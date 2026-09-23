@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Basketball badge">
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="#2B2F36"/>
+  <g transform="translate(0,0)">
+    <circle cx="32" cy="32" r="26" fill="#F97316"/>
+    <g fill="none" stroke="#111" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M32 8V56"/>
+      <path d="M8 32H56"/>
+      <path d="M14 14C24 18,24 46,14 50"/>
+      <path d="M50 14C40 18,40 46,50 50"/>
+    </g>
+  </g>
+</svg>

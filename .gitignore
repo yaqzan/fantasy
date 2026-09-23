@@ -1,0 +1,17 @@
+# Your credentials, league and session - never committed (see README "Your data")
+.env
+league.json
+*.cookie
+frontend/.env*.local
+
+# Personal hosting glue
+cloudflare-worker-router.js
+
+# Build output and caches
+node_modules/
+__pycache__/
+*.pyc
+frontend/build/
+.cache/
+*.log
+.archive/
