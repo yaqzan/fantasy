@@ -97,7 +97,9 @@ pip install -r requirements.txt
 python init_db.py                     # creates the database and tables
 ```
 
-Without `league.json` the app runs on the example league. Fantrax login drives your own account
+Without `league.json` the app runs on the example league. The league's teams and rosters start
+empty: add each team in the app's Team Manager (use the same abbreviation as `my_team` for yours),
+then draft players onto them. Fantrax login drives your own account
 through Selenium (Chrome), after first trying your browser's saved cookie.
 
 ### Data ingest scripts
