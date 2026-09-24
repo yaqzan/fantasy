@@ -12,6 +12,7 @@
 # reboot recovery.
 param(
     [int]$Port = 5001,
+    [string]$Tunnel = 'fantasy',
     [string]$Controller = '',
     [string]$Python = 'python'
 )
@@ -25,6 +26,7 @@ if ($Controller -and -not (Test-Path $Controller)) { throw "controller not found
 # Only non-default args, so the command stays under schtasks' 261-char /tr limit.
 $wdArgs = @()
 if ($Port -ne 5001) { $wdArgs += @('-Port', $Port) }
+if ($Tunnel -ne 'fantasy') { $wdArgs += @('-Tunnel', $Tunnel) }
 if ($Python -ne 'python') { $wdArgs += @('-Python', $Python) }
 if ($Controller) { $wdArgs += @('-Controller', (Resolve-Path $Controller).Path) }
 $quoted = (@('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $watchdog) + $wdArgs |

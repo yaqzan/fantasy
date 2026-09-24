@@ -14,7 +14,7 @@ from fantasy_config import CATEGORIES, CATEGORY_NAMES, INVERSE_CATEGORIES, TEAMN
 from fantasy_team_helper import get_current_fantasy_week_dates, get_week_info_from_schedule
 from datetime import date, timedelta
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=None)  # /static/* belongs to the React build (serve_frontend)
 CORS(app, resources={
     r"/*": {
         # Extra browser origins allowed to call the API (comma-separated, from .env).
@@ -909,22 +909,23 @@ def favicon():
     """Serve a basic favicon response"""
     return '', 204  # No Content response
 
-# Register the fantasy API blueprint
-app.register_blueprint(fantasy_api)
+# The API lives under /api; everything else is the React app (one origin, like the other apps).
+app.register_blueprint(fantasy_api, url_prefix='/api')
 
-# Serve React static files
-@app.route('/fantasy', defaults={'path': ''})
-@app.route('/fantasy/<path:path>')
-def serve_fantasy(path):
-    """Serve the React frontend"""
+# Serve the built React app (npm --prefix frontend run build). Unknown paths get index.html.
+FRONTEND_BUILD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'frontend', 'build')
+
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
     from flask import send_from_directory
-    frontend_build = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'frontend', 'build')
-    
-    # If path is empty or doesn't exist, serve index.html
-    if path and os.path.exists(os.path.join(frontend_build, path)):
-        return send_from_directory(frontend_build, path)
-    else:
-        return send_from_directory(frontend_build, 'index.html')
+    if path and os.path.isfile(os.path.join(FRONTEND_BUILD, path)):
+        return send_from_directory(FRONTEND_BUILD, path)
+    if not os.path.isfile(os.path.join(FRONTEND_BUILD, 'index.html')):
+        return jsonify({'error': 'frontend not built: run npm --prefix frontend run build'}), 404
+    return send_from_directory(FRONTEND_BUILD, 'index.html')
+
 
 if __name__ == '__main__':
     # Loopback by default; set FANTASY_HOST to expose it. Never combine FLASK_DEBUG=1 with a

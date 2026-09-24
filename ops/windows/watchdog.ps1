@@ -1,10 +1,11 @@
-# Fantasy watchdog - keeps the API alive on Windows.
+# Fantasy watchdog - keeps the app (and its tunnel, if you run one) alive on Windows.
 # Registered by install-tasks.ps1 as "Fantasy Watchdog" (every 5 min + at logon).
 #
-# Probe cheaply FIRST, act only when the API is down. Two modes:
-#   -Controller <script>  hand the restart to your own service controller, called as
-#                         `<script> start -Service fantasy-api`
-#   (no controller)       start `python backend/app.py` itself
+# Probe cheaply FIRST, act only on pieces that are actually down. Two modes:
+#   -Controller <script>  hand restarts to your own service controller, called as
+#                         `<script> start -Service fantasy-api|fantasy-tunnel`
+#   (no controller)       start `python backend/app.py` and, when
+#                         ops\cloudflared-config.yml exists, `cloudflared tunnel run`
 # Never capture controller output: its Start-Process children hold inherited
 # pipes open (the '| Out-Null' form once wedged a watchdog task for 8+ hours).
 #
@@ -12,6 +13,7 @@
 
 param(
     [int]$Port = 5001,
+    [string]$Tunnel = 'fantasy',
     [string]$Controller = '',
     [string]$Python = 'python'
 )
@@ -19,6 +21,7 @@ param(
 $ErrorActionPreference = 'Continue'
 
 $Root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$TunnelConfig = Join-Path $Root 'ops\cloudflared-config.yml'
 $LogDir = Join-Path $PSScriptRoot 'logs'
 $LogFile = Join-Path $LogDir 'watchdog.log'
 
@@ -37,26 +40,49 @@ function Rotate-Log {
 
 function Test-App {
     try {
-        $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 8
+        $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$Port/api/health" -TimeoutSec 8
         return ($r.StatusCode -eq 200)
     } catch { return $false }
 }
 
+function Test-Tunnel {
+    return [bool](Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match "run\s+$([regex]::Escape($Tunnel))(\s|$)" })
+}
+
+function Start-Piece {
+    param([string]$Svc)
+    if ($Controller) {
+        Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-File', $Controller, 'start', '-Service', $Svc -WindowStyle Hidden -Wait
+    } elseif ($Svc -eq 'fantasy-api') {
+        $env:FANTASY_PORT = $Port   # app.py reads its port from the environment
+        Start-Process $Python -ArgumentList '-u', 'backend\app.py' `
+            -WorkingDirectory $Root -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $LogDir 'app.log') -RedirectStandardError (Join-Path $LogDir 'app.err.log')
+    } else {
+        Start-Process cloudflared -ArgumentList 'tunnel', '--config', $TunnelConfig, 'run', $Tunnel `
+            -WorkingDirectory $Root -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $LogDir 'tunnel.log') -RedirectStandardError (Join-Path $LogDir 'tunnel.err.log')
+    }
+}
+
 Rotate-Log
 
-if (Test-App) {
+# The tunnel is optional: without a config (and no controller owning it) it isn't watched.
+$watchTunnel = [bool]$Controller -or (Test-Path $TunnelConfig)
+
+$down = @()
+if (-not (Test-App)) { $down += 'fantasy-api' }
+if ($watchTunnel -and -not (Test-Tunnel)) { $down += 'fantasy-tunnel' }
+
+if (-not $down) {
     Write-Log 'all up'
-} elseif ($Controller) {
-    Write-Log 'fantasy-api DOWN -> controller start'
-    Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass',
-        '-File', $Controller, 'start', '-Service', 'fantasy-api' -WindowStyle Hidden -Wait
-    Start-Sleep -Seconds 20
-    Write-Log ("post-start: app={0}" -f (Test-App))
 } else {
-    Write-Log 'fantasy-api DOWN -> python backend/app.py'
-    $env:FANTASY_PORT = $Port
-    Start-Process $Python -ArgumentList '-u', 'backend\app.py' -WorkingDirectory $Root -WindowStyle Hidden `
-        -RedirectStandardOutput (Join-Path $LogDir 'app.log') -RedirectStandardError (Join-Path $LogDir 'app.err.log')
+    foreach ($svc in $down) {
+        Write-Log "$svc DOWN -> start"
+        Start-Piece $svc
+    }
     Start-Sleep -Seconds 20
-    Write-Log ("post-start: app={0}" -f (Test-App))
+    Write-Log ("post-start: app={0} tunnel={1}" -f (Test-App), $(if ($watchTunnel) { Test-Tunnel } else { 'n/a' }))
 }

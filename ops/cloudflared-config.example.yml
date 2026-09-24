@@ -1,0 +1,15 @@
+# Optional: publish Fantasy through a Cloudflare tunnel.
+# Copy to ops/cloudflared-config.yml (gitignored) and fill in your own tunnel:
+#   cloudflared tunnel create fantasy
+#   cloudflared tunnel route dns fantasy fantasy.example.com
+#
+# One hostname is enough: Flask serves the built frontend and /api on one port.
+#
+# Run: cloudflared tunnel --config ops/cloudflared-config.yml run fantasy
+tunnel: <tunnel-uuid>
+credentials-file: <path-to-your-.cloudflared>/<tunnel-uuid>.json
+
+ingress:
+  - hostname: fantasy.example.com
+    service: http://127.0.0.1:5001
+  - service: http_status:404

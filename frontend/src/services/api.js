@@ -1,9 +1,8 @@
 import axios from 'axios';
 
-// REACT_APP_API_URL (frontend/.env.production.local) points a separately hosted build at the API.
-// Unset: production calls the same origin (Flask serves the build); development uses localhost.
-const API_BASE_URL = process.env.REACT_APP_API_URL
-  || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5001');
+// Same origin: Flask serves the build and the API under /api. In development the CRA proxy
+// (src/setupProxy.js) forwards /api to Flask. REACT_APP_API_URL overrides it for a split setup.
+const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

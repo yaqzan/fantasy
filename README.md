@@ -13,7 +13,7 @@ Mine runs at [fantasy.yaqzan.dev](https://fantasy.yaqzan.dev).
 - Daily player stats tracking (`daily_player_stats` table) with fantasy points
 - Fantrax league sync via `fantrax_client.py`
 - Serves the built React frontend at `/` and `/fantasy/*`
-- CORS limited to the origins in `FANTASY_CORS_ORIGINS`
+- Frontend and API on one origin; `FANTASY_CORS_ORIGINS` only for a split setup
 
 ### Frontend (React)
 - Sortable player statistics table with all key fantasy metrics
@@ -122,41 +122,47 @@ The frontend is available at `http://localhost:3000`.
 
 ## API Endpoints
 
+Everything except `/health` lives under `/api`; every other path serves the React app.
+
 ### Players
-- `GET /fantasy`: all players with fantasy statistics
-- `POST /calculate-zscores`: recalculate z-scores for custom categories
-- `POST /calculate-auction-values`: recalculate auction values
-- `POST /update-player`: update a player's manual fields (tier, notes, etc.)
+- `GET /api/fantasy`: all players with fantasy statistics
+- `POST /api/calculate-zscores`: recalculate z-scores for custom categories
+- `POST /api/calculate-auction-values`: recalculate auction values
+- `POST /api/update-player`: update a player's manual fields (tier, notes, etc.)
 
 ### Fantasy Teams
-- `GET /fantasy-teams`: list fantasy teams
-- `POST /fantasy-teams`: create a fantasy team
-- `PUT /fantasy-teams/<team_id>`: update a fantasy team
-- `GET /team-players/<team_id>`: players on a team
-- `POST /draft-player`: draft a player to a team
-- `POST /undraft-player`: remove a player from a team
+- `GET /api/fantasy-teams`: list fantasy teams
+- `POST /api/fantasy-teams`: create a fantasy team
+- `PUT /api/fantasy-teams/<team_id>`: update a fantasy team
+- `GET /api/team-players/<team_id>`: players on a team
+- `POST /api/draft-player`: draft a player to a team
+- `POST /api/undraft-player`: remove a player from a team
 
 ### Standings & Stats
-- `GET /team-standings`: league standings from category scoring
-- `GET /analyze`: category analysis
-- `GET /daily-stats`: daily fantasy point stats
-- `POST /daily-stats/update`: trigger a daily stats refresh
+- `GET /api/team-standings`: league standings from category scoring
+- `GET /api/analyze`: category analysis
+- `GET /api/daily-stats`: daily fantasy point stats
+- `POST /api/daily-stats/update`: trigger a daily stats refresh
 
 ### Misc
 - `GET /health`: liveness probe
 
 ## Deployment
 
-`python backend/app.py` serves the API and the built frontend (`npm --prefix frontend run build`)
-from one origin, so you can put any reverse proxy or tunnel in front of it. To host the frontend
-separately, build it with `REACT_APP_API_URL=https://your-api-host` (in
-`frontend/.env.production.local`) and add the frontend's origin to `FANTASY_CORS_ORIGINS` in `.env`.
+One process serves everything: `python backend/app.py` (port 5001, loopback only) returns the
+built frontend (`npm --prefix frontend run build`) at `/` and the API at `/api`. Put any reverse
+proxy or tunnel in front of it; `ops/cloudflared-config.example.yml` is the Cloudflare tunnel I use.
+
+On Windows, `ops/windows/install-tasks.ps1` registers a 5-minute watchdog that restarts the app
+(and the tunnel, when `ops/cloudflared-config.yml` exists) if they're down. Pass
+`-Controller <script>` to hand restarts to your own service manager instead.
 
 ## Your data
 
 | file | what it is |
 |---|---|
-| `.env` | Fantrax login, league id, MySQL and CORS settings |
+| `.env` | Fantrax login, league id, MySQL settings |
+| `ops/cloudflared-config.yml` | your tunnel, copied from the `.example` |
 | `league.json` | your team and the season's matchup schedule |
 | `fantraxloggedin.cookie` | the saved Fantrax session |
 | the MySQL `fantasy` database | stats, teams, rosters |
@@ -181,7 +187,7 @@ it each season once matchup dates are set.
    `fantasy_config.py` are correct.
 2. **NBA API timeouts/hangs**: upgrade `nba_api` first (`pip install --upgrade nba_api`) —
    `stats.nba.com` frequently rejects older clients outright rather than returning a clean error.
-3. **CORS errors**: allowed origins are hardcoded in `backend/app.py`; add new ones there.
+3. **CORS errors** (split setup only): add the frontend's origin to `FANTASY_CORS_ORIGINS` in `.env`.
 4. **Missing Dependencies**: `pip install -r requirements.txt` (root, for ingest scripts) and
    `pip install -r backend/requirements.txt` (for the API server), plus `npm install` in `frontend/`.
 
