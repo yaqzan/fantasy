@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createFantasyTeam, getTeamPlayers, undraftPlayer, updateFantasyTeam } from '../services/api';
+import { createFantasyTeam, deleteFantasyTeam, getTeamPlayers, undraftPlayer, updateFantasyTeam, errorMessage } from '../services/api';
 
-const TeamManager = ({ teams, onTeamUpdate, refreshTrigger }) => {
+const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, rosterSize = 14 }) => {
   const [showModal, setShowModal] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamAbbrev, setNewTeamAbbrev] = useState('');
@@ -78,7 +78,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger }) => {
       onTeamUpdate();
     } catch (error) {
       console.error('Error creating team:', error);
-      alert('Error creating team. Please try again.');
+      alert(`Error creating team: ${errorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -105,6 +105,21 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger }) => {
     } catch (error) {
       console.error('Error updating team:', error);
       alert('Error updating team. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTeam = async () => {
+    const count = (teamPlayers[editingTeam.id] || []).length;
+    if (!window.confirm(`Delete ${editingTeam.name}${count ? ` and its ${count} rostered players` : ''} from this league?`)) return;
+    try {
+      setLoading(true);
+      await deleteFantasyTeam(editingTeam.id);
+      setEditingTeam(null);
+      onTeamUpdate();
+    } catch (error) {
+      alert(`Error deleting team: ${errorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -142,7 +157,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger }) => {
     return 'text-gray-400';                          // Neutral gray
   };
 
-  // Calculate team average score based on best 11 players
+  // Team average score over its best `activeSlots` players (the ones that score)
   const getTeamAverageScore = (teamId) => {
     const players = teamPlayers[teamId] || [];
     if (players.length === 0) return 0;
@@ -154,15 +169,13 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger }) => {
     
     if (activePlayers.length === 0) return 0;
     
-    // Take only the top 11 players
-    const top11Players = activePlayers.slice(0, 11);
-    
-    const totalScore = top11Players.reduce((sum, player) => sum + (player.z_score || 0), 0);
-    return Math.round(totalScore / top11Players.length);
+    const starters = activePlayers.slice(0, activeSlots);
+    const totalScore = starters.reduce((sum, player) => sum + (player.z_score || 0), 0);
+    return Math.round(totalScore / starters.length);
   };
 
   // Sort teams by average score (descending)
-  const sortedTeams = teams.sort((a, b) => {
+  const sortedTeams = [...teams].sort((a, b) => {
     const scoreA = getTeamAverageScore(a.id);
     const scoreB = getTeamAverageScore(b.id);
     return scoreB - scoreA;
@@ -179,6 +192,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger }) => {
     <div className="bg-gray-800 rounded-lg shadow-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white">Fantasy Teams</h3>
+        <button onClick={() => setShowModal(true)} className="btn-secondary text-sm">Add team</button>
       </div>
       
       {teams.length === 0 ? (
@@ -213,7 +227,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger }) => {
                   <div className="space-y-0.5">
                     {teamPlayers[team.id]
                       .sort((a, b) => (b.z_score || 0) - (a.z_score || 0))
-                      .slice(0, 14)
+                      .slice(0, Math.max(rosterSize, 10))
                       .map((player, index) => (
                       <div key={index} className="text-xs text-gray-400 truncate flex items-center justify-between group/item">
                         <span className="flex-1 truncate leading-tight flex items-center gap-1">
@@ -237,9 +251,9 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger }) => {
                         </button>
                       </div>
                     ))}
-                    {teamPlayers[team.id].length > 14 && (
+                    {teamPlayers[team.id].length > Math.max(rosterSize, 10) && (
                       <div className="text-xs text-gray-500 leading-tight">
-                        +{teamPlayers[team.id].length - 14}
+                        +{teamPlayers[team.id].length - Math.max(rosterSize, 10)}
                       </div>
                     )}
                   </div>
@@ -288,6 +302,14 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger }) => {
               </div>
               
               <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={handleDeleteTeam}
+                  className="mr-auto text-sm text-red-400 hover:text-red-300"
+                  disabled={loading}
+                >
+                  Delete team
+                </button>
                 <button
                   type="button"
                   onClick={() => setEditingTeam(null)}

@@ -5,7 +5,11 @@ import Header from './components/Header';
 import LineupOptimizer from './components/LineupOptimizer';
 import DailyStats from './components/DailyStats';
 import TeamStandings from './components/TeamStandings';
-import { getPlayers, getFantasyTeams, draftPlayer, undraftPlayer, updatePlayer } from './services/api';
+import LeagueSettings from './components/LeagueSettings';
+import {
+  getPlayers, getFantasyTeams, draftPlayer, undraftPlayer, updatePlayer,
+  getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage
+} from './services/api';
 
 function App() {
   const [players, setPlayers] = useState([]);
@@ -23,14 +27,51 @@ function App() {
   const [expFactor, setExpFactor] = useState(4);
   const [activeTab, setActiveTab] = useState('players');
   const [statType, setStatType] = useState('5');
+  const [leaguesData, setLeaguesData] = useState({ leagues: [], category_catalog: [], defaults: null });
+  const [leagueId, setLeagueId] = useState(null);
+  const [leagueModal, setLeagueModal] = useState(null); // 'create' | 'edit' | null
+  const [loadError, setLoadError] = useState(null);
+
+  const currentLeague = leaguesData.leagues.find(l => l.id === leagueId) || null;
 
   useEffect(() => {
-    loadData();
+    loadLeagues();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Leagues first: the stored pick if it still exists, else the backend's active league.
+  const loadLeagues = async (preferredId = null) => {
+    try {
+      const data = await getLeagues();
+      setLeaguesData(data);
+      const ids = data.leagues.map(l => l.id);
+      const pick = [preferredId, getSelectedLeague(), data.active].find(id => id && ids.includes(id)) || null;
+      setSelectedLeague(pick);
+      setLeagueId(pick);
+      if (pick) {
+        await loadData();
+      } else {
+        setLoading(false);
+      }
+    } catch (error) {
+      setLoadError(errorMessage(error));
+      setLoading(false);
+    }
+  };
+
+  const switchLeague = async (id) => {
+    setSelectedLeague(id);
+    setLeagueId(id);
+    setPlayers([]);
+    setFantasyTeams([]);
+    activateLeague(id).catch(() => {}); // CLI scripts follow the league last picked here
+    await loadData();
+  };
 
   const loadData = async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
+      setLoadError(null);
       const [playersData, teamsData] = await Promise.all([
         getPlayers(),
         getFantasyTeams()
@@ -40,9 +81,23 @@ function App() {
       setConfig(playersData.config || { show_auction_price: true });
     } catch (error) {
       console.error('Error loading data:', error);
+      setLoadError(errorMessage(error));
     } finally {
       if (showLoading) setLoading(false);
     }
+  };
+
+  const handleLeagueSaved = async (id) => {
+    setLeagueModal(null);
+    setLoading(true);
+    await loadLeagues(id);
+  };
+
+  const handleLeagueDeleted = async () => {
+    setLeagueModal(null);
+    setSelectedLeague(null);
+    setLoading(true);
+    await loadLeagues();
   };
 
   const refreshData = () => loadData(false);
@@ -109,15 +164,65 @@ function App() {
     );
   }
 
+  const leagueModalView = leagueModal && leaguesData.defaults && (
+    <LeagueSettings
+      mode={leagueModal}
+      league={currentLeague}
+      leagues={leaguesData.leagues}
+      catalog={leaguesData.category_catalog}
+      defaults={leaguesData.defaults}
+      teams={leagueModal === 'edit' ? fantasyTeams : []}
+      onClose={() => setLeagueModal(null)}
+      onSaved={handleLeagueSaved}
+      onDeleted={handleLeagueDeleted}
+    />
+  );
+
+  const header = (
+    <Header
+      leagues={leaguesData.leagues}
+      currentLeague={currentLeague}
+      onSwitchLeague={switchLeague}
+      onEditLeague={() => setLeagueModal('edit')}
+      onNewLeague={() => setLeagueModal('create')}
+    />
+  );
+
+  if (!currentLeague) {
+    return (
+      <div className="min-h-screen bg-gray-900">
+        {header}
+        <main className="max-w-xl mx-auto px-4 py-16 text-center">
+          {loadError ? (
+            <p className="text-red-400">{loadError}</p>
+          ) : (
+            <>
+              <h2 className="text-2xl font-semibold text-white mb-3">No league yet</h2>
+              <p className="text-gray-400 mb-6">Create a league with its scoring categories, roster rules and schedule, then add its teams.</p>
+              <button onClick={() => setLeagueModal('create')} className="btn-primary">Create your first league</button>
+            </>
+          )}
+        </main>
+        {leagueModalView}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-900">
-      <Header />
-      <main className="max-w-full mx-auto px-2 sm:px-4 lg:px-6 py-8">
+      {header}
+      {leagueModalView}
+      <main key={leagueId} className="max-w-full mx-auto px-2 sm:px-4 lg:px-6 py-8">
+        {loadError && (
+          <div className="mb-4 p-3 rounded bg-red-900/40 border border-red-700 text-red-200 text-sm">{loadError}</div>
+        )}
         <div className="mb-8">
           <TeamManager 
             teams={fantasyTeams} 
             onTeamUpdate={refreshData}
             refreshTrigger={players.length}
+            activeSlots={currentLeague.settings.roster.active}
+            rosterSize={currentLeague.settings.roster.size}
           />
         </div>
 
@@ -277,7 +382,7 @@ function App() {
         )}
 
         {activeTab === 'lineup' && (
-          <LineupOptimizer />
+          <LineupOptimizer league={currentLeague} onEditLeague={() => setLeagueModal('edit')} />
         )}
 
         {activeTab === 'daily' && (

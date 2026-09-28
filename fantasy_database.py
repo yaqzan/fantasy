@@ -1,4 +1,6 @@
-from peewee import CharField, FloatField, DateTimeField, IntegerField, DateField, ForeignKeyField, CompositeKey
+from datetime import datetime
+
+from peewee import CharField, FloatField, DateTimeField, IntegerField, DateField, ForeignKeyField, CompositeKey, BooleanField, TextField
 from peewee import MySQLDatabase, Model
 from fileHelper import date_to_string
 from fantasy_config import DB_NAME, DB_CONFIGS
@@ -73,9 +75,15 @@ class Player(BaseModel):
     pf = IntegerField(null=True)
     pf_5 = IntegerField(null=True)
     pf_10 = IntegerField(null=True)
+    tech = IntegerField(null=True)  # technical fouls, from play-by-play (technical_fouls table)
+    tech_5 = IntegerField(null=True)
+    tech_10 = IntegerField(null=True)
+    w = IntegerField(null=True)  # team wins in games the player played
+    w_5 = IntegerField(null=True)
+    w_10 = IntegerField(null=True)
     injured = IntegerField(null=True)  # BOOL field (0/1)
     injured_games_to_miss = IntegerField(null=True)
-    undroppable = IntegerField(null=True)  # BOOL field (0/1)
+    undroppable = IntegerField(null=True)  # legacy, pre-leagues; now per league in league_player_flags
     api_updated_at = DateTimeField(null=True)
 
     class Meta:
@@ -101,13 +109,26 @@ class Game(BaseModel):
     class Meta:
         table_name = 'games'
 
+class League(BaseModel):
+    """A fantasy league: its rules live in `settings` (JSON, see leagues.py), its teams in fantasy_teams."""
+    id = CharField(primary_key=True, max_length=64)
+    name = CharField()
+    settings = TextField()
+    is_active = BooleanField(default=False)  # the league CLI scripts and header-less requests use
+    created_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'leagues'
+
 class FantasyTeam(BaseModel):
     id = IntegerField(primary_key=True)
-    name = CharField(unique=True)
+    name = CharField()
     abv = CharField(max_length=10, null=True)
+    league = ForeignKeyField(League, backref='teams', column_name='league_id', null=True)
 
     class Meta:
         table_name = 'fantasy_teams'
+        indexes = ((('league', 'name'), True),)
 
 class FantasyTeamPlayer(BaseModel):
     player_id = ForeignKeyField(Player, backref='fantasy_teams')
@@ -118,6 +139,36 @@ class FantasyTeamPlayer(BaseModel):
     class Meta:
         table_name = 'fantasy_team_players'
         primary_key = CompositeKey('player_id', 'fantasy_team_id')
+
+class LeaguePlayerFlag(BaseModel):
+    """Per-league player flags (injury is NBA-wide and stays on Player)."""
+    league = ForeignKeyField(League, column_name='league_id')
+    player = ForeignKeyField(Player, column_name='player_id')
+    undroppable = BooleanField(default=False)
+
+    class Meta:
+        table_name = 'league_player_flags'
+        primary_key = CompositeKey('league', 'player')
+
+class TechnicalFoul(BaseModel):
+    """Technical fouls per player per game, scanned from play-by-play (pull_technical_fouls.py)."""
+    game_id = CharField(max_length=16)
+    player_id = IntegerField()
+    game_date = DateField()
+    count = IntegerField()
+
+    class Meta:
+        table_name = 'technical_fouls'
+        primary_key = CompositeKey('game_id', 'player_id')
+
+class ScannedGame(BaseModel):
+    """Games whose play-by-play has been scanned for technicals, so they are never fetched twice."""
+    game_id = CharField(primary_key=True, max_length=16)
+    game_date = DateField()
+    scanned_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'pbp_scanned_games'
 
 class DailyPlayerStats(BaseModel):
     player_id = ForeignKeyField(Player, backref='daily_stats')
@@ -153,3 +204,6 @@ class DailyPlayerStats(BaseModel):
         table_name = 'daily_player_stats'
         primary_key = CompositeKey('player_id', 'game_date', 'game_id')
 
+
+ALL_MODELS = [Team, Player, Game, League, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag, TechnicalFoul,
+              ScannedGame, DailyPlayerStats]

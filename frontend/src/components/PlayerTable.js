@@ -2,41 +2,6 @@ import React, { useState, useEffect } from 'react';
 import DraftModal from './DraftModal';
 import { calculateCustomZScores, calculateCustomAuctionValues } from '../services/api';
 
-// Category names mapping from config
-const CATEGORY_NAMES = {
-    'PTS': 'PTS',
-    'AST-TOV': 'AST',
-    'AST': 'AST',
-    'TOV': 'TOV',
-    'PF': 'PF',
-    'REB': 'REB',
-    'STL': 'STL',
-    'BLK': 'BLK',
-    'FG3M': '3PM',
-    'PPS': 'PPS',
-    'DD2': 'DD',
-    'TD3': 'TD',
-    'TS%': 'TS%',
-    'EFG%': 'EFG%',
-    'FT%': 'FT%',
-    'PLUS_MINUS': '+/-',
-    'WIN%': 'WIN',
-    'TOT': 'Total Games',
-    'SCORE': 'Score',
-    'BLKA': 'BLKA',
-    'NFT': 'NFT',
-    'VEFG%': 'VEFG%'
-};
-
-// Categories from config (updated to match fantasy_config.py)
-const CATEGORIES = ['TS%', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'FG3M', 'NFT', 'TOV', 'PF', 'PLUS_MINUS'];
-
-// Inverse categories (lower is better)
-// const INVERSE_CATEGORIES = ['BLKA', 'TOV', 'PF'];
-
-// Percentage-based categories
-const PERCENTAGE_CATEGORIES = ['TS%', 'EFG%', 'FT%', 'VEFG%'];
-
 // Default EXP_FACTOR from config
 const DEFAULT_EXP_FACTOR = 4;
 
@@ -50,7 +15,11 @@ const formatWeekDate = (dateStr) => {
 };
 
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, expFactor, onExpFactorChange, config, statType = 'projected' }) => {
-  console.log('Config in PlayerTable:', config);
+  // The league's categories, in display order, with labels and percent/inverse flags.
+  const categoryMeta = config?.categories || [];
+  const CATEGORIES = categoryMeta.map(c => c.key);
+  const CATEGORY_NAMES = Object.fromEntries(categoryMeta.map(c => [c.key, c.label]));
+  const PERCENTAGE_CATEGORIES = categoryMeta.filter(c => c.percent).map(c => c.key);
   const [sortConfig, setSortConfig] = useState({ key: 'overall_rank', direction: 'asc' });
   const [draftModalPlayer, setDraftModalPlayer] = useState(null);
   const [puntCategories, setPuntCategories] = useState([]);
@@ -67,6 +36,15 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
       setSortConfig(prev => ({ ...prev }));
     }
   }, [customScores]);
+
+  // Punted scores are per timeframe: refetch them when the timeframe changes
+  useEffect(() => {
+    if (puntCategories.length === 0) return;
+    calculateCustomZScores(puntCategories, statType)
+      .then(response => setCustomScores(response.custom_scores))
+      .catch(error => console.error('Error calculating custom z-scores:', error));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statType]);
 
   // Force re-sort when statType changes to update OVR and rankings
   useEffect(() => {
@@ -131,7 +109,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     if (newPuntCategories.length > 0) {
       setLoadingCustomScores(true);
       try {
-        const response = await calculateCustomZScores(newPuntCategories);
+        const response = await calculateCustomZScores(newPuntCategories, statType);
         setCustomScores(response.custom_scores);
       } catch (error) {
         console.error('Error calculating custom z-scores:', error);

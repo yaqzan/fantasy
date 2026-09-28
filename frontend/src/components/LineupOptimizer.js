@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { analyze } from '../services/api';
+import { analyze, analyzeCustom, errorMessage } from '../services/api';
 
-// Category display order for matchup comparison
-const CATEGORY_ORDER = ['TS%', 'PTS', 'REB', 'AST', 'BLK', 'STL', 'FG3M', 'TOV', 'NFT', 'PF', 'PLUS_MINUS'];
-
-// Inverse categories (lower is better)
-const INVERSE_CATEGORIES = ['BLKA', 'TOV', 'PF'];
-
-const LineupOptimizer = () => {
+const LineupOptimizer = ({ league, onEditLeague }) => {
+  // The league's categories in display order, with labels
+  const CATEGORY_ORDER = (league?.categories || []).map(c => c.key);
+  const CATEGORY_LABELS = Object.fromEntries((league?.categories || []).map(c => [c.key, c.label]));
+  const totalCategories = CATEGORY_ORDER.length || 1;
+  const [errorSchedule, setErrorSchedule] = useState(null);
   const [analysisData, setAnalysisData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [contentLoading, setContentLoading] = useState(false);
@@ -57,6 +56,7 @@ const LineupOptimizer = () => {
     try {
       const data = await analyze(weekStart, 'projected', false);
       setAnalysisData(data);
+      setErrorSchedule(null);
       
       // After main analysis loads, start loading current analyses and pickups sequentially
       if (!isInitialLoad) {
@@ -64,7 +64,8 @@ const LineupOptimizer = () => {
         fetchPickupAnalyses(weekStart);
       }
     } catch (err) {
-      setError(err.message);
+      setError(errorMessage(err));
+      setErrorSchedule(err?.response?.data?.fantasy_schedule || null);
     } finally {
       if (isInitialLoad) {
       setLoading(false);
@@ -114,217 +115,14 @@ const LineupOptimizer = () => {
 
   const calculateCustomLineup = async () => {
     if (!customPickup) return;
-    
     setLoadingCustom(true);
     try {
-      // Manually calculate the custom lineup stats
-      const baseLineup = analysisData?.best_lineup || [];
-      let customLineup = [...baseLineup];
-      
-      // Apply the custom changes
-      if (customDrop && baseLineup.includes(customDrop)) {
-        customLineup = customLineup.filter(p => p !== customDrop);
-      }
-      if (customPickup && !customLineup.includes(customPickup)) {
-        customLineup.push(customPickup);
-      }
-      
-      // Ensure lineup doesn't exceed NUM_STARTERS
-      const numStarters = analysisData?.num_starters || 11;
-      // If pickup was added without a drop, remove the last player from base lineup
-      if (customPickup && !customDrop && customLineup.length > numStarters) {
-        // Remove the last player that wasn't the pickup
-        const pickupIndex = customLineup.indexOf(customPickup);
-        if (pickupIndex !== -1) {
-          customLineup = customLineup.filter((p, idx) => idx === pickupIndex || idx < numStarters);
-        } else {
-          customLineup = customLineup.slice(0, numStarters);
-        }
-      }
-      
-      // Remove any duplicate players (shouldn't happen, but safety check)
-      customLineup = [...new Set(customLineup)];
-      
-      // Calculate stats for the custom lineup
-      const playerStats = analysisData?.player_stats;
-      const gamesPlayed = analysisData?.games_played;
-      const teamWins = analysisData?.team_wins;
-      
-      if (!playerStats || !gamesPlayed || !teamWins) {
-        console.error('Missing required data for custom calculation');
-        return;
-      }
-      
-      // Calculate stats for all timeframes: season, 5, 10, projected
-      const timeframes = [
-        { suffix: '', label: 'Current', analysisKey: 'season' },
-        { suffix: '_5', label: 'Last 5', analysisKey: '5' },
-        { suffix: '_10', label: 'Last 10', analysisKey: '10' },
-        { suffix: '_projected', label: 'Projected', analysisKey: 'projected' }
-      ];
-      
-      const customAnalysisData = {};
-      
-      timeframes.forEach(({ suffix, label, analysisKey }) => {
-        let customScore = 0;
-        const customCategories = {};
-        
-        // Get opponent stats from the appropriate analysis data
-        // For season, the suffix is empty string, so we need to handle that
-        const analysisForTimeframe = currentAnalyses[analysisKey];
-        let theirStats = {};
-        
-        // First try to get their_stats directly from the timeframe-specific analysis
-        if (analysisForTimeframe?.their_stats) {
-          theirStats = analysisForTimeframe.their_stats;
-        }
-        
-        // Always try to extract from matchup categories as well (in case their_stats doesn't have all keys)
-        // The matchup.categories has opponent stats for the correct timeframe
-        if (analysisForTimeframe?.matchup?.categories) {
-          // Extract opponent stats from matchup categories
-          // The matchup.categories already has the correct timeframe values, we just need to map to keys with suffix
-          Object.keys(analysisForTimeframe.matchup.categories).forEach(cat => {
-            const catKey = cat === 'WIN%' ? cat : `${cat}${suffix}`;
-            const opponentValue = analysisForTimeframe.matchup.categories[cat]?.opponent;
-            if (opponentValue !== undefined && opponentValue !== null) {
-              theirStats[catKey] = opponentValue;
-            }
-          });
-        }
-        
-        // Final fallback: try main analysis data (but this might only have projected stats)
-        if (Object.keys(theirStats).length === 0) {
-          if (analysisData?.their_stats) {
-            // Try to extract stats with the correct suffix from main their_stats
-            Object.keys(analysisData.matchup?.categories || {}).forEach(cat => {
-              const catKey = cat === 'WIN%' ? cat : `${cat}${suffix}`;
-              // Try to find the stat in their_stats with the suffix
-              if (analysisData.their_stats[catKey] !== undefined) {
-                theirStats[catKey] = analysisData.their_stats[catKey];
-              }
-            });
-          }
-          // Last resort: extract from main matchup categories (only works for projected)
-          if (Object.keys(theirStats).length === 0 && analysisData?.matchup?.categories && suffix === '_projected') {
-            Object.keys(analysisData.matchup.categories).forEach(cat => {
-              const catKey = cat === 'WIN%' ? cat : `${cat}${suffix}`;
-              const opponentValue = analysisData.matchup.categories[cat]?.opponent;
-              if (opponentValue !== undefined && opponentValue !== null) {
-                theirStats[catKey] = opponentValue;
-              }
-            });
-          }
-        }
-        
-        // Calculate your team totals (similar to calculate_team_totals in backend)
-        const yourStats = {};
-        
-        // First, calculate totals for simple categories
-        Object.keys(analysisData.matchup.categories).forEach(category => {
-          const categoryKey = category === 'WIN%' ? category : `${category}${suffix}`;
-          
-          if (category === 'WIN%') {
-            yourStats[categoryKey] = customLineup.reduce((sum, player) => {
-              return sum + (teamWins[playerStats[player]?.TEAM] || 0);
-            }, 0);
-          } else if (category === 'TS%') {
-            // TS% needs to be calculated from totals
-            const totalPTS = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`PTS${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            const totalFGA = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`FGA${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            const totalFTA = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`FTA${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            const denominator = 2 * (totalFGA + (0.44 * totalFTA));
-            yourStats[categoryKey] = denominator > 0 ? totalPTS / denominator : 0;
-          } else if (category === 'EFG%') {
-            // EFG% needs to be calculated from totals
-            const totalFGA = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`FGA${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            const totalFGM = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`FGM${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            const totalFG3M = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`FG3M${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            yourStats[categoryKey] = totalFGA > 0 ? (totalFGM + 0.5 * totalFG3M) / totalFGA : 0;
-          } else if (category === 'FT%') {
-            // FT% needs to be calculated from totals
-            const totalFTM = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`FTM${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            const totalFTA = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`FTA${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            yourStats[categoryKey] = totalFTA > 0 ? totalFTM / totalFTA : 0;
-          } else if (category === 'PPS') {
-            // PPS needs to be calculated from totals
-            const totalPTS = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`PTS${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            const totalFGA = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[`FGA${suffix}`] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-            yourStats[categoryKey] = totalFGA > 0 ? totalPTS / totalFGA : 0;
-          } else if (category === 'NFT') {
-            // NFT is calculated as sum of (2*FTM - FTA) per player, where FTM and FTA are per-game averages
-            // Backend does NOT multiply by games_played - it just sums the per-game NFT values
-            yourStats[categoryKey] = customLineup.reduce((sum, player) => {
-              // Only count players that exist in playerStats
-              if (!playerStats[player]) return sum;
-              const ftm = playerStats[player][`FTM${suffix}`] || 0;
-              const fta = playerStats[player][`FTA${suffix}`] || 0;
-              return sum + (2 * ftm - fta);
-            }, 0);
-          } else {
-            // Regular categories: sum stat * games
-            yourStats[categoryKey] = customLineup.reduce((sum, player) => {
-              return sum + (playerStats[player]?.[categoryKey] || 0) * (gamesPlayed[playerStats[player]?.TEAM] || 0);
-            }, 0);
-          }
-        });
-        
-        // Now compare with opponent stats
-        Object.keys(analysisData.matchup.categories).forEach(category => {
-          const categoryKey = category === 'WIN%' ? category : `${category}${suffix}`;
-          const yourTotal = yourStats[categoryKey] || 0;
-          const opponentStat = theirStats[categoryKey] || 0;
-          
-          // Calculate margin - reverse for inverse categories
-          let margin;
-          if (INVERSE_CATEGORIES.includes(category)) {
-            margin = opponentStat - yourTotal; // Lower is better, so positive margin means you win
-          } else {
-            margin = yourTotal - opponentStat; // Higher is better
-          }
-          
-          customCategories[category] = {
-            your_team: yourTotal,
-            opponent: opponentStat,
-            margin: margin
-          };
-          
-          if (margin > 0) customScore++;
-        });
-        
-        const key = label.toLowerCase().replace(' ', '_');
-        customAnalysisData[key] = {
-          score: customScore,
-          my_team_player_games: analysisData.matchup.my_team_player_games,
-          their_team_player_games: analysisData.matchup.their_team_player_games,
-          opponent: analysisData.matchup.opponent,
-          categories: customCategories
-        };
-      });
-      
-      setCustomAnalysis(customAnalysisData);
+      // The backend re-picks the best lineup with the pickup in (and the drop out) for every timeframe
+      const data = await analyzeCustom(analysisData?.matchup?.week_start, customPickup, customDrop || null);
+      setCustomAnalysis(data);
     } catch (err) {
       console.error('Error calculating custom lineup:', err);
+      setCustomAnalysis(null);
     } finally {
       setLoadingCustom(false);
     }
@@ -393,9 +191,10 @@ const LineupOptimizer = () => {
     if (typeof score !== 'number') return '0.0';
     
     // For percentage categories, show 3 decimal places
-    if (category && (category.includes('%') || category === 'TS%' || category === 'EFG%' || category === 'FT%')) {
+    if (category && category.includes('%') && category !== 'WIN%') {
       return score.toFixed(3);
     }
+    if (category === 'TECH' || category === 'WIN%') return score.toFixed(2);
     
     return score.toFixed(1);
   };
@@ -403,14 +202,12 @@ const LineupOptimizer = () => {
   const formatMatchupScore = (score) => {
     if (typeof score !== 'number') return '0-0';
     // Score represents the actual number of wins
-    const totalCategories = 11;
     const wins = Math.round(score);
     const losses = totalCategories - wins;
     return `${wins}-${losses}`;
   };
 
   const getScoreColor = (score) => {
-    const totalCategories = 11;
     const halfCategories = totalCategories / 2;
     
     if (score > halfCategories) return 'text-green-600'; // Winning
@@ -424,22 +221,7 @@ const LineupOptimizer = () => {
   //   return 'text-gray-600';
   // };
 
-  const getCategoryName = (category) => {
-    const categoryNames = {
-      'PTS': 'PTS',
-      'FG3M': '3PM',
-      'AST': 'AST',
-      'TOV': 'TOV',
-      'REB': 'REB',
-      'STL': 'STL',
-      'BLK': 'BLK',
-      'PF': 'PF',
-      'TS%': 'TS%',
-      'NFT': 'NFT',
-      'PLUS_MINUS': '+/-'
-    };
-    return categoryNames[category] || category;
-  };
+  const getCategoryName = (category) => CATEGORY_LABELS[category] || category;
 
   const formatWeekTab = (weekIndex, scheduleEntry) => {
     const [startDate] = scheduleEntry;
@@ -569,17 +351,37 @@ const LineupOptimizer = () => {
   }
 
   if (error) {
+    const schedule = errorSchedule || analysisData?.fantasy_schedule || [];
     return (
       <div className="bg-gray-800 rounded-lg shadow-xl p-6">
-        <div className="text-red-400 text-center">
-          <p className="font-semibold">Error loading analysis</p>
-          <p className="text-sm">{error}</p>
-          <button 
-            onClick={fetchAnalysis}
-            className="mt-2 px-4 py-2 bg-nba-orange text-white rounded hover:bg-orange-600"
-          >
-            Retry
-          </button>
+        {schedule.length > 0 && (
+          <div className="mb-6 flex flex-wrap gap-2">
+            {schedule.map((scheduleEntry, index) => (
+              <button
+                key={index}
+                onClick={() => { setActiveWeek(index); setHasSetDefaultWeek(true); fetchAnalysis(scheduleEntry[0]); }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeWeek === index ? 'bg-nba-orange text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                }`}
+              >
+                {formatWeekTab(index, scheduleEntry)}{scheduleEntry[1] ? '' : ' ?'}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="text-center">
+          <p className="font-semibold text-red-400">No analysis for this week</p>
+          <p className="text-sm text-gray-300 mt-1">{error}</p>
+          <div className="mt-3 flex justify-center gap-3">
+            <button onClick={() => fetchAnalysis(schedule[activeWeek]?.[0] || null)} className="px-4 py-2 bg-nba-orange text-white rounded hover:bg-orange-600">
+              Retry
+            </button>
+            {onEditLeague && (
+              <button onClick={onEditLeague} className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500">
+                League settings
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -604,7 +406,7 @@ const LineupOptimizer = () => {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-nba-orange">Lineup Optimizer</h2>
         <button 
-          onClick={fetchAnalysis}
+          onClick={() => fetchAnalysis(analysisData?.matchup?.week_start || null)}
           className="px-4 py-2 bg-nba-orange text-white rounded hover:bg-orange-600 transition-colors"
         >
           Refresh Analysis
@@ -764,14 +566,7 @@ const LineupOptimizer = () => {
                     {showPickupDropdown && analysisData?.available_players && (
                       <div className="absolute z-50 w-full mt-1 bg-gray-700 border border-gray-500 rounded max-h-60 overflow-y-auto">
                         {analysisData.available_players
-                          .filter(p => {
-                            if (!analysisData.player_stats?.[p]) return false;
-                            if (!pickupSearchTerm) return true;
-                            return p.toLowerCase().includes(pickupSearchTerm.toLowerCase());
-                          })
-                          .sort((a, b) => {
-                            return (analysisData.player_stats[b]?.['Z-SCORE_projected'] || 0) - (analysisData.player_stats[a]?.['Z-SCORE_projected'] || 0);
-                          })
+                          .filter(p => !pickupSearchTerm || p.toLowerCase().includes(pickupSearchTerm.toLowerCase()))
                           .slice(0, 100)
                           .map(player => (
                             <div
@@ -787,11 +582,7 @@ const LineupOptimizer = () => {
                             </div>
                           ))
                         }
-                        {analysisData.available_players.filter(p => {
-                          if (!analysisData.player_stats?.[p]) return false;
-                          if (!pickupSearchTerm) return true;
-                          return p.toLowerCase().includes(pickupSearchTerm.toLowerCase());
-                        }).length === 0 && (
+                        {analysisData.available_players.filter(p => !pickupSearchTerm || p.toLowerCase().includes(pickupSearchTerm.toLowerCase())).length === 0 && (
                           <div className="px-2 py-1 text-gray-400 text-xs">No players found</div>
                         )}
                       </div>

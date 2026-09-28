@@ -1,264 +1,139 @@
 """
-Fantasy team helper functions.
-Handles database operations for fantasy teams and players.
+Fantasy team helper functions, all scoped to one league (a leagues.LeagueConfig).
+Handles the league's matchup schedule and its teams' rosters.
 """
 from datetime import datetime, date, timedelta
-from fantasy_database import FantasyTeam, FantasyTeamPlayer, Player
-from fantasy_config import MY_TEAM_ABV, FANTASY_SCHEDULE, FANTASY_SCHEDULE_DICT
-from fileHelper import string_to_date, date_to_string
+from fantasy_database import FantasyTeam, FantasyTeamPlayer, Player, LeaguePlayerFlag
 
-def get_week_info_from_schedule(week_start_param):
+
+def string_to_date(value):
+    return datetime.strptime(value, '%Y-%m-%d').date()
+
+
+def _week_end(schedule, index):
+    """Last day of schedule[index]: the day before the next week starts, else 7 days."""
+    week_start = string_to_date(schedule[index][0])
+    if index + 1 < len(schedule):
+        return string_to_date(schedule[index + 1][0]) - timedelta(days=1)
+    return week_start + timedelta(days=6)
+
+
+def get_week_info_from_schedule(league, week_start_param):
     """
-    Get week information from fantasy schedule based on week_start date.
-    
+    Week information for a week start date in the league's schedule.
+
+    :param league: leagues.LeagueConfig
     :param str week_start_param: Week start date in 'YYYY-MM-DD' format
     :return: tuple: (week_start, week_end, opponent) or (None, None, None) if not found
     """
-    try:
-        # Quick lookup using dictionary
-        opponent = FANTASY_SCHEDULE_DICT.get(week_start_param)
-        if not opponent:
-            return None, None, None
-            
-        week_start = datetime.strptime(week_start_param, '%Y-%m-%d').date()
-        
-        # Find the index for week_end calculation
-        for i, (schedule_date, _) in enumerate(FANTASY_SCHEDULE):
-            if schedule_date == week_start_param:
-                # Calculate week_end based on next week's start date
-                if i + 1 < len(FANTASY_SCHEDULE):
-                    next_week_start = datetime.strptime(FANTASY_SCHEDULE[i + 1][0], '%Y-%m-%d').date()
-                    week_end = next_week_start - timedelta(days=1)
-                else:
-                    # Last week of schedule - assume 7 days
-                    week_end = week_start + timedelta(days=6)
-                
-                return week_start, week_end, opponent
-        
-        return None, None, None
-        
-    except ValueError:
-        return None, None, None
+    schedule = league.schedule
+    for i, (start, opponent) in enumerate(schedule):
+        if start == week_start_param:
+            return string_to_date(start), _week_end(schedule, i), opponent or None
+    return None, None, None
 
-def get_current_fantasy_week_dates(target_date=None):
-    """
-    Get the start and end dates for the current fantasy week based on the schedule.
-    Handles variable week lengths and edge cases.
-    
-    Args:
-        target_date (str, optional): Date in 'YYYY-MM-DD' format. If None, uses current date.
-    
-    Returns:
-        tuple: (week_start, week_end, opponent) as date objects and string, or (None, None, None) if no week found
-    """
-    if target_date is None:
-        target_date = date.today().strftime('%Y-%m-%d')
-    
-    # Convert target_date to date object for comparison
-    target_date_obj = string_to_date(target_date)
-    
-    # Handle case where we're before the first game
-    if target_date_obj < string_to_date(FANTASY_SCHEDULE[0][0]):
-        week_start = string_to_date(FANTASY_SCHEDULE[0][0])
-        # Calculate week length based on next week or default to 7
-        if len(FANTASY_SCHEDULE) > 1:
-            next_week_start = string_to_date(FANTASY_SCHEDULE[1][0])
-            week_length = (next_week_start - week_start).days
-        else:
-            week_length = 7
-        week_end = week_start + timedelta(days=week_length - 1)
-        opponent = FANTASY_SCHEDULE[0][1]
-        return week_start, week_end, opponent
-    
-    # Find the current week
-    for i, (start_date_str, opponent) in enumerate(FANTASY_SCHEDULE):
-        week_start = string_to_date(start_date_str)
-        
-        # Calculate week length based on next week or default to 7
-        if i + 1 < len(FANTASY_SCHEDULE):
-            next_week_start = string_to_date(FANTASY_SCHEDULE[i + 1][0])
-            week_length = (next_week_start - week_start).days
-        else:
-            week_length = 7
-        
-        week_end = week_start + timedelta(days=week_length - 1)
-        
-        # If we're within this week
-        if week_start <= target_date_obj <= week_end:
-            return week_start, week_end, opponent
-        
-        # If we're after this week but before the next week
-        if target_date_obj > week_end:
-            # Check if there's a next week
-            if i + 1 < len(FANTASY_SCHEDULE):
-                next_week_start = string_to_date(FANTASY_SCHEDULE[i + 1][0])
-                # If we're between weeks, use the next week
-                if target_date_obj < next_week_start:
-                    next_opponent = FANTASY_SCHEDULE[i + 1][1]
-                    # Calculate next week length
-                    if i + 2 < len(FANTASY_SCHEDULE):
-                        next_next_week_start = string_to_date(FANTASY_SCHEDULE[i + 2][0])
-                        next_week_length = (next_next_week_start - next_week_start).days
-                    else:
-                        next_week_length = 7
-                    next_week_end = next_week_start + timedelta(days=next_week_length - 1)
-                    return next_week_start, next_week_end, next_opponent
-            else:
-                # We're after the last week, use the last week
-                return week_start, week_end, opponent
-    
-    # If we're after the last week, use the last week
-    last_week = FANTASY_SCHEDULE[-1]
-    week_start = string_to_date(last_week[0])
-    week_length = 7  # Default to 7 for the last week
-    week_end = week_start + timedelta(days=week_length - 1)
-    opponent = last_week[1]
-    return week_start, week_end, opponent
 
-def get_my_team_players():
+def get_current_fantasy_week_dates(league, target_date=None):
     """
-    Get all players on my fantasy team excluding injured players.
-    
-    Returns:
-        list: List of player names on my team (excluding injured)
-    """
-    try:
-        my_team = FantasyTeam.get(FantasyTeam.abv == MY_TEAM_ABV)
-        players = (Player
-                  .select()
-                  .join(FantasyTeamPlayer, on=(Player.id == FantasyTeamPlayer.player_id))
-                  .where(FantasyTeamPlayer.fantasy_team_id == my_team.id)
-                  .where(Player.injured == 0))
-        return [player.name for player in players]
-    except FantasyTeam.DoesNotExist:
-        print(f"Warning: Fantasy team with abbreviation '{MY_TEAM_ABV}' not found in database")
-        return []
-    except Exception as e:
-        print(f"Error getting my team players: {e}")
-        return []
+    The fantasy week containing target_date (default today): (week_start, week_end, opponent).
 
-def get_all_my_team_players():
+    Before the season: the first week. Between weeks: the next one. After the season: the last.
+    With no schedule yet: the Monday-Sunday week around target_date, with no opponent.
     """
-    Get all players on my fantasy team including injured players.
-    
-    Returns:
-        list: List of player names on my team (including injured)
-    """
-    try:
-        my_team = FantasyTeam.get(FantasyTeam.abv == MY_TEAM_ABV)
-        players = (Player
-                  .select()
-                  .join(FantasyTeamPlayer, on=(Player.id == FantasyTeamPlayer.player_id))
-                  .where(FantasyTeamPlayer.fantasy_team_id == my_team.id))
-        return [player.name for player in players]
-    except FantasyTeam.DoesNotExist:
-        print(f"Warning: Fantasy team with abbreviation '{MY_TEAM_ABV}' not found in database")
-        return []
-    except Exception as e:
-        print(f"Error getting all my team players: {e}")
-        return []
+    target = string_to_date(target_date) if target_date else date.today()
+    schedule = league.schedule
+    if not schedule:
+        week_start = target - timedelta(days=target.weekday())
+        return week_start, week_start + timedelta(days=6), None
+    for i, (start, opponent) in enumerate(schedule):
+        week_end = _week_end(schedule, i)
+        if target <= week_end:
+            return string_to_date(start), week_end, opponent or None
+    start, opponent = schedule[-1]
+    return string_to_date(start), _week_end(schedule, len(schedule) - 1), opponent or None
 
-def get_opponent_team_players(target_date=None):
-    """
-    Get opponent team players based on fantasy schedule and current date.
-    
-    Args:
-        target_date (str, optional): Date in 'YYYY-MM-DD' format. If None, uses current date.
-    
-    Returns:
-        list: List of player names on opponent team (excluding injured)
-    """
-    if target_date is None:
-        target_date = date.today().strftime('%Y-%m-%d')
-    
-    # Get the current week info including opponent
-    week_start, week_end, opponent_abv = get_current_fantasy_week_dates(target_date)
-    
+
+def get_next_week_dates(league, week_start):
+    """(start, end) of the week after the one starting on week_start, or (None, None)."""
+    schedule = league.schedule
+    key = week_start.strftime('%Y-%m-%d') if hasattr(week_start, 'strftime') else week_start
+    for i, (start, _) in enumerate(schedule):
+        if start == key and i + 1 < len(schedule):
+            return string_to_date(schedule[i + 1][0]), _week_end(schedule, i + 1)
+    return None, None
+
+
+def league_team_ids(league):
+    return [t.id for t in FantasyTeam.select(FantasyTeam.id).where(FantasyTeam.league == league.id)]
+
+
+def get_team_by_abv(league, abv):
+    return FantasyTeam.get_or_none((FantasyTeam.league == league.id) & (FantasyTeam.abv == abv))
+
+
+def _team_players(team, healthy_only):
+    query = (Player
+             .select()
+             .join(FantasyTeamPlayer, on=(Player.id == FantasyTeamPlayer.player_id))
+             .where(FantasyTeamPlayer.fantasy_team_id == team.id))
+    if healthy_only:
+        query = query.where((Player.injured == 0) | (Player.injured.is_null()))
+    return [player.name for player in query]
+
+
+def get_my_team_players(league):
+    """Healthy players on my team in this league."""
+    team = get_team_by_abv(league, league.my_team)
+    if team is None:
+        print(f"Warning: no team '{league.my_team}' in league {league.id}")
+        return []
+    return _team_players(team, healthy_only=True)
+
+
+def get_all_my_team_players(league):
+    """Every player on my team in this league, injured included."""
+    team = get_team_by_abv(league, league.my_team)
+    return _team_players(team, healthy_only=False) if team else []
+
+
+def get_opponent_team_players(league, target_date=None):
+    """Healthy players on the opponent for the week containing target_date."""
+    _, _, opponent_abv = get_current_fantasy_week_dates(league, target_date)
     if not opponent_abv:
-        print(f"Warning: No opponent found for date {target_date}")
         return []
-    
-    try:
-        opponent_team = FantasyTeam.get(FantasyTeam.abv == opponent_abv)
-        players = (Player
-                  .select()
-                  .join(FantasyTeamPlayer, on=(Player.id == FantasyTeamPlayer.player_id))
-                  .where(FantasyTeamPlayer.fantasy_team_id == opponent_team.id)
-                  .where(Player.injured == 0))
-        return [player.name for player in players]
-    except FantasyTeam.DoesNotExist:
-        print(f"Warning: Fantasy team with abbreviation '{opponent_abv}' not found in database")
+    team = get_team_by_abv(league, opponent_abv)
+    if team is None:
+        print(f"Warning: no team '{opponent_abv}' in league {league.id}")
         return []
-    except Exception as e:
-        print(f"Error getting opponent team players: {e}")
-        return []
+    return _team_players(team, healthy_only=True)
 
-def get_all_taken_players():
-    """
-    Get all players that are on any fantasy team (taken players).
-    
-    Returns:
-        list: List of all taken player names
-    """
-    try:
-        players = (Player
-                  .select()
-                  .join(FantasyTeamPlayer, on=(Player.id == FantasyTeamPlayer.player_id))
-                  .distinct())
-        return [player.name for player in players]
-    except Exception as e:
-        print(f"Error getting taken players: {e}")
+
+def get_all_taken_players(league):
+    """Every player on any team in this league."""
+    team_ids = league_team_ids(league)
+    if not team_ids:
         return []
+    return [ftp.player_name for ftp in FantasyTeamPlayer.select(FantasyTeamPlayer.player_name)
+            .where(FantasyTeamPlayer.fantasy_team_id.in_(team_ids))]
+
+
+def get_undroppable_players(league):
+    return [flag.player.name for flag in LeaguePlayerFlag.select(LeaguePlayerFlag, Player)
+            .join(Player).where((LeaguePlayerFlag.league == league.id) & (LeaguePlayerFlag.undroppable == True))]  # noqa: E712
+
 
 def get_injured_players():
-    """
-    Get all injured players from the database.
-    
-    Returns:
-        list: List of injured player names
-    """
-    try:
-        injured_players = Player.select(Player.name).where(Player.injured == 1)
-        return [player.name for player in injured_players]
-    except Exception as e:
-        print(f"Error getting injured players: {e}")
-        return []
+    """Injured players (NBA-wide, not per league)."""
+    return [player.name for player in Player.select(Player.name).where(Player.injured == 1)]
+
 
 def is_player_injured(player_name):
-    """
-    Check if a specific player is injured.
-    
-    Args:
-        player_name (str): Name of the player to check
-        
-    Returns:
-        bool: True if player is injured, False otherwise
-    """
-    try:
-        player = Player.get(Player.name == player_name)
-        return player.injured == 1
-    except Player.DoesNotExist:
-        return False
-    except Exception as e:
-        print(f"Error checking injury status for {player_name}: {e}")
-        return False
+    player = Player.get_or_none(Player.name == player_name)
+    return bool(player and player.injured == 1)
 
-def get_available_players(player_stats):
-    """
-    Get all available players (not on any fantasy team and not injured).
-    
-    Args:
-        player_stats (dict): Player statistics dictionary
-        
-    Returns:
-        set: Set of available player names
-    """
-    taken_players = get_all_taken_players()
-    injured_players = get_injured_players()
-    available = set()
-    
-    for player_name, _ in player_stats.items():
-        if player_name not in taken_players and player_name not in injured_players:
-            available.add(player_name)
-    
-    return available
+
+def get_available_players(league, player_stats):
+    """Players not on any team in this league and not injured."""
+    taken = set(get_all_taken_players(league))
+    injured = set(get_injured_players())
+    return {name for name in player_stats if name not in taken and name not in injured}

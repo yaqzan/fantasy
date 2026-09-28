@@ -1,22 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getTeamStandings } from '../services/api';
 
-const CATEGORY_NAMES = {
-  'PTS': 'PTS',
-  'AST': 'AST',
-  'TOV': 'TOV',
-  'PF': 'PF',
-  'REB': 'REB',
-  'STL': 'STL',
-  'BLK': 'BLK',
-  'FG3M': '3PM',
-  'TS%': 'TS%',
-  'NFT': 'NFT',
-  'PLUS_MINUS': '+/-'
-};
-
-const PERCENTAGE_CATEGORIES = ['TS%'];
-
 const TeamStandings = ({ config }) => {
   const [statType, setStatType] = useState('projected');
   const [healthyOnly, setHealthyOnly] = useState(false);
@@ -25,7 +9,7 @@ const TeamStandings = ({ config }) => {
   const [dataCache, setDataCache] = useState({});
 
   useEffect(() => {
-    const cacheKey = `teamStandings_${statType}_${healthyOnly}`;
+    const cacheKey = `teamStandings_${config?.league?.id}_${statType}_${healthyOnly}`;
     
     // Check sessionStorage first
     const cachedData = sessionStorage.getItem(cacheKey);
@@ -73,6 +57,7 @@ const TeamStandings = ({ config }) => {
     if (category === 'PLUS_MINUS') {
       return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
     }
+    if (category === 'TECH' || category === 'WIN%') return value.toFixed(2);  // small per-game numbers
     return value.toFixed(1);
   };
 
@@ -166,13 +151,11 @@ const TeamStandings = ({ config }) => {
     );
   }
 
-  const { teams, categories, category_names } = standingsData;
+  const { teams, categories, category_names, category_meta = [] } = standingsData;
+  const PERCENTAGE_CATEGORIES = category_meta.filter(c => c.percent).map(c => c.key);
   const isMyTeam = (team) => team.abbreviation === config?.MY_TEAM_ABV;
-  
-  // Use category_names from backend, fallback to local CATEGORY_NAMES
-  const getCategoryName = (category) => {
-    return category_names?.[category] || CATEGORY_NAMES[category] || category;
-  };
+
+  const getCategoryName = (category) => category_names?.[category] || category;
 
   return (
     <div className="p-6">

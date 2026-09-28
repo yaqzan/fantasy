@@ -9,7 +9,7 @@ Flask REST API for NBA fantasy basketball player statistics and draft management
    pip install -r requirements.txt
    ```
 
-2. Ensure your MySQL database is running and configured in `../fantasy_config.py`
+2. Ensure your MySQL database is running (settings in `../.env`, see `../.env.example`) and `python ../init_db.py` has run
 
 3. Run the server:
    ```bash

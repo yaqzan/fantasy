@@ -11,6 +11,65 @@ const api = axios.create({
   },
 });
 
+// Every request is about one league: the one picked in the header's league switcher.
+const LEAGUE_KEY = 'fantasy.league';
+
+export const getSelectedLeague = () => {
+  try {
+    return localStorage.getItem(LEAGUE_KEY);
+  } catch (e) {
+    return null;
+  }
+};
+
+export const setSelectedLeague = (leagueId) => {
+  try {
+    if (leagueId) localStorage.setItem(LEAGUE_KEY, leagueId);
+    else localStorage.removeItem(LEAGUE_KEY);
+  } catch (e) {
+    // storage blocked: the backend falls back to the active league
+  }
+};
+
+api.interceptors.request.use((config) => {
+  const leagueId = getSelectedLeague();
+  if (leagueId) config.headers['X-League'] = leagueId;
+  return config;
+});
+
+// The backend's error message, when it sent one.
+export const errorMessage = (error) => error?.response?.data?.error || error?.message || 'Request failed';
+
+export const getLeagues = async () => {
+  const response = await api.get('/leagues');
+  return response.data;
+};
+
+export const createLeague = async (name, settings, copyTeamsFrom = null) => {
+  const response = await api.post('/leagues', { name, settings, copy_teams_from: copyTeamsFrom });
+  return response.data;
+};
+
+export const updateLeague = async (leagueId, name, settings) => {
+  const response = await api.put(`/leagues/${leagueId}`, { name, settings });
+  return response.data;
+};
+
+export const activateLeague = async (leagueId) => {
+  const response = await api.post(`/leagues/${leagueId}/activate`);
+  return response.data;
+};
+
+export const deleteLeague = async (leagueId) => {
+  const response = await api.delete(`/leagues/${leagueId}`);
+  return response.data;
+};
+
+export const generateWeeks = async () => {
+  const response = await api.get('/leagues/generate-weeks');
+  return response.data;
+};
+
 export const getPlayers = async () => {
   const response = await api.get('/fantasy');
   return response.data;
@@ -28,6 +87,11 @@ export const createFantasyTeam = async (teamData) => {
 
 export const updateFantasyTeam = async (teamId, teamData) => {
   const response = await api.put(`/fantasy-teams/${teamId}`, teamData);
+  return response.data;
+};
+
+export const deleteFantasyTeam = async (teamId) => {
+  const response = await api.delete(`/fantasy-teams/${teamId}`);
   return response.data;
 };
 
@@ -60,9 +124,10 @@ export const getTeamPlayers = async (teamId) => {
   return response.data;
 };
 
-export const calculateCustomZScores = async (puntCategories) => {
+export const calculateCustomZScores = async (puntCategories, statType = 'projected') => {
   const response = await api.post('/calculate-zscores', {
-    punt_categories: puntCategories
+    punt_categories: puntCategories,
+    stat_type: statType
   });
   return response.data;
 };
@@ -83,6 +148,11 @@ export const analyze = async (weekStart = null, timeframe = 'projected', pickup 
     ...(pickupTimeframe && { pickup_timeframe: pickupTimeframe })
   };
   const response = await api.get('/analyze', { params });
+  return response.data;
+};
+
+export const analyzeCustom = async (weekStart, pickup, drop = null) => {
+  const response = await api.post('/analyze/custom', { week_start: weekStart, pickup, drop });
   return response.data;
 };
 

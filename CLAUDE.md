@@ -3,8 +3,8 @@
 NBA fantasy basketball dashboard and lineup optimizer: https://fantasy.yaqzan.dev.
 Flask + Peewee/MySQL backend, React (CRA) + Tailwind frontend, one process on port 5001.
 
-**Public repo (github.com/yaqzan/fantasy), plug and play.** Owner state is gitignored: `.env`
-(Fantrax login, league id, DB), `league.json` (team + schedule with league mates' names),
+**Public repo (github.com/yaqzan/fantasy), plug and play.** Owner state is gitignored or in MySQL:
+`.env` (Fantrax login, DB), the `leagues` table (rules, schedule, league mates' names),
 `*.cookie` (Fantrax session), `ops/cloudflared-config.yml`. Tracked files carry no credential,
 league id or person's name. Pre-2026-09-23 history (it holds a real password) is in private
 `yaqzan/fantasy-archive`.
@@ -13,8 +13,10 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 
 - `C:\Development\server.ps1 start|status|logs -Service fantasy` - api + tunnel (`fantasy-api`, `fantasy-tunnel`)
 - `npm --prefix frontend run build` - deploy a frontend change (Flask serves `frontend/build`, live on reload)
-- `python init_db.py` - create the database + tables (safe to re-run)
-- `python pull_api_data.py` / `update_daily_stats.py` - stats ingest
+- `python init_db.py` - create/upgrade the database + tables (safe to re-run, additive only)
+- `python pull_api_data.py [--season 2025-26 --force]` - schedule, standings, rosters, stats, techs
+- `python pull_technical_fouls.py` - play-by-play tech scan alone (~3s per new game)
+- `python lineup_optimizer.py [--league <id>] [--pickup]` - this week's matchup in the terminal
 - `ops\windows\install-tasks.ps1 -Controller C:\Development\server.ps1` - watchdog task; ELEVATED shell
 
 ## Invariants
@@ -27,6 +29,10 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 - **Own tunnel** `fantasy` (locally managed, `ops/cloudflared-config.yml`). Never route Fantasy
   through the dashboard-managed `trading-api` tunnel again.
 - Credentials only from `.env`; never a default league id or password in code.
+- **Multi-league.** Rules, teams, rosters, undroppable flags and schedules belong to a league;
+  every league-scoped query filters by it. Requests pick it with the `X-League` header. Never
+  reintroduce league constants in `fantasy_config.py` (it holds NBA-wide settings only).
 
-Detail: hosting, tunnel, watchdog, cutover history -> `.claude/docs/ops.md`.
+Detail: leagues, categories, daily vs weekly lineups -> `.claude/docs/leagues.md`.
+Hosting, tunnel, watchdog, cutover history -> `.claude/docs/ops.md`.
 Kanban -> vault `Engineering Wiki/Projects/Fantasy/`.

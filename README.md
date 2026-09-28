@@ -1,14 +1,17 @@
 # NBA Fantasy Dashboard
 
-A React + Flask dashboard for a Fantrax NBA fantasy basketball league: player rankings, a lineup
-optimizer, team standings, and daily stat tracking, built around one league's category scoring.
-Mine runs at [fantasy.yaqzan.dev](https://fantasy.yaqzan.dev).
+A React + Flask dashboard for Fantrax NBA fantasy basketball leagues: player rankings, a lineup
+optimizer, team standings, and daily stat tracking. Each league carries its own rules (scoring
+categories, roster and lineup rules, auction budget, waivers, matchup schedule) and its own teams;
+a switcher in the header moves between them. Mine runs at [fantasy.yaqzan.dev](https://fantasy.yaqzan.dev).
 
 ## Features
 
 ### Backend (Flask)
 - RESTful API for player statistics, fantasy team management, and league data
-- Custom z-score and auction value calculation per the league's scoring categories
+- Several leagues side by side, each with its own rules, teams and rosters
+- Scores and auction values per league: its categories, team count, roster size and budget
+- Daily-lineup leagues (best N active players each day count) and weekly-lineup leagues
 - Team standings computed from category scoring across the fantasy schedule
 - Daily player stats tracking (`daily_player_stats` table) with fantasy points
 - Fantrax league sync via `fantrax_client.py`
@@ -25,19 +28,30 @@ Mine runs at [fantasy.yaqzan.dev](https://fantasy.yaqzan.dev).
 - Draft system with fantasy team selection, "Show Available Only" filter
 - Modern NBA-themed UI with dark mode, responsive for desktop and mobile
 
+### Scoring categories
+
+Any mix of: points, rebounds, assists, steals, blocks, 3PM, assists minus turnovers, net free
+throws, double/triple-doubles, plus/minus, turnovers, personal fouls, times blocked, technical
+fouls, wins, TS%, EFG%, FT%, points per shot. Turnovers, fouls, times blocked and technicals count
+against you.
+
 ### Key Statistics Displayed
 - Overall Rank (OVR), Points, Rebounds, Assists, Steals, Blocks
 - Field Goal %, Free Throw %, Three-pointers made
 - True Shooting %, Effective FG%, Plus/Minus, AST-TOV ratio, Points per Shot
 - Games played, hot streak status
-- Auction Values and Z-Scores (per-category, configurable in `fantasy_config.py`)
+- Auction Values and Z-Scores (per category, per league)
 
 ## Data Ingest (NBA stats)
 
 Player and game data is pulled from `stats.nba.com` via the `nba_api` package and written into
 MySQL:
 
-- `pull_api_data.py`: full player/roster/game-log backfill, run periodically
+- `pull_api_data.py`: season schedule, standings, rosters and player stats (one bulk game-log
+  call, plus times blocked from `leaguedashplayerstats`), run daily in season. `--season 2025-26
+  --force` backfills a past season (useful before a draft).
+- `pull_technical_fouls.py`: technical fouls, scanned from each game's play-by-play once (about
+  3 seconds a game; a full season is about an hour). `pull_api_data.py` runs it for new games.
 - `update_daily_stats.py` / `update_daily_stats_efficient.py`: daily fantasy-point updates,
   scoped to teams that played on a given date
 - `create_daily_stats_table.py`: one-time table setup
@@ -66,20 +80,23 @@ Fantasy/
 ├── update_daily_stats.py        # Daily fantasy stats updater
 ├── update_daily_stats_efficient.py
 ├── fantasy_database.py          # Peewee models: Player, Team, Game, FantasyTeam, DailyPlayerStats
-├── fantasy_team_helper.py       # Fantasy schedule / week helpers
-├── fantasy_config.py            # Scoring, categories, roster rules; reads .env + league.json
-├── init_db.py                   # Creates the MySQL database and tables
-├── league.example.json          # Example team + schedule (copy to league.json)
+├── pull_technical_fouls.py      # Technical fouls from play-by-play
+├── leagues.py                   # League rules: category catalog, settings schema, CRUD
+├── fantasy_team_helper.py       # Per-league schedule / roster helpers
+├── fantasy_config.py            # NBA-wide settings; reads .env
+├── init_db.py                   # Creates and upgrades the MySQL database and tables
 ├── fantrax_client.py            # Fantrax league sync client
-├── lineup_optimizer.py          # Best-lineup calculation
-├── player_stats.py              # Z-scores, auction values, fantasy points
-└── display.py                   # CLI stat display helpers
+├── lineup_optimizer.py          # Best lineup, best pickup, pickup/drop what-ifs
+└── player_stats.py              # Scores, week projections, auction values, fantasy points
 ```
 
 ## Database Schema
 
 - `teams`, `players`, `games`: NBA reference data
-- `fantasy_teams`, `fantasy_team_players`: this league's teams and drafted players
+- `technical_fouls`, `pbp_scanned_games`: technicals per player per game, and which games are scanned
+- `leagues`: each league's rules as JSON (`leagues.py` `DEFAULT_SETTINGS` lists every key)
+- `fantasy_teams`, `fantasy_team_players`: each league's teams and drafted players
+- `league_player_flags`: per-league player flags (undroppable)
 - `daily_player_stats`: per-day fantasy point tracking
 
 ## Setup Instructions
@@ -91,16 +108,19 @@ Fantasy/
 
 ### Environment
 ```bash
-cp .env.example .env                  # Fantrax login + league id, optional MySQL settings
-cp league.example.json league.json    # your team abbreviation + matchup schedule
+cp .env.example .env                  # Fantrax login, optional MySQL settings
 pip install -r requirements.txt
-python init_db.py                     # creates the database and tables
+python init_db.py                     # creates (or upgrades) the database and tables
+python pull_api_data.py               # NBA schedule, rosters, stats
 ```
 
-Without `league.json` the app runs on the example league. The league's teams and rosters start
-empty: add each team in the app's Team Manager (use the same abbreviation as `my_team` for yours),
-then draft players onto them. Fantrax login drives your own account
-through Selenium (Chrome), after first trying your browser's saved cookie.
+Open the app and create a league (**New league** in the header): categories, roster spots and
+active spots, daily or weekly lineups, auction budget, waiver claims, your team's abbreviation.
+**Fill weeks from NBA calendar** lays out the matchup weeks; type each week's opponent. Then add
+the league's teams in the Team Manager (**Add team**, using the abbreviations the schedule uses)
+and draft players onto them. Add another league any time; the header's switcher moves between them.
+Fantrax login drives your own account through Selenium (Chrome), after first trying your
+browser's saved cookie.
 
 ### Data ingest scripts
 ```bash
@@ -124,7 +144,16 @@ The frontend is available at `http://localhost:3000`.
 
 ## API Endpoints
 
-Everything except `/health` lives under `/api`; every other path serves the React app.
+Everything except `/health` lives under `/api`; every other path serves the React app. League
+endpoints aside, requests act on the league named in the `X-League` header (the switcher sends
+it), else the active league.
+
+### Leagues
+- `GET /api/leagues`: leagues, the active one, the category catalog and default settings
+- `POST /api/leagues`: create (`name`, `settings`, optional `copy_teams_from`)
+- `PUT /api/leagues/<id>`: update name/settings; `DELETE` removes a league with no rostered players
+- `POST /api/leagues/<id>/activate`: make it the default for header-less requests and CLI scripts
+- `GET /api/leagues/generate-weeks`: blank matchup weeks from the stored NBA schedule
 
 ### Players
 - `GET /api/fantasy`: all players with fantasy statistics
@@ -135,14 +164,15 @@ Everything except `/health` lives under `/api`; every other path serves the Reac
 ### Fantasy Teams
 - `GET /api/fantasy-teams`: list fantasy teams
 - `POST /api/fantasy-teams`: create a fantasy team
-- `PUT /api/fantasy-teams/<team_id>`: update a fantasy team
+- `PUT /api/fantasy-teams/<team_id>`: update a fantasy team; `DELETE` removes it and its roster
 - `GET /api/team-players/<team_id>`: players on a team
 - `POST /api/draft-player`: draft a player to a team
 - `POST /api/undraft-player`: remove a player from a team
 
 ### Standings & Stats
 - `GET /api/team-standings`: league standings from category scoring
-- `GET /api/analyze`: category analysis
+- `GET /api/analyze`: matchup analysis for a week (best lineup, or best pickup with `pickup=true`)
+- `POST /api/analyze/custom`: what-if for a chosen pickup and drop, every timeframe
 - `GET /api/daily-stats`: daily fantasy point stats
 - `POST /api/daily-stats/update`: trigger a daily stats refresh
 
@@ -163,13 +193,13 @@ On Windows, `ops/windows/install-tasks.ps1` registers a 5-minute watchdog that r
 
 | file | what it is |
 |---|---|
-| `.env` | Fantrax login, league id, MySQL settings |
+| `.env` | Fantrax login, MySQL settings |
 | `ops/cloudflared-config.yml` | your tunnel, copied from the `.example` |
-| `league.json` | your team and the season's matchup schedule |
 | `fantraxloggedin.cookie` | the saved Fantrax session |
-| the MySQL `fantasy` database | stats, teams, rosters |
+| the MySQL `fantasy` database | stats, leagues (rules, schedules), teams, rosters |
 
-All of it is gitignored.
+None of it is in git. (An older install's `league.json` is imported once by `init_db.py` and then
+no longer read.)
 
 ## Customization
 
@@ -179,9 +209,9 @@ All of it is gitignored.
 3. Update table header and cell rendering
 
 ### League Settings
-Scoring categories, punt categories, team count, roster minimums, and the fantasy week schedule
-live in `fantasy_config.py`. Your team and the week-by-week schedule live in `league.json`: update
-it each season once matchup dates are set.
+Everything about a league (categories, team count, roster and lineup rules, draft, waivers, the
+matchup schedule, your team) is edited in the app under **Settings**. A new category needs a stat
+in `player_stats.load_player_stats` and an entry in `leagues.CATEGORY_CATALOG`.
 
 ## Troubleshooting
 
