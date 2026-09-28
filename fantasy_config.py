@@ -40,11 +40,8 @@ FANTRAX_LEAGUE_ID = os.getenv("FANTRAX_LEAGUE_ID")
 FANTRAX_USERNAME = os.getenv("FANTRAX_USERNAME")
 FANTRAX_PASSWORD = os.getenv("FANTRAX_PASSWORD")
 
-# League rules (categories, roster, team count, draft, schedule, your team) are per league:
-# see leagues.py. What stays here is NBA-wide.
-
-# AUCTION: exponent that concentrates the budget on the best players
-EXP_FACTOR = 5
+# League rules (categories, roster, team count, draft and its auction price exponent, schedule,
+# your team) are per league: see leagues.py. What stays here is NBA-wide.
 
 # FANTASY POINTS SCORING (daily stats tab)
 FPOINTS_SCORING = {

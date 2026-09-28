@@ -11,10 +11,10 @@ const Section = ({ title, children }) => (
   </div>
 );
 
-const NumberField = ({ label, value, onChange, min = 0 }) => (
-  <div>
+const NumberField = ({ label, value, onChange, min = 0, step, title }) => (
+  <div title={title}>
     <label className={labelClass}>{label}</label>
-    <input type="number" min={min} value={value} onChange={(e) => onChange(e.target.value)} className={inputClass} />
+    <input type="number" min={min} step={step} value={value} onChange={(e) => onChange(e.target.value)} className={inputClass} />
   </div>
 );
 
@@ -164,6 +164,14 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, teams = [], 
               <input type="datetime-local" value={settings.draft.date} onChange={(e) => setIn('draft', 'date', e.target.value)} className={inputClass} />
             </div>
             <NumberField label="Waiver claims / week" value={settings.waivers.claims_per_week} onChange={(v) => setIn('waivers', 'claims_per_week', v)} />
+            <NumberField
+              label="Auction star premium"
+              value={settings.draft.price_exponent ?? 1}
+              min={0.2}
+              step={0.05}
+              onChange={(v) => setIn('draft', 'price_exponent', v)}
+              title="Auction $ follow value above replacement raised to this power: 1 splits money in proportion to value, higher pays stars more. Fit it to the league's past drafts."
+            />
           </div>
         </Section>
 

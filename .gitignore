@@ -16,3 +16,6 @@ frontend/build/
 *.log
 .archive/
 ops/cloudflared-config.yml
+
+# League auction bidding history (owner data, see CLAUDE.md)
+draft_history_price_curve.json

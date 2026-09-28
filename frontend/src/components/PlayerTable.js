@@ -2,9 +2,6 @@ import React, { useState, useEffect } from 'react';
 import DraftModal from './DraftModal';
 import { calculateCustomZScores, calculateCustomAuctionValues } from '../services/api';
 
-// Default EXP_FACTOR from config
-const DEFAULT_EXP_FACTOR = 4;
-
 const formatWeekDate = (dateStr) => {
   if (!dateStr) return '';
   // Parse date string directly to avoid timezone issues
@@ -14,7 +11,8 @@ const formatWeekDate = (dateStr) => {
   return `${monthName} ${day}`;
 };
 
-const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, expFactor, onExpFactorChange, config, statType = 'projected' }) => {
+// priceExponent: null means the league's own draft.price_exponent (the server's default values).
+const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected' }) => {
   // The league's categories, in display order, with labels and percent/inverse flags.
   const categoryMeta = config?.categories || [];
   const CATEGORIES = categoryMeta.map(c => c.key);
@@ -52,42 +50,24 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     setSortConfig(prev => ({ ...prev }));
   }, [statType]);
 
-  // Handle EXP_FACTOR changes
-  const handleExpFactorChange = async (newExpFactor) => {
-    onExpFactorChange(newExpFactor);
-    
-    // If using default factor, clear custom values
-    if (newExpFactor === DEFAULT_EXP_FACTOR) {
+  // Auction values follow the star-premium slider and the punted categories; with neither
+  // changed, the server's values (the league's own exponent, nothing punted) stand.
+  useEffect(() => {
+    if (priceExponent === null && puntCategories.length === 0) {
       setCustomAuctionValues({});
       return;
     }
-    
+    let cancelled = false;
     setLoadingAuctionValues(true);
-    
-    try {
-      const response = await calculateCustomAuctionValues(newExpFactor, puntCategories);
-      setCustomAuctionValues(response.auction_values || {});
-    } catch (error) {
-      console.error('Error calculating custom auction values:', error);
-      setCustomAuctionValues({});
-    } finally {
-      setLoadingAuctionValues(false);
-    }
-  };
-
-  // Load custom auction values when expFactor changes
-  useEffect(() => {
-    handleExpFactorChange(expFactor);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expFactor]);
-
-  // Recalculate auction values when punt categories change
-  useEffect(() => {
-    if (expFactor !== DEFAULT_EXP_FACTOR) {
-      handleExpFactorChange(expFactor);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [puntCategories]);
+    calculateCustomAuctionValues(priceExponent, puntCategories)
+      .then(response => { if (!cancelled) setCustomAuctionValues(response.auction_values || {}); })
+      .catch(error => {
+        console.error('Error calculating custom auction values:', error);
+        if (!cancelled) setCustomAuctionValues({});
+      })
+      .finally(() => { if (!cancelled) setLoadingAuctionValues(false); });
+    return () => { cancelled = true; };
+  }, [priceExponent, puntCategories]);
 
   // Get auction value (custom or original)
   const getAuctionValue = (playerName, originalValue) => {

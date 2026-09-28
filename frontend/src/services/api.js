@@ -132,9 +132,10 @@ export const calculateCustomZScores = async (puntCategories, statType = 'project
   return response.data;
 };
 
-export const calculateCustomAuctionValues = async (expFactor, puntCategories = []) => {
+// priceExponent null: the league's own draft.price_exponent.
+export const calculateCustomAuctionValues = async (priceExponent, puntCategories = []) => {
   const response = await api.post('/calculate-auction-values', {
-    exp_factor: expFactor,
+    ...(priceExponent !== null && { price_exponent: priceExponent }),
     punt_categories: puntCategories
   });
   return response.data;

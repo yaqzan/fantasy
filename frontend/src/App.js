@@ -24,7 +24,7 @@ function App() {
     F: true,
     C: true
   });
-  const [expFactor, setExpFactor] = useState(4);
+  const [priceExponent, setPriceExponent] = useState(null); // null: the league's own exponent
   const [activeTab, setActiveTab] = useState('players');
   const [statType, setStatType] = useState('5');
   const [leaguesData, setLeaguesData] = useState({ leagues: [], category_catalog: [], defaults: null });
@@ -33,6 +33,7 @@ function App() {
   const [loadError, setLoadError] = useState(null);
 
   const currentLeague = leaguesData.leagues.find(l => l.id === leagueId) || null;
+  const leagueExponent = config?.league?.settings?.draft?.price_exponent ?? 1;
 
   useEffect(() => {
     loadLeagues();
@@ -62,6 +63,7 @@ function App() {
   const switchLeague = async (id) => {
     setSelectedLeague(id);
     setLeagueId(id);
+    setPriceExponent(null);
     setPlayers([]);
     setFantasyTeams([]);
     activateLeague(id).catch(() => {}); // CLI scripts follow the league last picked here
@@ -327,18 +329,24 @@ function App() {
                 </div>
                 
                 {config.show_auction_price && (
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-300">Price Factor:</span>
+                  <div
+                    className="flex items-center space-x-2"
+                    title={`Auction $ follow each player's value above replacement, raised to this power. 1 splits money in proportion to value; higher pays stars more. This league's default: ${leagueExponent}`}
+                  >
+                    <span className="text-sm text-gray-300">Star premium:</span>
                     <input
                       type="range"
-                      min="1"
-                      max="5"
-                      step="0.5"
-                      value={expFactor}
-                      onChange={(e) => setExpFactor(parseFloat(e.target.value))}
+                      min="0.5"
+                      max="2"
+                      step="0.05"
+                      value={priceExponent ?? leagueExponent}
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value);
+                        setPriceExponent(Math.abs(value - leagueExponent) < 1e-9 ? null : value);
+                      }}
                       className="w-20 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
                     />
-                    <span className="text-sm text-gray-300 w-8 text-center">{expFactor}</span>
+                    <span className="text-sm text-gray-300 w-10 text-center">{(priceExponent ?? leagueExponent).toFixed(2)}</span>
                   </div>
                 )}
                 
@@ -373,8 +381,7 @@ function App() {
             onDraftPlayer={handleDraftPlayer}
             onUndraftPlayer={handleUndraftPlayer}
             onUpdatePlayer={handleUpdatePlayer}
-            expFactor={expFactor}
-            onExpFactorChange={setExpFactor}
+            priceExponent={priceExponent}
             config={config}
             statType={statType}
           />

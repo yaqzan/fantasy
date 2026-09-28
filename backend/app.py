@@ -11,7 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fantasy_database import DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats, LeaguePlayerFlag
 from player_stats import (load_player_stats, calculate_overall_scores, calculate_auction_values, calculate_fantasy_points,
                           calculate_team_totals, week_schedule, team_games, TEAM_DICT)
-from fantasy_config import TEAMNAMES, EXP_FACTOR
+from fantasy_config import TEAMNAMES
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
                                  league_team_ids, get_undroppable_players)
 from leagues import (get_league, list_leagues, create_league, update_league, activate_league, delete_league,
@@ -270,15 +270,19 @@ def calculate_custom_zscores():
 
 @fantasy_api.route('/calculate-auction-values', methods=['POST'])
 def calculate_custom_auction_values():
-    """Auction values with a custom EXP_FACTOR and punted categories"""
+    """Auction values with a custom price exponent and punted categories"""
     data = request.get_json() or {}
     league = current_league()
     punt = data.get('punt_categories', [])
+    try:
+        price_exponent = float(data.get('price_exponent') or league.price_exponent)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'price_exponent must be a number'}), 400
+    if not 0.2 <= price_exponent <= 5:
+        return jsonify({'error': 'price_exponent must be between 0.2 and 5'}), 400
     player_stats = scored_players(league, punt)
-    if punt:
-        for stats in player_stats.values():
-            stats['SCORE'] = stats['Z-SCORE']  # auction values follow the punt-adjusted score
-    calculate_auction_values(player_stats, league, exp_factor=data.get('exp_factor', EXP_FACTOR))
+    # Punting: auction values follow the value over the categories still played.
+    calculate_auction_values(player_stats, league, price_exponent, value_key='Z-VALUE' if punt else 'VALUE')
     return jsonify({'auction_values': {name: {'auction_value': stats.get('AUCTION_VALUE', 0)}
                                        for name, stats in player_stats.items()}})
 

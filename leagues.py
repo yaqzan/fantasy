@@ -34,10 +34,17 @@ CATEGORY_CATALOG = {
     'BLKA': {'label': 'TB', 'name': 'Times blocked', 'kind': 'count', 'inverse': True},
     'TECH': {'label': 'TF', 'name': 'Technical fouls', 'kind': 'count', 'inverse': True},
     'WIN%': {'label': 'W', 'name': 'Wins', 'kind': 'wins'},
-    'TS%': {'label': 'TS%', 'name': 'True shooting %', 'kind': 'ratio', 'percent': True},
-    'EFG%': {'label': 'EFG%', 'name': 'Effective FG %', 'kind': 'ratio', 'percent': True},
-    'FT%': {'label': 'FT%', 'name': 'Free throw %', 'kind': 'ratio', 'percent': True},
-    'PPS': {'label': 'PPS', 'name': 'Points per shot', 'kind': 'ratio'},
+    # Ratios are valued by impact (player_stats.py). `attempts`: the per-game attempts behind the
+    # rate, as (stat, coefficient) terms. `prior`: attempts of league-average shooting a player's
+    # rate is blended with before scoring (method of moments on 2025-26: TS% ~233, EFG% ~223,
+    # FT% ~27, PPS ~98).
+    'TS%': {'label': 'TS%', 'name': 'True shooting %', 'kind': 'ratio', 'percent': True,
+            'attempts': [('FGA', 1.0), ('FTA', 0.44)], 'prior': 250},
+    'EFG%': {'label': 'EFG%', 'name': 'Effective FG %', 'kind': 'ratio', 'percent': True,
+             'attempts': [('FGA', 1.0)], 'prior': 250},
+    'FT%': {'label': 'FT%', 'name': 'Free throw %', 'kind': 'ratio', 'percent': True,
+            'attempts': [('FTA', 1.0)], 'prior': 50},
+    'PPS': {'label': 'PPS', 'name': 'Points per shot', 'kind': 'ratio', 'attempts': [('FGA', 1.0)], 'prior': 100},
 }
 # Column order in tables: shooting first, then counting stats, inverse categories last.
 CATEGORY_ORDER = ['TS%', 'EFG%', 'FT%', 'PPS', 'PTS', 'REB', 'AST', 'AST-TOV', 'STL', 'BLK', 'FG3M', 'NFT',
@@ -57,7 +64,9 @@ DEFAULT_SETTINGS = {
                                       # False: one lineup of `active` players for the whole week
         'min_guards': 0, 'min_forwards': 0, 'min_centers': 0,
     },
-    'draft': {'type': 'auction', 'budget': 200, 'date': ''},
+    'draft': {'type': 'auction', 'budget': 200, 'date': '',
+              'price_exponent': 1.0},     # auction $ follow value over replacement ** this;
+                                          # fit to the league's past drafts (1 = linear)
     'waivers': {'claims_per_week': 1},
     'schedule': [],                   # [[week start "YYYY-MM-DD", opponent abbreviation], ...]
     'notes': '',                      # free text: prizes, tie-breakers, anything else
@@ -104,6 +113,12 @@ def validate_settings(settings):
         s['waivers']['claims_per_week'] = int(s['waivers']['claims_per_week'] or 0)
     except (TypeError, ValueError):
         raise ValueError('team count, roster sizes, budget and claims must be whole numbers')
+    try:
+        s['draft']['price_exponent'] = float(s['draft']['price_exponent'])
+    except (TypeError, ValueError):
+        raise ValueError('the price exponent must be a number')
+    if not 0.2 <= s['draft']['price_exponent'] <= 5:
+        raise ValueError('the price exponent must be between 0.2 and 5')
     s['roster']['daily_lineups'] = bool(s['roster']['daily_lineups'])
     if s['num_teams'] < 2:
         raise ValueError('a league needs at least 2 teams')
@@ -147,6 +162,7 @@ class LeagueConfig:
     min_forwards = property(lambda self: self.settings['roster']['min_forwards'])
     min_centers = property(lambda self: self.settings['roster']['min_centers'])
     budget = property(lambda self: self.settings['draft']['budget'] or 200)
+    price_exponent = property(lambda self: self.settings['draft']['price_exponent'])
     claims_per_week = property(lambda self: max(self.settings['waivers']['claims_per_week'], 1))
     fantrax_league_id = property(lambda self: self.settings['fantrax_league_id'])
 

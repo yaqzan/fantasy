@@ -2,13 +2,16 @@
 Player statistics calculation.
 Builds player_stats dictionary from fantasy_database data.
 """
-from math import pow
+from statistics import mean, pstdev
 from fantasy_database import Player, Team, Game
-from fantasy_config import API_ATTRIBUTES, EXP_FACTOR, FPOINTS_SCORING
+from fantasy_config import API_ATTRIBUTES, FPOINTS_SCORING
 from leagues import CATEGORY_CATALOG
 
 
 TIME_PERIODS = ['', '_5', '_10']
+TIMEFRAMES = ['', '_5', '_10', '_projected']
+Z_CAP = 3.0       # a category's z-score is capped at +/-Z_CAP before categories are summed
+POOL_PASSES = 3   # re-rank passes that settle the draftable pool the z-scores are measured against
 VALID_POSITIONS = ['C', 'F', 'G']
 STAT_AVG_WEIGHTS = {'': 0.5, '_10': 0.5, '_5': 0.0}
 TEAM_DICT = {
@@ -31,12 +34,14 @@ def load_player_stats():
         team_name = TEAM_DICT.get(player.team, player.team)
         player_stats[player.name] = {
             'TEAM': team_name,
-            'Pos': player.pos
+            'Pos': player.pos,
+            'GP': player.gp,
         }
 
         for n in TIME_PERIODS:
             gp = min(player.gp, int(n.replace('_', '')) if n else 100)
-                
+            player_stats[player.name][f'GP{n}'] = gp
+
             for key in API_ATTRIBUTES:
                 player_stats[player.name][f'{key}{n}'] = getattr(player, f'{key.lower()}{n}', 0) / gp if getattr(player, f'{key.lower()}{n}', 0) is not None else 0
 
@@ -89,6 +94,11 @@ def load_player_stats():
         player_stats[player.name]['NFT_projected'] = (
             2 * (player_stats[player.name].get('FTM_projected', 0) or 0) -
             (player_stats[player.name].get('FTA_projected', 0) or 0)
+        )
+        # Games behind the projected (blended) rate, same weights as the rate itself: ratio
+        # shrinkage (_category_values) needs total attempts in every timeframe.
+        player_stats[player.name]['GP_projected'] = sum(
+            player_stats[player.name].get(f'GP{n}', 0) * STAT_AVG_WEIGHTS[n] for n in STAT_AVG_WEIGHTS
         )
 
     return player_stats
@@ -168,98 +178,131 @@ def calculate_team_totals(roster, player_stats, player_games, player_wins, categ
             totals[key] = total(category)
     return totals
 
-def get_league_average_stat(player_stats, stat='EFG%', last_n_games= ''):
-    values = [player_stats[player_name][f'{stat}{last_n_games}'] for player_name, _ in player_stats.items() if f'{stat}{last_n_games}' in player_stats[player_name]]
-    return sum(values) / len(values) if values else 0
+def _qualified_pool(player_stats):
+    """Players whose stats may set a category's mean/SD: at least 15% of the most games anyone
+    has played this season (min 5), so a 1-2 game call-up can't define the scale. Scales itself
+    down early in a season; everyone qualifies when nobody has reached the floor yet."""
+    gp_values = [stats.get('GP') or 0 for stats in player_stats.values()]
+    if not gp_values:
+        return set(player_stats)
+    floor = max(5, round(0.15 * max(gp_values)))
+    qualified = {name for name, stats in player_stats.items() if (stats.get('GP') or 0) >= floor}
+    return qualified or set(player_stats)
+
+
+def _category_values(player_stats, category, n, pool):
+    """{player: the number category `category` is scored on in timeframe `n`}.
+
+    Counting stats and wins: the per-game value. Ratio categories: impact, attempts per game x
+    (rate - the pool's combined rate). A ratio only moves a team's ratio in proportion to the
+    attempts behind it: .770 TS% on 3 shots a game barely moves a team, .665 on 23 moves it a lot.
+    The rate is first blended with `prior` attempts of pool-average shooting (CATEGORY_CATALOG),
+    so a few hot games don't read as talent."""
+    key = category + n
+    raw = {p: s[key] for p, s in player_stats.items() if s.get(key) is not None}
+    spec = CATEGORY_CATALOG[category]
+    if spec.get('kind') != 'ratio' or not spec.get('attempts'):
+        return raw
+    attempts = {p: sum(coef * (player_stats[p].get(f'{stat}{n}') or 0) for stat, coef in spec['attempts'])
+                for p in raw}
+    in_pool = [p for p in pool if p in raw]
+    pool_attempts = sum(attempts[p] for p in in_pool)
+    pool_rate = sum(raw[p] * attempts[p] for p in in_pool) / pool_attempts if pool_attempts else 0.0
+    prior = spec.get('prior', 0)
+    values = {}
+    for p, rate in raw.items():
+        total = attempts[p] * (player_stats[p].get(f'GP{n}') or 0)
+        shrunk = (total * rate + prior * pool_rate) / (total + prior) if total + prior else pool_rate
+        values[p] = attempts[p] * (shrunk - pool_rate)
+    return values
+
+
+def _z_scores(player_stats, categories, inverse, n, eligible, pool_size):
+    """{player: {category: z}}, each z capped at +/-Z_CAP, measured against the draftable pool.
+
+    The pool starts as every eligible player and becomes the top `pool_size` of them by summed z,
+    re-ranked POOL_PASSES times: value is relative to the players who actually get drafted, not
+    to hundreds of bench players (the average scorer in the whole pool is at 10 PPG, the average
+    drafted one at 17)."""
+    pool = sorted(eligible)
+    z = {}
+    for _ in range(POOL_PASSES):
+        z = {p: {} for p in player_stats}
+        for category in categories:
+            values = _category_values(player_stats, category, n, pool)
+            ref = [values[p] for p in pool if p in values]
+            mu = mean(ref) if ref else 0.0
+            sd = pstdev(ref) if len(ref) > 1 else 0.0
+            sign = -1.0 if category in inverse else 1.0
+            for p in player_stats:
+                if p not in values:
+                    z[p][category] = -Z_CAP
+                else:
+                    z[p][category] = max(-Z_CAP, min(Z_CAP, sign * (values[p] - mu) / sd)) if sd else 0.0
+        pool = sorted(eligible, key=lambda p: sum(z[p].values()), reverse=True)[:pool_size]
+    return z
+
+
+def _category_display(z):
+    """0-100 display scale for one category's z: 50 is the average drafted player, 0 and 100
+    are -/+Z_CAP."""
+    return 50.0 + 50.0 * z / Z_CAP
+
+
+def _overall_display(player_stats, value_key, eligible, pool_size):
+    """{player: 0-100 overall score}: 50 + 10 per standard deviation of `value_key` among the
+    draftable pool (its top `pool_size` eligible players), so 50 is the average drafted player
+    and the best players land in the 80s-90s."""
+    pool = sorted(eligible, key=lambda p: player_stats[p][value_key], reverse=True)[:pool_size]
+    ref = [player_stats[p][value_key] for p in pool]
+    mu = mean(ref) if ref else 0.0
+    sd = pstdev(ref) if len(ref) > 1 else 0.0
+    return {p: max(0.0, min(100.0, 50.0 + 10.0 * (s[value_key] - mu) / sd)) if sd else 50.0
+            for p, s in player_stats.items()}
+
 
 def calculate_overall_scores(player_stats, league, punt_categories=()):
-    """Per-category 0-100 scores and the overall Z-SCORE / Z-RANK over the league's categories.
-    Punted categories still get a score but leave the Z-SCORE."""
+    """Category z-scores and overall value for every player, per timeframe.
+
+    For each category, a player's per-game value (ratios: impact, see _category_values) is turned
+    into a z-score against the draftable pool (see _z_scores) and capped at +/-Z_CAP. The cap
+    keeps one freak number from outweighing whole categories (Dillon Brooks' technical fouls sit
+    6.8 SD out) while a real specialist still counts in full up to 3 SD. Categories are then
+    summed, so each one is worth the same, as in the league's scoring. Scarce stats are weighted
+    by their spread: one block is worth about sixteen points.
+
+    Keys written, per timeframe n ('', '_5', '_10', '_projected'):
+      SCORE-{cat}{n}     one category, 0-100: 50 + 50 * z / Z_CAP (50 = average drafted player)
+      VALUE{n}, RANK{n}  summed z over every category, and the rank by it
+      Z-VALUE{n}, Z-RANK{n}  summed z over the categories not punted, and the rank by it
+      SCORE{n}, Z-SCORE{n}   VALUE / Z-VALUE as 0-100 display scores (see _overall_display)
+    Punted categories keep their SCORE-{cat} and count in VALUE, but not in Z-VALUE.
+    """
+    if not player_stats:
+        return
     categories = league.categories
-    inverse_categories = league.inverse_categories
-    for category in categories:
-        for last_n_games in ['', '_5', '_10', '_projected']:
-            category_last_n_games = category + last_n_games
-            values = [player_stats[player][category_last_n_games] for player in player_stats if category_last_n_games in player_stats[player] and player_stats[player][category_last_n_games] is not None]
-            if not values:
-                continue
-            max_value = max(values)
-            min_value = min(values)
-            needs_adjustment = (max_value > 0 and min_value < 0) or (max_value < 1 and min_value > 0)
-            adjusted_max = max_value - min_value if needs_adjustment else max_value
+    inverse = set(league.inverse_categories)
+    scored = [c for c in categories if c not in punt_categories]
+    eligible = _qualified_pool(player_stats)
+    pool_size = max(league.num_teams * league.roster_size, 1)
 
-            for player_name in player_stats:
-                if category_last_n_games not in player_stats[player_name]:
-                    player_stats[player_name][f'SCORE-{category_last_n_games}'] = 0
-                    continue
-                    
-                player_value = player_stats[player_name][category_last_n_games]
-                if player_value is None:
-                    player_stats[player_name][f'SCORE-{category_last_n_games}'] = 0
-                    continue
-                    
-                adjusted_value = player_value - min_value if needs_adjustment else player_value
-                if category in inverse_categories:
-                    if player_value == 0:
-                        player_stats[player_name][f'SCORE-{category_last_n_games}'] = 100
-                    elif player_value == max_value:
-                        player_stats[player_name][f'SCORE-{category_last_n_games}'] = 0
-                    else:
-                        denominator = adjusted_max / adjusted_value if adjusted_value != 0 else adjusted_max
-                        player_stats[player_name][f'SCORE-{category_last_n_games}'] = 100 - ((1 / denominator) * 100)
-                else:
-                    if player_value == 0:
-                        player_stats[player_name][f'SCORE-{category_last_n_games}'] = 0
-                    elif player_value == max_value:
-                        player_stats[player_name][f'SCORE-{category_last_n_games}'] = 100
-                    else:
-                        denominator = adjusted_max / adjusted_value if adjusted_value != 0 else adjusted_max
-                        player_stats[player_name][f'SCORE-{category_last_n_games}'] = (1 / denominator) * 100
-                if player_stats[player_name][f'SCORE-{category_last_n_games}'] > 100: 
-                    player_stats[player_name][f'SCORE-{category_last_n_games}'] = 0
-
-    for n in ['', '_5', '_10', '_projected']:
-        for player_name, _ in player_stats.items():
-            score = 0
-            z_score = 0
+    for n in TIMEFRAMES:
+        z_all = _z_scores(player_stats, categories, inverse, n, eligible, pool_size)
+        z_scored = (z_all if len(scored) == len(categories)
+                    else _z_scores(player_stats, scored, inverse, n, eligible, pool_size))
+        for p, stats in player_stats.items():
             for category in categories:
-                category_last_n_games = category + n
-                score += player_stats[player_name].get(f'SCORE-{category_last_n_games}', 0)
-                if category not in punt_categories:
-                    z_score += player_stats[player_name].get(f'SCORE-{category_last_n_games}', 0)
-            player_stats[player_name][f'SCORE{n}'] = score / len(categories)
-            scored = len([c for c in categories if c not in punt_categories])
-            player_stats[player_name][f'Z-SCORE{n}'] = z_score / scored if scored else 0
+                stats[f'SCORE-{category}{n}'] = _category_display(z_all[p][category])
+            stats[f'VALUE{n}'] = sum(z_all[p][c] for c in categories)
+            stats[f'Z-VALUE{n}'] = sum(z_scored[p][c] for c in scored)
 
-        # Normalize scores
-        max_z_score = max(player_stats[player][f'Z-SCORE{n}'] for player in player_stats)
-        if max_z_score > 0:
-            for player_name, _ in player_stats.items():
-                player_stats[player_name][f'Z-SCORE{n}'] = player_stats[player_name][f'Z-SCORE{n}'] / max_z_score * 100
-
-        max_score = max(player_stats[player][f'SCORE{n}'] for player in player_stats)
-        if max_score > 0:
-            for player_name, _ in player_stats.items():
-                player_stats[player_name][f'SCORE{n}'] = player_stats[player_name][f'SCORE{n}'] / max_score * 100
-
-        sorted_by_score = sorted(player_stats.items(), key=lambda kv: kv[1][f'SCORE{n}'], reverse=True)
-        for i, (key, val) in enumerate(sorted_by_score, start=1):
-            player_stats[key][f'RANK{n}'] = i
-
-        sorted_by_z_score = sorted(player_stats.items(), key=lambda kv: kv[1][f'Z-SCORE{n}'], reverse=True)
-        for i, (key, val) in enumerate(sorted_by_z_score, start=1):
-            player_stats[key][f'Z-RANK{n}'] = i
-
-    for days_n in ['', '_5', '_10']:
-        average_efg = get_league_average_stat(player_stats, 'EFG%', days_n)
-        average_fga = get_league_average_stat(player_stats, 'FGA', days_n)
-        for player_name, _ in player_stats.items():
-            volume = player_stats[player_name].get(f'FGA{days_n}', 0)
-            efg_key = f'EFG%{days_n}'
-            if efg_key in player_stats[player_name]:
-                player_stats[player_name][f'VEFG%{days_n}'] = ((volume * player_stats[player_name][efg_key]) + (average_fga * average_efg)) / (volume + average_fga)
-            else:
-                player_stats[player_name][f'VEFG%{days_n}'] = 0
+        for rank_key, value_key, score_key in ((f'RANK{n}', f'VALUE{n}', f'SCORE{n}'),
+                                               (f'Z-RANK{n}', f'Z-VALUE{n}', f'Z-SCORE{n}')):
+            display = _overall_display(player_stats, value_key, eligible, pool_size)
+            ranked = sorted(player_stats, key=lambda p: player_stats[p][value_key], reverse=True)
+            for i, p in enumerate(ranked, start=1):
+                player_stats[p][rank_key] = i
+                player_stats[p][score_key] = display[p]
 
 def calculate_fantasy_points(player_stats):
     for player_name, stats in player_stats.items():
@@ -275,32 +318,35 @@ def calculate_fantasy_points(player_stats):
         for i, (key, val) in enumerate(sorted_by_fpoints, start=1):
             player_stats[key][f'FPOINTS-RANK{n}'] = i
 
-def calculate_auction_values(player_stats, league, exp_factor=EXP_FACTOR):
-    """Split the league's total auction budget over the players who will be drafted
-    (teams x roster spots), weighted by SCORE ** exp_factor, $1 minimum."""
-    total_budget = league.num_teams * league.budget
-    total_drafted_players = league.num_teams * league.roster_size
+def calculate_auction_values(player_stats, league, price_exponent=None, value_key='VALUE'):
+    """Whole-dollar auction values by value over replacement.
 
-    sorted_players = sorted(player_stats.items(), key=lambda x: x[1]['SCORE'], reverse=True)
-    top_players = sorted_players[:total_drafted_players]
-
-    adjusted_scores = {player: pow(stats['SCORE'], exp_factor) for player, stats in top_players}
-    total_adjusted_score = sum(adjusted_scores.values())
-
-    total_spent = 0
-    for player, stats in top_players:
-        player_stats[player]['AUCTION_VALUE'] = int(max(round((adjusted_scores[player] / total_adjusted_score) * total_budget, 0), 1))
-        # Note: AUCTION_INJURED was removed from config, so no injury adjustments
-        total_spent += player_stats[player]['AUCTION_VALUE']
-
-    adjustment_factor = total_budget / total_spent
-
-    total_spent = 0
-    for player, stats in top_players:
-        adjusted_value = round(player_stats[player]['AUCTION_VALUE'] * adjustment_factor)
-        player_stats[player]['AUCTION_VALUE'] = int(max(adjusted_value, 1))
-        total_spent += player_stats[player]['AUCTION_VALUE']
-
-    for player, stats in sorted_players[total_drafted_players:]:
-        player_stats[player]['AUCTION_VALUE'] = 1
+    The num_teams x roster-size players who get drafted each cost at least $1. The rest of the
+    league's money is split by how far each sits above replacement (the best player left
+    undrafted), raised to `price_exponent`: 1 is linear, above 1 pays stars more. The default is
+    the league's draft.price_exponent. Undrafted players are $1. Rounded so the drafted players
+    add up to exactly the league's budget."""
+    if price_exponent is None:
+        price_exponent = league.price_exponent
+    ranked = sorted(player_stats, key=lambda p: player_stats[p].get(value_key, 0), reverse=True)
+    for p in ranked:
+        player_stats[p]['AUCTION_VALUE'] = 1
+    drafted = ranked[:league.num_teams * league.roster_size]
+    if not drafted:
+        return
+    undrafted = ranked[len(drafted):]
+    replacement = (player_stats[undrafted[0]][value_key] if undrafted
+                   else min(player_stats[p][value_key] for p in drafted))
+    surplus = {p: max(player_stats[p][value_key] - replacement, 0.0) ** price_exponent for p in drafted}
+    total_surplus = sum(surplus.values())
+    spend = max(league.num_teams * league.budget - len(drafted), 0)
+    exact = {p: 1 + (surplus[p] / total_surplus * spend if total_surplus else spend / len(drafted))
+             for p in drafted}
+    # Largest remainder: floor everything, then hand the leftover dollars to the biggest fractions.
+    dollars = {p: int(v) for p, v in exact.items()}
+    leftover = league.num_teams * league.budget - sum(dollars.values())
+    for p in sorted(drafted, key=lambda p: exact[p] - dollars[p], reverse=True)[:max(leftover, 0)]:
+        dollars[p] += 1
+    for p, v in dollars.items():
+        player_stats[p]['AUCTION_VALUE'] = v
 
