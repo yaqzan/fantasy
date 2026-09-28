@@ -11,7 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fantasy_database import DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats, LeaguePlayerFlag
 from player_stats import (load_player_stats, calculate_overall_scores, calculate_auction_values, calculate_fantasy_points,
                           calculate_team_totals, week_schedule, team_games, player_week_games, best_starters,
-                          TEAM_DICT)
+                          games_floor, TEAM_DICT)
 from fantasy_config import TEAMNAMES
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
                                  league_team_ids, get_undroppable_players)
@@ -77,12 +77,17 @@ def team_json(team):
 
 
 def league_config(league):
-    """League rules the frontend renders from (categories, roster, draft)."""
+    """League rules the frontend renders from (categories, roster, draft). Before the league's
+    first week the stats are last season's, and the full season is the basis to draft on; after,
+    the projection (half season, half last 10 games)."""
+    schedule = league.schedule
+    preseason = bool(schedule) and date.today().isoformat() < schedule[0][0]
     return {
         'show_auction_price': league.settings['draft']['type'] == 'auction',
         'MY_TEAM_ABV': league.my_team,
         'league': league.to_dict(),
         'categories': category_meta(league.categories),
+        'default_stat_type': 'season' if preseason else 'projected',
     }
 
 
@@ -169,8 +174,11 @@ def get_fantasy_players():
     """Get all players with fantasy stats, scored for the current league"""
     league = current_league()
     player_stats = scored_players(league)
-    calculate_auction_values(player_stats, league)
+    # A $ value per timeframe, so the price always matches the rank it is shown next to.
+    for suffix in STAT_SUFFIXES.values():
+        calculate_auction_values(player_stats, league, value_key=f'VALUE{suffix}', out_key=f'AUCTION_VALUE{suffix}')
     calculate_fantasy_points(player_stats)
+    floor = games_floor(player_stats)
 
     team_ids = league_team_ids(league)
     fantasy_teams = {t.id: team_json(t) for t in FantasyTeam.select().where(FantasyTeam.league == league.id)}
@@ -218,6 +226,7 @@ def get_fantasy_players():
             'team_abv': abbreviations.get(team_name) or abbreviations.get(full_team_name) or team_name[:3].upper(),
             'position': player.pos if player and player.pos else "Unknown",
             'games_played': player.gp if player and player.gp else 0,
+            'small_sample': (stats.get('GP') or 0) < floor,
             'current_week_games': current_week_games.get(full_team_name, 0),
             'next_week_games': next_week_games.get(full_team_name, 0),
             'current_week_start': current_week_start.strftime('%Y-%m-%d') if current_week_start else None,
@@ -233,7 +242,11 @@ def get_fantasy_players():
             'z_score_5': round(stats.get('Z-SCORE_5', 0), 1),
             'z_score_10': round(stats.get('Z-SCORE_10', 0), 1),
             'z_score_projected': round(stats.get('Z-SCORE_projected', 0), 1),
-            'auction_value': stats.get('AUCTION_VALUE', 0),
+            'auction_value': stats.get('AUCTION_VALUE_projected', 0),  # Default to projected
+            'auction_value_season': stats.get('AUCTION_VALUE', 0),
+            'auction_value_5': stats.get('AUCTION_VALUE_5', 0),
+            'auction_value_10': stats.get('AUCTION_VALUE_10', 0),
+            'auction_value_projected': stats.get('AUCTION_VALUE_projected', 0),
             'fpoints': stats.get('FPOINTS_projected', 0),
             'fpoints_season': stats.get('FPOINTS', 0),
             'fpoints_5': stats.get('FPOINTS_5', 0),
@@ -281,9 +294,11 @@ def calculate_custom_auction_values():
         return jsonify({'error': 'price_exponent must be a number'}), 400
     if not 0.2 <= price_exponent <= 5:
         return jsonify({'error': 'price_exponent must be between 0.2 and 5'}), 400
+    suffix = STAT_SUFFIXES.get(data.get('stat_type', 'projected'), '_projected')
     player_stats = scored_players(league, punt)
     # Punting: auction values follow the value over the categories still played.
-    calculate_auction_values(player_stats, league, price_exponent, value_key='Z-VALUE' if punt else 'VALUE')
+    calculate_auction_values(player_stats, league, price_exponent,
+                             value_key=f'Z-VALUE{suffix}' if punt else f'VALUE{suffix}')
     return jsonify({'auction_values': {name: {'auction_value': stats.get('AUCTION_VALUE', 0)}
                                        for name, stats in player_stats.items()}})
 

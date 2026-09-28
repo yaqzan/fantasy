@@ -59,7 +59,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     }
     let cancelled = false;
     setLoadingAuctionValues(true);
-    calculateCustomAuctionValues(priceExponent, puntCategories)
+    calculateCustomAuctionValues(priceExponent, puntCategories, statType)
       .then(response => { if (!cancelled) setCustomAuctionValues(response.auction_values || {}); })
       .catch(error => {
         console.error('Error calculating custom auction values:', error);
@@ -67,11 +67,15 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
       })
       .finally(() => { if (!cancelled) setLoadingAuctionValues(false); });
     return () => { cancelled = true; };
-  }, [priceExponent, puntCategories]);
+  }, [priceExponent, puntCategories, statType]);
 
-  // Get auction value (custom or original)
-  const getAuctionValue = (playerName, originalValue) => {
-    return customAuctionValues[playerName]?.auction_value || originalValue;
+  // Auction value on the same stats as the rank (custom slider/punt values when set)
+  const getAuctionValue = (player) => {
+    const key = statType === 'season' ? 'auction_value_season' :
+               statType === '5' ? 'auction_value_5' :
+               statType === '10' ? 'auction_value_10' :
+               'auction_value_projected';
+    return customAuctionValues[player.name]?.auction_value || (player[key] ?? player.auction_value);
   };
 
   // Handle category inclusion changes (unchecked = punt)
@@ -383,6 +387,10 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
       aValue = customScores[a.name]?.custom_z_score || getZScore(a);
       bValue = customScores[b.name]?.custom_z_score || getZScore(b);
     }
+    else if (sortConfig.key === 'auction_value') {
+      aValue = getAuctionValue(a);
+      bValue = getAuctionValue(b);
+    }
     // Handle nested stat properties like "stats.PTS.value"
     else if (sortConfig.key.startsWith('stats.')) {
       const parts = sortConfig.key.split('.');
@@ -604,7 +612,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 </td>
                 {config.show_auction_price && (
                   <td className="table-cell text-gray-300 font-medium">
-                    ${getAuctionValue(player.name, player.auction_value)}
+                    ${getAuctionValue(player)}
                   </td>
                 )}
                 <td className="table-cell text-center">
@@ -663,7 +671,13 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     </td>
                   );
                 })}
-                <td className="table-cell text-gray-300">{player.games_played}</td>
+                <td className="table-cell text-gray-300">
+                  {player.small_sample ? (
+                    <span className="text-amber-400" title={`Small sample: only ${player.games_played} games, so his numbers may not hold`}>
+                      {player.games_played}⚠
+                    </span>
+                  ) : player.games_played}
+                </td>
                 <td className="table-cell">
                   {player.drafted ? (
                     <div className="flex items-center">
@@ -677,7 +691,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 </td>
                 <td className="table-cell">
                   <button
-                    onClick={() => setDraftModalPlayer(player)}
+                    onClick={() => setDraftModalPlayer({
+                      ...player,
+                      overall_rank: customScores[player.name]?.custom_z_rank || getOverallRank(player),
+                      auction_value: getAuctionValue(player),
+                    })}
                     className="btn-primary text-xs"
                     disabled={fantasyTeams.length === 0}
                   >

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PlayerTable from './components/PlayerTable';
 import TeamManager from './components/TeamManager';
 import Header from './components/Header';
@@ -27,7 +27,8 @@ function App() {
   });
   const [priceExponent, setPriceExponent] = useState(null); // null: the league's own exponent
   const [activeTab, setActiveTab] = useState('players');
-  const [statType, setStatType] = useState('5');
+  const [statType, setStatType] = useState('projected');
+  const statTypePicked = useRef(false); // until the user picks one, the league's default applies
   const [leaguesData, setLeaguesData] = useState({ leagues: [], category_catalog: [], defaults: null });
   const [leagueId, setLeagueId] = useState(null);
   const [leagueModal, setLeagueModal] = useState(null); // 'create' | 'edit' | null
@@ -65,6 +66,7 @@ function App() {
     setSelectedLeague(id);
     setLeagueId(id);
     setPriceExponent(null);
+    statTypePicked.current = false;
     setPlayers([]);
     setFantasyTeams([]);
     activateLeague(id).catch(() => {}); // CLI scripts follow the league last picked here
@@ -82,6 +84,10 @@ function App() {
       setPlayers(playersData.players || []);
       setFantasyTeams(teamsData.teams || []);
       setConfig(playersData.config || { show_auction_price: true });
+      // Before the season the full last season is the basis to draft on, after it the projection.
+      if (!statTypePicked.current && playersData.config?.default_stat_type) {
+        setStatType(playersData.config.default_stat_type);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
       setLoadError(errorMessage(error));
@@ -296,7 +302,7 @@ function App() {
                   <span className="text-sm text-gray-300">Stats:</span>
                   <select
                     value={statType}
-                    onChange={(e) => setStatType(e.target.value)}
+                    onChange={(e) => { statTypePicked.current = true; setStatType(e.target.value); }}
                     className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent"
                   >
                     <option value="season">Season Average</option>

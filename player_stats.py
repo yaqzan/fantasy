@@ -395,8 +395,8 @@ def calculate_fantasy_points(player_stats):
         for i, (key, val) in enumerate(sorted_by_fpoints, start=1):
             player_stats[key][f'FPOINTS-RANK{n}'] = i
 
-def calculate_auction_values(player_stats, league, price_exponent=None, value_key='VALUE'):
-    """Whole-dollar auction values by value over replacement.
+def calculate_auction_values(player_stats, league, price_exponent=None, value_key='VALUE', out_key='AUCTION_VALUE'):
+    """Whole-dollar auction values by value over replacement, written to `out_key`.
 
     The num_teams x roster-size players who get drafted each cost at least $1. The rest of the
     league's money is split by how far each sits above replacement (the best player left
@@ -407,7 +407,7 @@ def calculate_auction_values(player_stats, league, price_exponent=None, value_ke
         price_exponent = league.price_exponent
     ranked = sorted(player_stats, key=lambda p: player_stats[p].get(value_key, 0), reverse=True)
     for p in ranked:
-        player_stats[p]['AUCTION_VALUE'] = 1
+        player_stats[p][out_key] = 1
     drafted = ranked[:league.num_teams * league.roster_size]
     if not drafted:
         return
@@ -425,5 +425,5 @@ def calculate_auction_values(player_stats, league, price_exponent=None, value_ke
     for p in sorted(drafted, key=lambda p: exact[p] - dollars[p], reverse=True)[:max(leftover, 0)]:
         dollars[p] += 1
     for p, v in dollars.items():
-        player_stats[p]['AUCTION_VALUE'] = v
+        player_stats[p][out_key] = v
 

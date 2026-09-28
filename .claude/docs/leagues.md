@@ -59,7 +59,10 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
 - **Auction values** (`calculate_auction_values`): value over replacement. Each drafted player
   (`num_teams x roster.size`) costs $1; the rest of `num_teams x budget` goes by (value -
   first undrafted player's value) ^ `draft.price_exponent`, rounded to whole dollars that add up
-  to the budget. Fit the exponent to the league's past auction prices by rank (least squares
+  to the budget. `/api/fantasy` prices every timeframe (`auction_value_<period>`) so the table's
+  $ always sits on the same stats as its rank; before a league's first week the UI defaults to
+  the full season (`config.default_stat_type`), after it to the projection. Players under
+  `games_floor` are flagged `small_sample`. Fit the exponent to the league's past auction prices by rank (least squares
   over the drafted players); the owner's league stores its fit (a gitignored
   `draft_history_price_curve.json` holds the price curve it came from).
 - **Schedule.** `[[week start, opponent abbreviation], ...]`; a week ends the day before the next
