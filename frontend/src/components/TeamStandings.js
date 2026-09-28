@@ -3,13 +3,14 @@ import { getTeamStandings } from '../services/api';
 
 const TeamStandings = ({ config }) => {
   const [statType, setStatType] = useState('projected');
-  const [healthyOnly, setHealthyOnly] = useState(false);
+  const [healthyOnly, setHealthyOnly] = useState(true);
+  const [view, setView] = useState('per_game');
   const [standingsData, setStandingsData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [dataCache, setDataCache] = useState({});
 
   useEffect(() => {
-    const cacheKey = `teamStandings_${config?.league?.id}_${statType}_${healthyOnly}`;
+    const cacheKey = `teamStandings2_${config?.league?.id}_${statType}_${healthyOnly}_${view}`;
     
     // Check sessionStorage first
     const cachedData = sessionStorage.getItem(cacheKey);
@@ -33,7 +34,7 @@ const TeamStandings = ({ config }) => {
     const loadStandings = async () => {
       setLoading(true);
       try {
-        const data = await getTeamStandings(statType, healthyOnly);
+        const data = await getTeamStandings(statType, healthyOnly, view);
         setStandingsData(data);
         setDataCache(prev => ({ ...prev, [cacheKey]: data }));
         // Cache in sessionStorage
@@ -47,7 +48,7 @@ const TeamStandings = ({ config }) => {
 
     loadStandings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statType, healthyOnly]);
+  }, [statType, healthyOnly, view]);
 
   const formatValue = (category, value) => {
     if (value === null || value === undefined) return '-';
@@ -57,7 +58,7 @@ const TeamStandings = ({ config }) => {
     if (category === 'PLUS_MINUS') {
       return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
     }
-    if (category === 'TECH' || category === 'WIN%') return value.toFixed(2);  // small per-game numbers
+    if (category === 'TECH' || category === 'WIN%') return value.toFixed(2);
     return value.toFixed(1);
   };
 
@@ -151,7 +152,17 @@ const TeamStandings = ({ config }) => {
     );
   }
 
-  const { teams, categories, category_names, category_meta = [] } = standingsData;
+  const { teams, categories, category_names, category_meta = [], active_slots, week_start, week_end } = standingsData;
+  const shownView = standingsData.view || 'per_game';
+  const formatDay = (iso) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const viewNote = shownView === 'week'
+    ? `Projected totals for the week of ${formatDay(week_start)} to ${formatDay(week_end)}: only games NBA teams actually play${
+        config?.league?.settings?.roster?.daily_lineups ? `, each day's best ${active_slots} counting (bench players fill empty days)` : ', starters only'}.`
+    : `Per game: one game each of every team's best ${active_slots} players. Roster strength, no schedule.`;
   const PERCENTAGE_CATEGORIES = category_meta.filter(c => c.percent).map(c => c.key);
   const isMyTeam = (team) => team.abbreviation === config?.MY_TEAM_ABV;
 
@@ -163,6 +174,18 @@ const TeamStandings = ({ config }) => {
         <h2 className="text-2xl font-bold text-white mb-4">Team Standings</h2>
         
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-300">View:</span>
+            <select
+              value={view}
+              onChange={(e) => setView(e.target.value)}
+              className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent"
+            >
+              <option value="per_game">Per game</option>
+              <option value="week">This week</option>
+            </select>
+          </div>
+
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-300">Stats:</span>
             <select
@@ -187,6 +210,9 @@ const TeamStandings = ({ config }) => {
             <span className="ml-2 text-sm text-gray-300">Healthy</span>
           </label>
         </div>
+        <p className="mt-3 text-xs text-gray-400">
+          {viewNote} Ranked by the sum of category ranks. A power ranking, not the league's real standings.
+        </p>
       </div>
 
       {loading ? (
@@ -239,6 +265,7 @@ const TeamStandings = ({ config }) => {
                       </div>
                       <div className="text-xs text-gray-400">
                         Rank Sum: {teamData.total_rank_sum}
+                        {shownView === 'week' && ` · ${teamData.games} games`}
                       </div>
                     </td>
                     {categories.map(category => {

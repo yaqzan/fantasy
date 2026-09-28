@@ -10,7 +10,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fantasy_database import DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats, LeaguePlayerFlag
 from player_stats import (load_player_stats, calculate_overall_scores, calculate_auction_values, calculate_fantasy_points,
-                          calculate_team_totals, week_schedule, team_games, TEAM_DICT)
+                          calculate_team_totals, week_schedule, team_games, player_week_games, best_starters,
+                          TEAM_DICT)
 from fantasy_config import TEAMNAMES
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
                                  league_team_ids, get_undroppable_players)
@@ -383,10 +384,15 @@ def get_team_players(team_id):
 
 @fantasy_api.route('/team-standings', methods=['GET'])
 def get_team_standings():
-    """Per-game category totals of each team's best `active` players, ranked per category"""
+    """A power ranking from each team's category totals, ranked per category. Not the league's
+    real standings. view=per_game (default): roster strength, one game each of the best `active`
+    players (position minimums apply), schedule-free. view=week: this fantasy week's projection,
+    only games NBA teams actually play, daily-lineup leagues counting the best `active` players of
+    each day (bench players fill empty days) and weekly-lineup leagues their starters' games."""
     league = current_league()
     suffix = STAT_SUFFIXES.get(request.args.get('stat_type', 'projected'), '_projected')
-    healthy_only = request.args.get('healthy_only', 'false').lower() == 'true'
+    healthy_only = request.args.get('healthy_only', 'true').lower() == 'true'
+    view = 'week' if request.args.get('view') == 'week' else 'per_game'
     player_stats = scored_players(league)
     injured = {p.name for p in Player.select(Player.name).where(Player.injured == 1)} if healthy_only else set()
 
@@ -397,14 +403,24 @@ def get_team_standings():
             if ftp.player_name in player_stats and ftp.player_name not in injured:
                 rosters[ftp.fantasy_team_id_id].append(ftp.player_name)
 
+    week_start = week_end = schedule = None
+    if view == 'week':
+        week_start, week_end, _ = get_current_fantasy_week_dates(league)
+        schedule = week_schedule(week_start, week_end)
+
     team_totals = {}
     for team in teams:
-        starters = sorted(rosters[team.id], key=lambda p: player_stats[p].get(f'Z-SCORE{suffix}', 0),
-                          reverse=True)[:league.active_slots]
-        per_game = {p: 1 for p in starters}
-        wins = {p: player_stats[p].get(f'WIN%{suffix}', 0) for p in starters}
-        totals = calculate_team_totals(starters, player_stats, per_game, wins, league.categories, suffix)
-        team_totals[team.id] = {'team': team_json(team), 'player_count': len(starters),
+        if view == 'week':
+            # Daily lineups: player_week_games picks each day's best `active` from the whole roster.
+            counted = rosters[team.id] if league.daily_lineups else best_starters(league, rosters[team.id], player_stats, suffix)
+            games, wins = player_week_games(counted, player_stats, schedule, league, suffix, injured)
+        else:
+            counted = best_starters(league, rosters[team.id], player_stats, suffix)
+            games = {p: 1 for p in counted}
+            wins = {p: player_stats[p].get(f'WIN%{suffix}', 0) for p in counted}
+        totals = calculate_team_totals(counted, player_stats, games, wins, league.categories, suffix)
+        team_totals[team.id] = {'team': team_json(team), 'player_count': sum(1 for g in games.values() if g),
+                                'games': sum(games.values()),
                                 'category_totals': {c: totals.get(c + suffix, 0) for c in league.categories}}
 
     category_rankings = {}
@@ -421,7 +437,9 @@ def get_team_standings():
     meta = category_meta(league.categories)
     return jsonify({'teams': teams_data, 'categories': [m['key'] for m in meta],
                     'category_names': {m['key']: m['label'] for m in meta}, 'category_meta': meta,
-                    'active_slots': league.active_slots})
+                    'active_slots': league.active_slots, 'view': view,
+                    'week_start': week_start.isoformat() if week_start else None,
+                    'week_end': week_end.isoformat() if week_end else None})
 
 
 # ---------------------------------------------------------------- matchups

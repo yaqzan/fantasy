@@ -11,7 +11,7 @@ from itertools import combinations
 
 from fantasy_database import Player
 from player_stats import (load_player_stats, calculate_overall_scores, calculate_team_totals, week_schedule,
-                          team_games, player_week_games)
+                          team_games, player_week_games, positions_ok)
 from fantasy_team_helper import (get_my_team_players, get_all_my_team_players, get_opponent_team_players,
                                  get_available_players, get_current_fantasy_week_dates, get_undroppable_players,
                                  get_injured_players)
@@ -119,15 +119,7 @@ class Week:
         return calculate_team_totals(lineup, self.player_stats, games, wins, self.league.categories, suffix), games
 
     def positions_ok(self, lineup):
-        league = self.league
-        if not (league.min_guards or league.min_forwards or league.min_centers):
-            return True
-        counts = {'C': 0, 'F': 0, 'G': 0}
-        for player in lineup:
-            pos = self.player_stats[player]['Pos']
-            if pos in counts:
-                counts[pos] += 1
-        return counts['G'] >= league.min_guards and counts['F'] >= league.min_forwards and counts['C'] >= league.min_centers
+        return positions_ok(self.league, self.player_stats, lineup)
 
     def best_lineup(self, pool, their_stats, suffix, required=()):
         """Best lineup_size-player lineup from pool: (value, lineup, totals, categories won)."""

@@ -34,6 +34,10 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
   (`player_week_games`); the optimizer "lineup" is the whole roster (`lineup_size` =
   roster size), injured players hold a spot and score nothing, and a pickup means choosing a drop.
   Opponents are modelled the same way.
+- **Team Standings** is a power ranking, not the league's real standings. `view=per_game`: one
+  game each of every team's `best_starters` (best `active` by Z-SCORE, position minimums met;
+  exact because each player has one position). `view=week`: the current fantasy week through
+  `player_week_games`. Injured players are left out unless `healthy_only=false`.
 - **Player value** (`calculate_overall_scores`): per category, a z-score of the per-game value
   against the draftable pool (`num_teams x roster.size`, re-ranked 3 times from the qualified
   players), capped at ±3, then summed (`VALUE`; `Z-VALUE` without punted categories). Ratios are

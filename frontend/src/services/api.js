@@ -171,11 +171,13 @@ export const updateDailyStats = async (date) => {
   return response.data;
 };
 
-export const getTeamStandings = async (statType, healthyOnly) => {
+// view: 'per_game' (roster strength, schedule-free) or 'week' (this fantasy week's projection)
+export const getTeamStandings = async (statType, healthyOnly, view = 'per_game') => {
   const response = await api.get('/team-standings', {
     params: {
       stat_type: statType,
-      healthy_only: healthyOnly
+      healthy_only: healthyOnly,
+      view
     }
   });
   return response.data;

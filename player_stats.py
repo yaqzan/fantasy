@@ -122,6 +122,35 @@ def team_games(schedule):
     """{NBA team: games this week} from week_schedule()."""
     return {team: len(days) for team, days in schedule.items()}
 
+def positions_ok(league, player_stats, lineup):
+    """Whether a lineup meets the league's position minimums (every player has one position)."""
+    if not (league.min_guards or league.min_forwards or league.min_centers):
+        return True
+    counts = {'C': 0, 'F': 0, 'G': 0}
+    for p in lineup:
+        pos = player_stats[p].get('Pos')
+        if pos in counts:
+            counts[pos] += 1
+    return counts['G'] >= league.min_guards and counts['F'] >= league.min_forwards and counts['C'] >= league.min_centers
+
+
+def best_starters(league, roster, player_stats, last_n_games=''):
+    """The `active` players with the highest Z-SCORE that meet the position minimums.
+
+    Each player has exactly one position, so this is exact: the best players of each required
+    position up to its minimum, then the best of the rest. A position short of players stays
+    short and its spots go to the best of the rest."""
+    ranked = sorted((p for p in roster if p in player_stats),
+                    key=lambda p: player_stats[p].get(f'Z-SCORE{last_n_games}', 0), reverse=True)
+    size = min(league.active_slots, len(ranked))
+    chosen = []
+    for pos, minimum in (('C', league.min_centers), ('G', league.min_guards), ('F', league.min_forwards)):
+        chosen += [p for p in ranked if player_stats[p].get('Pos') == pos][:minimum]
+    chosen = chosen[:size]
+    chosen += [p for p in ranked if p not in chosen][:size - len(chosen)]
+    return chosen
+
+
 def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=()):
     """Games and expected wins each rostered player contributes over the week.
 
