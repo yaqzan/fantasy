@@ -303,7 +303,9 @@ def get_pickup_candidates(league, week_start=None, week_end=None, opponent_team_
 
     undroppable = set(get_undroppable_players(league))
     drops = [p for p in roster if p not in undroppable] + ([None] if len(roster) < league.roster_size else [])
-    playing = [p for p in get_available_players(league, stats) if week.schedule.get(stats[p]['TEAM'])]
+    if not drops:
+        return {'error': 'Your roster is full and every player on it is marked undroppable'}
+    playing =[p for p in get_available_players(league, stats) if week.schedule.get(stats[p]['TEAM'])]
     playing = sorted(playing, key=lambda p: stats[p].get(f'Z-VALUE{suffix}', 0), reverse=True)[:pool]
 
     floor = games_floor(stats)
