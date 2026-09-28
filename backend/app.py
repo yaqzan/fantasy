@@ -469,6 +469,31 @@ def analyze():
     return jsonify(analysis_data)
 
 
+@fantasy_api.route('/pickups')
+def pickups():
+    """Free agents ranked by how many more categories they'd win you in a week, with the best drop
+    (lineup_optimizer.get_pickup_candidates). Judged against the week's opponent once its roster
+    is in, else the league's average team, else an evenly matched team."""
+    from lineup_optimizer import get_pickup_candidates
+    league = current_league()
+    week_start, week_end, opponent = _requested_week(league, request.args.get('week_start'))
+    try:
+        limit = max(1, min(int(request.args.get('limit', 40)), 100))
+    except ValueError:
+        return jsonify({'error': 'limit must be a whole number'}), 400
+    result = get_pickup_candidates(league, week_start, week_end, opponent,
+                                   request.args.get('timeframe', 'projected'), limit=limit)
+    if 'error' in result:
+        return jsonify(result), 422
+    abbreviations = _team_abbreviations()
+    for candidate in result['candidates']:
+        team = candidate['team']
+        candidate['team_abv'] = abbreviations.get(team) or abbreviations.get(TEAM_DICT.get(team, team)) or team[:3].upper()
+    result['categories'] = category_meta(league.categories)
+    result['weeks'] = [start for start, _ in league.schedule]
+    return jsonify(result)
+
+
 @fantasy_api.route('/analyze/custom', methods=['POST'])
 def analyze_custom():
     """What-if: add one player (optionally dropping one) and compare in every timeframe"""

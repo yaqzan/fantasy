@@ -24,6 +24,7 @@ a switcher in the header moves between them. Mine runs at [fantasy.yaqzan.dev](h
 - Sortable player statistics table with all key fantasy metrics
 - Search functionality for players and teams
 - Lineup optimizer with a duration-based filter for picking the best lineup
+- Weekly pickups: free agents ranked by the categories they'd add that week, from the NBA schedule
 - Team standings view
 - Player pinning (favorites)
 - Hot streak indicators
@@ -175,6 +176,7 @@ it), else the active league.
 - `GET /api/team-standings`: power ranking from category totals (`view=per_game` or `week`)
 - `GET /api/analyze`: matchup analysis for a week (best lineup, or best pickup with `pickup=true`)
 - `POST /api/analyze/custom`: what-if for a chosen pickup and drop, every timeframe
+- `GET /api/pickups`: free agents ranked by expected categories gained in a week, with the best drop
 - `GET /api/daily-stats`: daily fantasy point stats
 - `POST /api/daily-stats/update`: trigger a daily stats refresh
 

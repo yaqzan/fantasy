@@ -17,34 +17,40 @@ class NotFound(LookupError):
 
 # Every category the stats pipeline can compute. `inverse`: lower wins. `kind`: how a team total
 # is built (count = per-game rate x games, ratio = from summed components, wins = expected wins).
+# `noise`: a count's game-to-game variance, sum of coef x the player's per-game stat (None = 1 per
+# game); `attempt_sd`: a ratio's spread per attempt; wins are Bernoulli. Both measured on the
+# 2025-26 game logs (452 players with 20+ games); they set how likely a weekly lead holds up.
 CATEGORY_CATALOG = {
-    'PTS': {'label': 'PTS', 'name': 'Points', 'kind': 'count'},
-    'REB': {'label': 'REB', 'name': 'Rebounds', 'kind': 'count'},
-    'AST': {'label': 'AST', 'name': 'Assists', 'kind': 'count'},
-    'STL': {'label': 'STL', 'name': 'Steals', 'kind': 'count'},
-    'BLK': {'label': 'BLK', 'name': 'Blocks', 'kind': 'count'},
-    'FG3M': {'label': '3PM', 'name': 'Three-pointers made', 'kind': 'count'},
-    'AST-TOV': {'label': 'A-TO', 'name': 'Assists minus turnovers', 'kind': 'count'},
-    'NFT': {'label': 'NFT', 'name': 'Net free throws (2*FTM - FTA)', 'kind': 'count'},
-    'DD2': {'label': 'DD', 'name': 'Double-doubles', 'kind': 'count'},
-    'TD3': {'label': 'TD', 'name': 'Triple-doubles', 'kind': 'count'},
-    'PLUS_MINUS': {'label': '+/-', 'name': 'Plus/minus', 'kind': 'count'},
-    'TOV': {'label': 'TOV', 'name': 'Turnovers', 'kind': 'count', 'inverse': True},
-    'PF': {'label': 'PF', 'name': 'Personal fouls', 'kind': 'count', 'inverse': True},
-    'BLKA': {'label': 'TB', 'name': 'Times blocked', 'kind': 'count', 'inverse': True},
-    'TECH': {'label': 'TF', 'name': 'Technical fouls', 'kind': 'count', 'inverse': True},
+    'PTS': {'label': 'PTS', 'name': 'Points', 'kind': 'count', 'noise': [('PTS', 3.4)]},
+    'REB': {'label': 'REB', 'name': 'Rebounds', 'kind': 'count', 'noise': [('REB', 1.5)]},
+    'AST': {'label': 'AST', 'name': 'Assists', 'kind': 'count', 'noise': [('AST', 1.3)]},
+    'STL': {'label': 'STL', 'name': 'Steals', 'kind': 'count', 'noise': [('STL', 1.1)]},
+    'BLK': {'label': 'BLK', 'name': 'Blocks', 'kind': 'count', 'noise': [('BLK', 1.1)]},
+    'FG3M': {'label': '3PM', 'name': 'Three-pointers made', 'kind': 'count', 'noise': [('FG3M', 1.2)]},
+    'AST-TOV': {'label': 'A-TO', 'name': 'Assists minus turnovers', 'kind': 'count',
+                'noise': [('AST', 1.1), ('TOV', 1.1)]},
+    'NFT': {'label': 'NFT', 'name': 'Net free throws (2*FTM - FTA)', 'kind': 'count', 'noise': [('FTA', 1.5)]},
+    'DD2': {'label': 'DD', 'name': 'Double-doubles', 'kind': 'count', 'noise': [('DD2', 0.7)]},
+    'TD3': {'label': 'TD', 'name': 'Triple-doubles', 'kind': 'count', 'noise': [('TD3', 0.8)]},
+    'PLUS_MINUS': {'label': '+/-', 'name': 'Plus/minus', 'kind': 'count', 'noise': [(None, 127.0)]},
+    'TOV': {'label': 'TOV', 'name': 'Turnovers', 'kind': 'count', 'inverse': True, 'noise': [('TOV', 1.1)]},
+    'PF': {'label': 'PF', 'name': 'Personal fouls', 'kind': 'count', 'inverse': True, 'noise': [('PF', 1.0)]},
+    # No per-game times-blocked data; assumed Poisson like blocks and steals.
+    'BLKA': {'label': 'TB', 'name': 'Times blocked', 'kind': 'count', 'inverse': True, 'noise': [('BLKA', 1.0)]},
+    'TECH': {'label': 'TF', 'name': 'Technical fouls', 'kind': 'count', 'inverse': True, 'noise': [('TECH', 1.0)]},
     'WIN%': {'label': 'W', 'name': 'Wins', 'kind': 'wins'},
     # Ratios are valued by impact (player_stats.py). `attempts`: the per-game attempts behind the
     # rate, as (stat, coefficient) terms. `prior`: attempts of league-average shooting a player's
     # rate is blended with before scoring (method of moments on 2025-26: TS% ~233, EFG% ~223,
     # FT% ~27, PPS ~98).
     'TS%': {'label': 'TS%', 'name': 'True shooting %', 'kind': 'ratio', 'percent': True,
-            'attempts': [('FGA', 1.0), ('FTA', 0.44)], 'prior': 250},
+            'attempts': [('FGA', 1.0), ('FTA', 0.44)], 'prior': 250, 'attempt_sd': 0.566},
     'EFG%': {'label': 'EFG%', 'name': 'Effective FG %', 'kind': 'ratio', 'percent': True,
-             'attempts': [('FGA', 1.0)], 'prior': 250},
+             'attempts': [('FGA', 1.0)], 'prior': 250, 'attempt_sd': 0.578},
     'FT%': {'label': 'FT%', 'name': 'Free throw %', 'kind': 'ratio', 'percent': True,
-            'attempts': [('FTA', 1.0)], 'prior': 50},
-    'PPS': {'label': 'PPS', 'name': 'Points per shot', 'kind': 'ratio', 'attempts': [('FGA', 1.0)], 'prior': 100},
+            'attempts': [('FTA', 1.0)], 'prior': 50, 'attempt_sd': 0.404},
+    'PPS': {'label': 'PPS', 'name': 'Points per shot', 'kind': 'ratio', 'attempts': [('FGA', 1.0)], 'prior': 100,
+            'attempt_sd': 1.327},
 }
 # Column order in tables: shooting first, then counting stats, inverse categories last.
 CATEGORY_ORDER = ['TS%', 'EFG%', 'FT%', 'PPS', 'PTS', 'REB', 'AST', 'AST-TOV', 'STL', 'BLK', 'FG3M', 'NFT',

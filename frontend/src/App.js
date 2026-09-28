@@ -5,6 +5,7 @@ import Header from './components/Header';
 import LineupOptimizer from './components/LineupOptimizer';
 import DailyStats from './components/DailyStats';
 import TeamStandings from './components/TeamStandings';
+import WeeklyPickups from './components/WeeklyPickups';
 import LeagueSettings from './components/LeagueSettings';
 import {
   getPlayers, getFantasyTeams, draftPlayer, undraftPlayer, updatePlayer,
@@ -253,6 +254,16 @@ function App() {
                 Lineup Optimizer
               </button>
               <button
+                onClick={() => setActiveTab('pickups')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'pickups'
+                    ? 'border-nba-orange text-nba-orange'
+                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                Weekly Pickups
+              </button>
+              <button
                 onClick={() => setActiveTab('daily')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'daily'
@@ -390,6 +401,10 @@ function App() {
 
         {activeTab === 'lineup' && (
           <LineupOptimizer league={currentLeague} onEditLeague={() => setLeagueModal('edit')} />
+        )}
+
+        {activeTab === 'pickups' && (
+          <WeeklyPickups config={config} />
         )}
 
         {activeTab === 'daily' && (

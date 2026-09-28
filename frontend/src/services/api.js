@@ -152,6 +152,13 @@ export const analyze = async (weekStart = null, timeframe = 'projected', pickup 
   return response.data;
 };
 
+// Free agents ranked by the categories they'd add in a week (weekStart null: the current week).
+export const getPickups = async (weekStart = null, timeframe = 'projected') => {
+  const params = { ...(weekStart && { week_start: weekStart }), timeframe };
+  const response = await api.get('/pickups', { params });
+  return response.data;
+};
+
 export const analyzeCustom = async (weekStart, pickup, drop = null) => {
   const response = await api.post('/analyze/custom', { week_start: weekStart, pickup, drop });
   return response.data;

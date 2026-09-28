@@ -2,7 +2,7 @@
 Player statistics calculation.
 Builds player_stats dictionary from fantasy_database data.
 """
-from statistics import mean, pstdev
+from statistics import NormalDist, mean, pstdev
 from fantasy_database import Player, Team, Game
 from fantasy_config import API_ATTRIBUTES, FPOINTS_SCORING
 from leagues import CATEGORY_CATALOG
@@ -12,6 +12,7 @@ TIME_PERIODS = ['', '_5', '_10']
 TIMEFRAMES = ['', '_5', '_10', '_projected']
 Z_CAP = 3.0       # a category's z-score is capped at +/-Z_CAP before categories are summed
 POOL_PASSES = 3   # re-rank passes that settle the draftable pool the z-scores are measured against
+_NORMAL = NormalDist()
 VALID_POSITIONS = ['C', 'F', 'G']
 STAT_AVG_WEIGHTS = {'': 0.5, '_10': 0.5, '_5': 0.0}
 TEAM_DICT = {
@@ -207,14 +208,61 @@ def calculate_team_totals(roster, player_stats, player_games, player_wins, categ
             totals[key] = total(category)
     return totals
 
+def team_week_totals(players, player_stats, player_games, player_wins, categories, last_n_games=''):
+    """{category: (total, variance)} for a team's week: calculate_team_totals' totals, and how far
+    each can swing on game-to-game noise (CATEGORY_CATALOG `noise` / `attempt_sd`; wins as coin
+    flips at each game's win chance)."""
+    n = last_n_games
+    totals = calculate_team_totals(players, player_stats, player_games, player_wins, categories, n)
+    played = [p for p in players if p in player_stats and player_games.get(p)]
+
+    def per_game(p, terms):
+        return sum(coef * (1.0 if stat is None else abs(player_stats[p].get(f'{stat}{n}') or 0)) for stat, coef in terms)
+
+    result = {}
+    for category in categories:
+        spec = CATEGORY_CATALOG[category]
+        if spec['kind'] == 'wins':
+            variance = 0.0
+            for p in played:
+                q = min(max(player_wins.get(p, 0) / player_games[p], 0.0), 1.0)
+                variance += player_games[p] * q * (1 - q)
+        elif spec['kind'] == 'ratio':
+            attempts = sum(player_games[p] * per_game(p, spec['attempts']) for p in played)
+            variance = spec['attempt_sd'] ** 2 / attempts if attempts else 0.0
+        else:
+            variance = sum(player_games[p] * per_game(p, spec['noise']) for p in played)
+        result[category] = (totals.get(category + n, 0), variance)
+    return result
+
+
+def average_week_totals(teams):
+    """A league-average team from several team_week_totals results: mean totals, mean variances."""
+    return {c: (mean(t[c][0] for t in teams), mean(t[c][1] for t in teams)) for c in teams[0]}
+
+
+def category_win_chances(mine, theirs, league):
+    """{category: chance `mine` beats `theirs` this week}. Each weekly total is taken as normal
+    around its projection with its team_week_totals variance; an exact tie counts as half."""
+    chances = {}
+    for category in league.categories:
+        (a, var_a), (b, var_b) = mine[category], theirs[category]
+        lead = (b - a) if category in league.inverse_categories else (a - b)
+        sd = (var_a + var_b) ** 0.5
+        chances[category] = _NORMAL.cdf(lead / sd) if sd > 0 else (1.0 if lead > 0 else 0.0 if lead < 0 else 0.5)
+    return chances
+
+
+def games_floor(player_stats):
+    """Games a player needs for his numbers to count as more than a small sample: 15% of the most
+    anyone has played this season, at least 5 (12 at the end of a full season)."""
+    return max(5, round(0.15 * max((stats.get('GP') or 0 for stats in player_stats.values()), default=0)))
+
+
 def _qualified_pool(player_stats):
-    """Players whose stats may set a category's mean/SD: at least 15% of the most games anyone
-    has played this season (min 5), so a 1-2 game call-up can't define the scale. Scales itself
-    down early in a season; everyone qualifies when nobody has reached the floor yet."""
-    gp_values = [stats.get('GP') or 0 for stats in player_stats.values()]
-    if not gp_values:
-        return set(player_stats)
-    floor = max(5, round(0.15 * max(gp_values)))
+    """Players whose stats may set a category's mean/SD (games_floor), so a 1-2 game call-up
+    can't define the scale. Everyone qualifies while nobody has reached the floor yet."""
+    floor = games_floor(player_stats)
     qualified = {name for name, stats in player_stats.items() if (stats.get('GP') or 0) >= floor}
     return qualified or set(player_stats)
 

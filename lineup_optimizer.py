@@ -9,9 +9,10 @@ Everything is scoped to one league (leagues.LeagueConfig):
 """
 from itertools import combinations
 
-from fantasy_database import Player
+from fantasy_database import FantasyTeam, FantasyTeamPlayer
 from player_stats import (load_player_stats, calculate_overall_scores, calculate_team_totals, week_schedule,
-                          team_games, player_week_games, positions_ok)
+                          team_games, player_week_games, positions_ok, best_starters, team_week_totals,
+                          average_week_totals, category_win_chances, games_floor)
 from fantasy_team_helper import (get_my_team_players, get_all_my_team_players, get_opponent_team_players,
                                  get_available_players, get_current_fantasy_week_dates, get_undroppable_players,
                                  get_injured_players)
@@ -241,6 +242,99 @@ def get_analysis_data(league, timeframe, week_start=None, week_end=None, opponen
         'active_slots': league.active_slots,
         'daily_lineups': league.daily_lineups,
         'num_categories': len(league.categories),
+    }
+
+
+def _week_team(week, players, suffix):
+    """(team_week_totals, games, wins) for a roster's week. Daily-lineup leagues let
+    player_week_games pick each day's best `active` from all of them; weekly-lineup leagues count
+    their best healthy starters."""
+    league = week.league
+    players = [p for p in players if p in week.player_stats]
+    if not league.daily_lineups:
+        players = best_starters(league, [p for p in players if p not in week.injured], week.player_stats, suffix)
+    games, wins = player_week_games(players, week.player_stats, week.schedule, league, suffix, week.injured)
+    return team_week_totals(players, week.player_stats, games, wins, league.categories, suffix), games, wins
+
+
+def _week_opponent(league, week, week_start, opponent_team_name, suffix):
+    """(label, weekly totals) that pickups are judged against: the week's opponent once its roster
+    is in; else the average of the league's other rostered teams; else (None, None), meaning an
+    opponent exactly as strong as my team."""
+    if opponent_team_name:
+        theirs = get_opponent_team_players(league, week_start.strftime('%Y-%m-%d'))
+        if theirs:
+            return opponent_team_name, _week_team(week, theirs, suffix)[0]
+    others = []
+    for team in FantasyTeam.select().where((FantasyTeam.league == league.id) & (FantasyTeam.abv != league.my_team)):
+        roster = [ftp.player_name for ftp in FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id == team.id)]
+        if any(p in week.player_stats for p in roster):
+            others.append(_week_team(week, roster, suffix)[0])
+    if others:
+        return 'league average', average_week_totals(others)
+    return None, None
+
+
+def get_pickup_candidates(league, week_start=None, week_end=None, opponent_team_name=None, timeframe='projected',
+                          limit=40, pool=150):
+    """Free agents ranked by how many more categories they'd win me this week: one pickup and the
+    drop that suits him best (or an open roster spot).
+
+    Uses the NBA schedule: only games his team plays count, and in daily-lineup leagues only on
+    days he'd crack my best `active` (player_week_games). Wins are the summed chances of his team
+    winning each of those games, so 4-5 games against weak teams add up. Each category's weekly
+    total gets a win chance against the opponent (_week_opponent) from its projection and
+    game-to-game noise (team_week_totals, category_win_chances); gain = change in the sum of those
+    chances. `pool`: how many free agents with games to try, best Z-VALUE first."""
+    week_start, week_end, opponent_team_name = _resolve_week(league, week_start, week_end, opponent_team_name)
+    suffix = timeframe_suffix(timeframe)
+    week = Week(league, week_start, week_end)
+    stats = week.player_stats
+    roster = get_all_my_team_players(league)
+    if not any(p in stats for p in roster):
+        return {'error': f"No players on your team ({league.my_team or 'set Your team in the league settings'}) "
+                         "in this league yet"}
+
+    base, base_games, base_wins = _week_team(week, roster, suffix)
+    label, theirs = _week_opponent(league, week, week_start, opponent_team_name, suffix)
+    theirs = theirs or base
+    base_chances = category_win_chances(base, theirs, league)
+    base_expected = sum(base_chances.values())
+
+    undroppable = set(get_undroppable_players(league))
+    drops = [p for p in roster if p not in undroppable] + ([None] if len(roster) < league.roster_size else [])
+    playing = [p for p in get_available_players(league, stats) if week.schedule.get(stats[p]['TEAM'])]
+    playing = sorted(playing, key=lambda p: stats[p].get(f'Z-VALUE{suffix}', 0), reverse=True)[:pool]
+
+    floor = games_floor(stats)
+    candidates = []
+    for pickup in playing:
+        best = None
+        for drop in drops:
+            totals, games, wins = _week_team(week, [p for p in roster if p != drop] + [pickup], suffix)
+            chances = category_win_chances(totals, theirs, league)
+            gain = sum(chances.values()) - base_expected
+            if best is None or gain > best[0]:
+                best = (gain, drop, totals, games, wins, chances)
+        gain, drop, totals, games, wins, chances = best
+        days = sorted(week.schedule[stats[pickup]['TEAM']])
+        candidates.append({
+            'name': pickup, 'team': stats[pickup]['TEAM'], 'position': stats[pickup].get('Pos'),
+            'gp': stats[pickup].get('GP') or 0, 'small_sample': (stats[pickup].get('GP') or 0) < floor,
+            'games': len(days), 'days': [d.isoformat() for d in days],
+            'plays': games.get(pickup, 0), 'expected_wins': round(wins.get(pickup, 0.0), 2),
+            'score': round(stats[pickup].get(f'Z-SCORE{suffix}', 0), 1),
+            'gain': round(gain, 3), 'drop': drop,
+            'category_changes': {c: totals[c][0] - base[c][0] for c in league.categories},
+            'chance_changes': {c: round(chances[c] - base_chances[c], 3) for c in league.categories},
+        })
+    candidates.sort(key=lambda c: (c['gain'], c['score']), reverse=True)
+    return {
+        'week_start': week_start.isoformat(), 'week_end': week_end.isoformat(), 'timeframe': timeframe,
+        'opponent': label, 'expected_categories': round(base_expected, 2),
+        'my_week': {c: {'total': base[c][0], 'opponent': theirs[c][0], 'chance': round(base_chances[c], 3)}
+                    for c in league.categories},
+        'candidates': candidates[:limit], 'tried': len(playing), 'claims_per_week': league.claims_per_week,
     }
 
 

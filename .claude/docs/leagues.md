@@ -34,6 +34,16 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
   (`player_week_games`); the optimizer "lineup" is the whole roster (`lineup_size` =
   roster size), injured players hold a spot and score nothing, and a pickup means choosing a drop.
   Opponents are modelled the same way.
+- **Weekly matchup model** (`team_week_totals`, `category_win_chances`): a team's weekly totals,
+  each with a variance from per-game noise (catalog `noise`: variance per game = coef x the
+  player's per-game stat; `attempt_sd` for ratios; wins are coin flips at each game's log5
+  chance). The constants come from the 2025-26 game logs: points swing 3.4x their mean,
+  most counting stats 1-1.5x. P(win a category) is normal on the difference.
+- **Weekly pickups** (`get_pickup_candidates`, `/api/pickups`, the Weekly Pickups tab): for each
+  of the 150 best free agents whose team plays that week, every possible drop (or an open spot)
+  is tried and the gain is the change in expected categories won. Only games he'd play count
+  (daily leagues: days he makes the best `active`). The opponent is the week's opponent once its
+  roster is in, else the league's average rostered team, else a copy of my team (even match).
 - **Team Standings** is a power ranking, not the league's real standings. `view=per_game`: one
   game each of every team's `best_starters` (best `active` by Z-SCORE, position minimums met;
   exact because each player has one position). `view=week`: the current fantasy week through
