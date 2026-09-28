@@ -2,7 +2,9 @@
 Player statistics calculation.
 Builds player_stats dictionary from fantasy_database data.
 """
+from datetime import date
 from statistics import NormalDist, mean, pstdev
+from peewee import fn
 from fantasy_database import Player, Team, Game
 from fantasy_config import API_ATTRIBUTES, FPOINTS_SCORING
 from leagues import CATEGORY_CATALOG
@@ -20,6 +22,15 @@ TEAM_DICT = {
     'LA Lakers': 'Los Angeles Lakers',
 }
 
+def is_preseason(today=None):
+    """True from July 1 until the NBA season's first regular-season game (stored schedule): the
+    players table still holds last season's stats."""
+    today = today or date.today()
+    season_start = date(today.year if today.month >= 7 else today.year - 1, 7, 1)
+    first = Game.select(fn.MIN(Game.date)).where(Game.date >= season_start).scalar()
+    return first is not None and today < first
+
+
 # populates a full dictionary of player stats from the db
 def load_player_stats():
     """
@@ -30,6 +41,7 @@ def load_player_stats():
     """
     player_stats = {}
     team_win_percentages = {team.name: team.win_percentage for team in Team.select()}
+    preseason = is_preseason()
 
     for player in Player.select().where(Player.team.is_null(False)).where(Player.pos.is_null(False)).where(Player.gp > 0):
         team_name = TEAM_DICT.get(player.team, player.team)
@@ -53,8 +65,12 @@ def load_player_stats():
             player_stats[player.name][f'FT%{n}'] = player_stats[player.name][f'FTM{n}'] / player_stats[player.name][f'FTA{n}'] if player_stats[player.name][f'FTA{n}'] != 0 else 0
             player_stats[player.name][f'TS%{n}'] = player_stats[player.name][f'PTS{n}'] / (2 * (player_stats[player.name][f'FGA{n}'] + (0.44 * player_stats[player.name][f'FTA{n}']))) if player_stats[player.name][f'FGA{n}'] != 0 or player_stats[player.name][f'FTA{n}'] != 0 else 0
             player_stats[player.name][f'EFG%{n}'] = (player_stats[player.name][f'FGM{n}'] + 0.5 * player_stats[player.name][f'FG3M{n}']) / player_stats[player.name][f'FGA{n}'] if player_stats[player.name][f'FGA{n}'] != 0 else 0
-            # Wins per game played; before player wins were ingested, fall back to the team's win %.
-            player_stats[player.name][f'WIN%{n}'] = player_stats[player.name][f'W{n}'] if player.w is not None else (team_win_percentages.get(team_name) or 0)
+            # Wins per game played. Before the season's first game (last season's stats, and after
+            # the Oct 1 roster update maybe another team) and before player wins were ingested:
+            # his current team's win %.
+            player_stats[player.name][f'WIN%{n}'] = (
+                (team_win_percentages.get(team_name) or 0) if preseason or player.w is None
+                else player_stats[player.name][f'W{n}'])
 
         for stat in API_ATTRIBUTES + ['PLUS_MINUS']:
             player_stats[player.name][f'{stat}_projected'] = sum((player_stats[player.name].get(f'{stat}{n}', 0) or 0) * STAT_AVG_WEIGHTS[n] for n in STAT_AVG_WEIGHTS)

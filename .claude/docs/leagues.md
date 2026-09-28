@@ -25,9 +25,11 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
   - `TECH`: play-by-play scan, `pull_technical_fouls.py`, one fetch per game ever
     (`pbp_scanned_games`). Counts `Foul` actions whose subType contains "Technical" by players
     (coach/team techs and defensive 3 seconds drop out). Unscanned games count 0.
-  - `WIN%` ("Wins"): per player, wins per game played (game log `WL`), falling back to team win %
-    before player wins exist. In a week projection a player's wins are the summed log5 chances
-    of his team winning each game he is active for (`week_schedule`, team win % from standings).
+  - `WIN%` ("Wins"): per player, wins per game played (game log `WL`). Before the season's
+    first game (`is_preseason`) and before player wins exist: his current team's win %, since
+    his wins came with last season's team (Anthony Davis: Dallas-era .500, Washington .207).
+    In a week projection a player's wins are the summed log5 chances of his team winning each
+    game he is active for (`week_schedule`, team win % from standings).
 - **Daily vs weekly lineups** (`roster.daily_lineups`). Weekly: the optimizer picks `active`
   starters from the healthy roster, position minimums apply, every game counts. Daily: each day
   only the best `active` players (by the timeframe's Z-SCORE) whose team plays count
