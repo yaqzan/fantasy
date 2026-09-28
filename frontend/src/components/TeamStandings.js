@@ -152,7 +152,9 @@ const TeamStandings = ({ config }) => {
     );
   }
 
-  const { teams, categories, category_names, category_meta = [], active_slots, week_start, week_end } = standingsData;
+  const { teams, categories, category_names, category_meta = [], active_slots, week_start, week_end, stage } = standingsData;
+  // Guillotine: the bottom rows a stage would knock out, if this ranking were the stage's record.
+  const choppedFrom = stage?.stage && stage.eliminated ? teams.length - stage.eliminated : Infinity;
   const shownView = standingsData.view || 'per_game';
   const formatDay = (iso) => {
     if (!iso) return '';
@@ -213,6 +215,15 @@ const TeamStandings = ({ config }) => {
         <p className="mt-3 text-xs text-gray-400">
           {viewNote} Ranked by the sum of category ranks. A power ranking, not the league's real standings.
         </p>
+        {stage?.stage && (
+          <p className="mt-1 text-xs text-gray-400">
+            Guillotine stage {stage.stage} of {stage.stages} (weeks {stage.first_week}-{stage.last_week}):{' '}
+            {stage.eliminated
+              ? <>the bottom {stage.eliminated} by stage record are eliminated. <span className="text-red-400">Red rows</span> would be on this ranking.</>
+              : 'the final.'}
+            {' '}Eliminated teams are left out.
+          </p>
+        )}
       </div>
 
       {loading ? (
@@ -241,7 +252,7 @@ const TeamStandings = ({ config }) => {
                 return (
                   <tr
                     key={team.id}
-                    className={`hover:bg-gray-700 transition-colors ${
+                    className={`hover:bg-gray-700 transition-colors ${index >= choppedFrom ? 'border-l-4 border-red-500 bg-red-900/20 ' : ''}${
                       myTeam
                         ? 'bg-gradient-to-r from-nba-orange/10 via-nba-orange/5 to-transparent shadow-[0_0_8px_rgba(251,146,60,0.25)] ring-1 ring-nba-orange/30'
                         : ''

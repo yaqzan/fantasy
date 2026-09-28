@@ -22,7 +22,14 @@ const NumberField = ({ label, value, onChange, min = 0, step, title }) => (
 const LeagueSettings = ({ mode, league, leagues, catalog, defaults, teams = [], onClose, onSaved, onDeleted }) => {
   const initial = mode === 'edit' ? league.settings : defaults;
   const [name, setName] = useState(mode === 'edit' ? league.name : '');
-  const [settings, setSettings] = useState(JSON.parse(JSON.stringify(initial)));
+  const [settings, setSettings] = useState(() => {
+    const s = JSON.parse(JSON.stringify(initial));
+    // leagues saved before these keys existed
+    s.elimination = { ...defaults?.elimination, ...s.elimination };
+    s.waivers = { ...defaults?.waivers, ...s.waivers };
+    return s;
+  });
+  const [stageText, setStageText] = useState((initial.elimination?.stage_weeks || []).join(', '));
   const [copyFrom, setCopyFrom] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -55,9 +62,10 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, teams = [], 
     setSaving(true);
     setError(null);
     try {
+      const toSave = { ...settings, elimination: { ...settings.elimination, stage_weeks: stageText } };
       const saved = mode === 'edit'
-        ? await updateLeague(league.id, name, settings)
-        : await createLeague(name, settings, copyFrom || null);
+        ? await updateLeague(league.id, name, toSave)
+        : await createLeague(name, toSave, copyFrom || null);
       onSaved(saved.id);
     } catch (err) {
       setError(errorMessage(err));
@@ -173,6 +181,23 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, teams = [], 
               title="Auction $ follow value above replacement raised to this power: 1 splits money in proportion to value, higher pays stars more. Fit it to the league's past drafts."
             />
           </div>
+        </Section>
+
+        <Section title="Guillotine (elimination stages)">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="col-span-2">
+              <label className={labelClass}>Weeks per stage</label>
+              <input value={stageText} onChange={(e) => setStageText(e.target.value)} className={inputClass} placeholder="e.g. 3, 3, 3, 2 (blank = no eliminations)" />
+            </div>
+            <NumberField label="Teams out per stage" value={settings.elimination.per_stage} onChange={(v) => setIn('elimination', 'per_stage', v)} />
+            <div />
+            <NumberField label="FAAB budget ($, season)" value={settings.waivers.faab_budget} onChange={(v) => setIn('waivers', 'faab_budget', v)} />
+            <NumberField label="FAAB wins per stage" value={settings.waivers.faab_per_stage} onChange={(v) => setIn('waivers', 'faab_per_stage', v)} title="0 = no limit" />
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Stages run over consecutive schedule weeks. After each stage but the last, the worst records over it are eliminated:
+            mark them with Eliminate in the team's edit dialog and their players become free agents.
+          </p>
         </Section>
 
         <Section title={`Matchup schedule (${settings.schedule.length} weeks)`}>

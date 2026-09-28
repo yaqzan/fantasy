@@ -20,6 +20,16 @@ const leagueSummary = (league) => {
   return parts.join(' · ');
 };
 
+// Guillotine leagues: "Stage 2/7 · wk 1 of 3 · 12 teams, 2 out · trades open".
+const stageSummary = (stage) => {
+  if (stage.finished) return 'Guillotine over';
+  const parts = [`Stage ${stage.stage}/${stage.stages}`];
+  parts.push(stage.started ? `wk ${stage.week_in_stage} of ${stage.weeks}` : 'not started');
+  parts.push(stage.final ? `final, ${stage.teams} teams` : `${stage.teams} teams, ${stage.eliminated} out`);
+  if (stage.trade_window) parts.push('trades open');
+  return parts.join(' · ');
+};
+
 const Header = ({ leagues = [], currentLeague, onSwitchLeague, onEditLeague, onNewLeague }) => {
   return (
     <header className="bg-nba-blue shadow-lg">
@@ -35,6 +45,12 @@ const Header = ({ leagues = [], currentLeague, onSwitchLeague, onEditLeague, onN
           <div className="flex flex-wrap items-center gap-2">
             {currentLeague && (
               <span className="hidden lg:inline text-gray-300 text-xs mr-2">{leagueSummary(currentLeague)}</span>
+            )}
+            {currentLeague?.stage && (
+              <span className="text-xs px-2 py-1 rounded bg-red-900/60 border border-red-700 text-red-100"
+                title="Guillotine: the worst records over each stage are eliminated; records reset every stage">
+                {stageSummary(currentLeague.stage)}
+              </span>
             )}
             {leagues.length > 0 && (
               <select

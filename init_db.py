@@ -9,7 +9,7 @@ or overwritten. An install from before leagues existed (teams with no league, a 
 import json
 import os
 
-from peewee import MySQLDatabase, IntegerField, CharField
+from peewee import MySQLDatabase, IntegerField, CharField, TextField
 
 from fantasy_config import DB_NAME, DB_CONFIGS
 
@@ -34,8 +34,13 @@ def upgrade_schema(DB):
     for col in ('tech', 'tech_5', 'tech_10', 'w', 'w_5', 'w_10'):
         if col not in player_cols:
             ops.append(migrator.add_column('players', col, IntegerField(null=True)))
-    if 'league_id' not in {c.name for c in DB.get_columns('fantasy_teams')}:
+    team_cols = {c.name for c in DB.get_columns('fantasy_teams')}
+    if 'league_id' not in team_cols:
         ops.append(migrator.add_column('fantasy_teams', 'league_id', CharField(max_length=64, null=True)))
+    if 'eliminated_stage' not in team_cols:
+        ops.append(migrator.add_column('fantasy_teams', 'eliminated_stage', IntegerField(null=True)))
+    if 'released_roster' not in team_cols:
+        ops.append(migrator.add_column('fantasy_teams', 'released_roster', TextField(null=True)))
     if ops:
         migrate(*ops)
         print(f'added {len(ops)} column(s)')

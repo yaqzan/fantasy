@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createFantasyTeam, deleteFantasyTeam, getTeamPlayers, undraftPlayer, updateFantasyTeam, errorMessage } from '../services/api';
+import {
+  createFantasyTeam, deleteFantasyTeam, getTeamPlayers, undraftPlayer, updateFantasyTeam, eliminateFantasyTeam, restoreFantasyTeam,
+  errorMessage,
+} from '../services/api';
 
-const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, rosterSize = 14 }) => {
+const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, rosterSize = 14, guillotine = false }) => {
   const [showModal, setShowModal] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamAbbrev, setNewTeamAbbrev] = useState('');
@@ -125,6 +128,37 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
     }
   };
 
+  const handleEliminate = async () => {
+    const count = (teamPlayers[editingTeam.id] || []).length;
+    const stage = window.prompt(
+      `Eliminate ${editingTeam.name}? Its ${count} players become free agents. After which stage? (blank = the last one that ended)`, '');
+    if (stage === null) return;
+    try {
+      setLoading(true);
+      await eliminateFantasyTeam(editingTeam.id, parseInt(stage, 10) || null);
+      setEditingTeam(null);
+      onTeamUpdate();
+    } catch (error) {
+      alert(`Error eliminating team: ${errorMessage(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      setLoading(true);
+      const result = await restoreFantasyTeam(editingTeam.id);
+      if (result.skipped?.length) alert(`Restored. Not given back (on another team now): ${result.skipped.join(', ')}`);
+      setEditingTeam(null);
+      onTeamUpdate();
+    } catch (error) {
+      alert(`Error restoring team: ${errorMessage(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleUndraftPlayer = async (playerName) => {
     try {
       await undraftPlayer(playerName);
@@ -176,6 +210,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
 
   // Sort teams by average score (descending)
   const sortedTeams = [...teams].sort((a, b) => {
+    if (!a.eliminated_stage !== !b.eliminated_stage) return a.eliminated_stage ? 1 : -1; // knocked-out teams last
     const scoreA = getTeamAverageScore(a.id);
     const scoreB = getTeamAverageScore(b.id);
     return scoreB - scoreA;
@@ -200,15 +235,21 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
       ) : (
         <div ref={containerRef} className="flex flex-nowrap gap-1 overflow-x-auto">
           {sortedTeams.map((team) => (
-            <div key={team.id} className="bg-gray-700 rounded p-0.5 group hover:bg-gray-600 transition-colors flex-shrink-0 min-h-64" style={{width: teamBlockWidth}}>
+            <div key={team.id} className={`bg-gray-700 rounded p-0.5 group hover:bg-gray-600 transition-colors flex-shrink-0 min-h-64 ${team.eliminated_stage ? 'opacity-40' : ''}`} style={{width: teamBlockWidth}}>
               <div className="text-center mb-1 relative">
                 <h4 className="font-medium text-white text-xs truncate leading-tight">{team.name}</h4>
                 {team.abbreviation && (
                   <p className="text-xs text-gray-400 leading-tight">{team.abbreviation}</p>
                 )}
-                <div className="team-badge bg-nba-blue text-white text-xs mt-0.5 px-1">
-                  {getTeamAverageScore(team.id)}
-                </div>
+                {team.eliminated_stage ? (
+                  <div className="team-badge bg-red-800 text-white text-xs mt-0.5 px-1" title={`Eliminated after stage ${team.eliminated_stage}`}>
+                    Out S{team.eliminated_stage}
+                  </div>
+                ) : (
+                  <div className="team-badge bg-nba-blue text-white text-xs mt-0.5 px-1">
+                    {getTeamAverageScore(team.id)}
+                  </div>
+                )}
                 
                 {/* Edit icon - only visible on hover */}
                 <button
@@ -310,6 +351,16 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
                 >
                   Delete team
                 </button>
+                {guillotine && (editingTeam.eliminated_stage ? (
+                  <button type="button" onClick={handleRestore} className="text-sm text-gray-300 hover:text-white" disabled={loading}
+                    title={`Eliminated after stage ${editingTeam.eliminated_stage}; gives back its players unless another team has them`}>
+                    Undo elimination
+                  </button>
+                ) : (
+                  <button type="button" onClick={handleEliminate} className="text-sm text-red-400 hover:text-red-300" disabled={loading}>
+                    Eliminate
+                  </button>
+                ))}
                 <button
                   type="button"
                   onClick={() => setEditingTeam(null)}

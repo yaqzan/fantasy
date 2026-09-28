@@ -16,7 +16,7 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
   on a team in each league.
 - **Categories.** `CATEGORY_CATALOG` in `leagues.py`: key, label, `inverse` (lower wins), `kind`;
   ratios also carry `attempts` (per-game attempts formula) and `prior` (shrinkage strength in
-  attempts, method of moments on 2025-26). Adding a category = a per-player per-period stat in
+  attempts, method of moments on 2025-26; FG% measured ~55, stored 60). Adding a category = a per-player per-period stat in
   `player_stats.load_player_stats` (keys `CAT`, `CAT_5`, `CAT_10`, `CAT_projected`) + a catalog
   entry; `calculate_team_totals` sums counting stats generically and special-cases ratios and
   `WIN%`.
@@ -67,6 +67,17 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
   `games_floor` are flagged `small_sample`. Fit the exponent to the league's past auction prices by rank (least squares
   over the drafted players); the owner's league stores its fit (a gitignored
   `draft_history_price_curve.json` holds the price curve it came from).
+- **Guillotine leagues** (`elimination.stage_weeks`, e.g. `[3,3,3,3,3,2,2]`; empty = ordinary
+  league). Stages are consecutive schedule weeks; after each stage but the last, the
+  `per_stage` worst records are eliminated and every record resets. `LeagueConfig.stage_info()`
+  (in `to_dict()`, so the header shows it) gives the stage, its weeks and dates, teams in it and
+  the trade window (first week of a stage). Eliminating a team (`/fantasy-teams/<id>/eliminate`,
+  Team Manager edit dialog) sets `fantasy_teams.eliminated_stage`, saves its roster to
+  `released_roster` and releases the players to free agency, so pickups see them; `/restore`
+  undoes it minus players another team took since. Eliminated teams drop out of Team Standings,
+  which marks the bottom `per_stage` rows. Records aren't imported, so the red rows are the power
+  ranking's guess, not the real stage standings. Auction prices and z-score pools still use the
+  starting `num_teams`. `waivers.faab_budget` / `faab_per_stage` are recorded, not enforced.
 - **Schedule.** `[[week start, opponent abbreviation], ...]`; a week ends the day before the next
   starts (last week: 7 days). Empty schedule: Monday-Sunday weeks, no opponent, the optimizer
   answers 422 with a message. "Fill weeks from NBA calendar" (`/api/leagues/generate-weeks`) makes

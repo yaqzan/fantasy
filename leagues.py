@@ -42,7 +42,9 @@ CATEGORY_CATALOG = {
     # Ratios are valued by impact (player_stats.py). `attempts`: the per-game attempts behind the
     # rate, as (stat, coefficient) terms. `prior`: attempts of league-average shooting a player's
     # rate is blended with before scoring (method of moments on 2025-26: TS% ~233, EFG% ~223,
-    # FT% ~27, PPS ~98).
+    # FG% ~55, FT% ~27, PPS ~98).
+    'FG%': {'label': 'FG%', 'name': 'Field goal %', 'kind': 'ratio', 'percent': True,
+            'attempts': [('FGA', 1.0)], 'prior': 60, 'attempt_sd': 0.499},
     'TS%': {'label': 'TS%', 'name': 'True shooting %', 'kind': 'ratio', 'percent': True,
             'attempts': [('FGA', 1.0), ('FTA', 0.44)], 'prior': 250, 'attempt_sd': 0.566},
     'EFG%': {'label': 'EFG%', 'name': 'Effective FG %', 'kind': 'ratio', 'percent': True,
@@ -53,7 +55,7 @@ CATEGORY_CATALOG = {
             'attempt_sd': 1.327},
 }
 # Column order in tables: shooting first, then counting stats, inverse categories last.
-CATEGORY_ORDER = ['TS%', 'EFG%', 'FT%', 'PPS', 'PTS', 'REB', 'AST', 'AST-TOV', 'STL', 'BLK', 'FG3M', 'NFT',
+CATEGORY_ORDER = ['TS%', 'EFG%', 'FG%', 'FT%', 'PPS', 'PTS', 'REB', 'AST', 'AST-TOV', 'STL', 'BLK', 'FG3M', 'NFT',
                   'DD2', 'TD3', 'WIN%', 'PLUS_MINUS', 'TOV', 'PF', 'BLKA', 'TECH']
 
 DEFAULT_SETTINGS = {
@@ -73,7 +75,13 @@ DEFAULT_SETTINGS = {
     'draft': {'type': 'auction', 'budget': 200, 'date': '',
               'price_exponent': 1.0},     # auction $ follow value over replacement ** this;
                                           # fit to the league's past drafts (1 = linear)
-    'waivers': {'claims_per_week': 1},
+    'waivers': {'claims_per_week': 1,
+                'faab_budget': 0,             # free agent auction budget for the season (0 = no FAAB)
+                'faab_per_stage': 0},         # FAAB wins allowed per elimination stage (0 = no limit)
+    # Guillotine: the season is split into stages of consecutive matchup weeks; after each stage
+    # but the last, the `per_stage` teams with the worst record over it are eliminated and their
+    # players become free agents. Empty `stage_weeks` = an ordinary league.
+    'elimination': {'stage_weeks': [], 'per_stage': 2},
     'schedule': [],                   # [[week start "YYYY-MM-DD", opponent abbreviation], ...]
     'notes': '',                      # free text: prizes, tie-breakers, anything else
 }
@@ -117,6 +125,13 @@ def validate_settings(settings):
             s['roster'][key] = int(s['roster'][key] or 0)
         s['draft']['budget'] = int(s['draft']['budget'] or 0)
         s['waivers']['claims_per_week'] = int(s['waivers']['claims_per_week'] or 0)
+        s['waivers']['faab_budget'] = int(s['waivers']['faab_budget'] or 0)
+        s['waivers']['faab_per_stage'] = int(s['waivers']['faab_per_stage'] or 0)
+        s['elimination']['per_stage'] = int(s['elimination']['per_stage'] or 0)
+        stage_weeks = s['elimination']['stage_weeks'] or []
+        if isinstance(stage_weeks, str):  # "3,3,3,2" from a text field
+            stage_weeks = [w for w in re.split(r'[\s,]+', stage_weeks) if w]
+        s['elimination']['stage_weeks'] = [int(w) for w in stage_weeks]
     except (TypeError, ValueError):
         raise ValueError('team count, roster sizes, budget and claims must be whole numbers')
     try:
@@ -144,6 +159,13 @@ def validate_settings(settings):
     if len({e[0] for e in schedule}) != len(schedule):
         raise ValueError('schedule has two weeks starting on the same day')
     s['schedule'] = schedule
+    stage_weeks = s['elimination']['stage_weeks']
+    if any(w < 1 for w in stage_weeks):
+        raise ValueError('every elimination stage needs at least one week')
+    if stage_weeks and schedule and sum(stage_weeks) > len(schedule):
+        raise ValueError(f'the elimination stages cover {sum(stage_weeks)} weeks but the schedule has {len(schedule)}')
+    if stage_weeks and s['num_teams'] - s['elimination']['per_stage'] * (len(stage_weeks) - 1) < 1:
+        raise ValueError('eliminations run out of teams before the last stage')
     s['my_team'] = (s['my_team'] or '').strip()
     return s
 
@@ -170,6 +192,8 @@ class LeagueConfig:
     budget = property(lambda self: self.settings['draft']['budget'] or 200)
     price_exponent = property(lambda self: self.settings['draft']['price_exponent'])
     claims_per_week = property(lambda self: max(self.settings['waivers']['claims_per_week'], 1))
+    stage_weeks = property(lambda self: list(self.settings['elimination']['stage_weeks']))
+    is_guillotine = property(lambda self: bool(self.settings['elimination']['stage_weeks']))
     fantrax_league_id = property(lambda self: self.settings['fantrax_league_id'])
 
     @property
@@ -186,9 +210,48 @@ class LeagueConfig:
     def schedule_dict(self):
         return {start: opponent for start, opponent in self.schedule}
 
+    def stage_of_week(self, week_index):
+        """1-based stage a 0-based schedule week belongs to, None past the last stage."""
+        end = 0
+        for number, weeks in enumerate(self.stage_weeks, 1):
+            end += weeks
+            if week_index < end:
+                return number
+        return None
+
+    def stage_info(self, today=None):
+        """Where a guillotine league stands on `today`: its stage, that stage's weeks and dates,
+        how many teams play it and how many it eliminates, and whether trades are open (first
+        week of a stage). Before the first week: stage 1, not started. None for ordinary leagues
+        or before a schedule exists."""
+        schedule = self.schedule
+        if not self.is_guillotine or not schedule:
+            return None
+        today = (today or date.today()).isoformat()
+        started = today >= schedule[0][0]
+        index = max((i for i, (start, _) in enumerate(schedule) if start <= today), default=0)
+        stage = self.stage_of_week(index)
+        if stage is None:
+            return {'stage': None, 'stages': len(self.stage_weeks), 'finished': True}
+        first = sum(self.stage_weeks[:stage - 1])
+        last = first + self.stage_weeks[stage - 1] - 1
+        per_stage = self.settings['elimination']['per_stage']
+        teams = self.num_teams - per_stage * (stage - 1)
+        final = stage == len(self.stage_weeks)
+        end = (_parse_date(schedule[last + 1][0]) - timedelta(days=1) if last + 1 < len(schedule)
+               else _parse_date(schedule[last][0]) + timedelta(days=6))
+        if today > end.isoformat():  # past the last scheduled week
+            return {'stage': None, 'stages': len(self.stage_weeks), 'finished': True}
+        return {'stage': stage, 'stages': len(self.stage_weeks), 'started': started, 'final': final,
+                'week_in_stage': index - first + 1 if started else 0, 'weeks': self.stage_weeks[stage - 1],
+                'first_week': first + 1, 'last_week': last + 1,
+                'start': schedule[first][0], 'end': end.isoformat(),
+                'teams': teams, 'eliminated': 0 if final else per_stage,
+                'trade_window': started and index == first}
+
     def to_dict(self):
         return {'id': self.id, 'name': self.name, 'is_active': self.is_active, 'settings': self.settings,
-                'categories': category_meta(self.categories)}
+                'categories': category_meta(self.categories), 'stage': self.stage_info()}
 
 
 def slugify(name):

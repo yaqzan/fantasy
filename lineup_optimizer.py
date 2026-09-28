@@ -40,6 +40,7 @@ def calculate_category_weight(category):
         'WIN%': (0.30, 0.85),
         'EFG%': (0.10, 1.0),
         'TS%': (0.12, 0.95),
+        'FG%': (0.12, 0.95),
         'FT%': (0.20, 0.95),
         'PF': (0.30, 0.85),
         'PLUS_MINUS': (0.25, 0.90),

@@ -125,6 +125,10 @@ class FantasyTeam(BaseModel):
     name = CharField()
     abv = CharField(max_length=10, null=True)
     league = ForeignKeyField(League, backref='teams', column_name='league_id', null=True)
+    # Guillotine leagues: the stage the team was knocked out after (None = still in), and the
+    # players it held then (JSON names), kept so an elimination can be undone.
+    eliminated_stage = IntegerField(null=True)
+    released_roster = TextField(null=True)
 
     class Meta:
         table_name = 'fantasy_teams'

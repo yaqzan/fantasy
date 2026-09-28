@@ -232,6 +232,7 @@ function App() {
             refreshTrigger={players.length}
             activeSlots={currentLeague.settings.roster.active}
             rosterSize={currentLeague.settings.roster.size}
+            guillotine={Boolean(currentLeague.settings.elimination?.stage_weeks?.length)}
           />
         </div>
 

@@ -95,6 +95,17 @@ export const deleteFantasyTeam = async (teamId) => {
   return response.data;
 };
 
+// Guillotine: knock a team out (its players become free agents) or undo that.
+export const eliminateFantasyTeam = async (teamId, stage = null) => {
+  const response = await api.post(`/fantasy-teams/${teamId}/eliminate`, stage ? { stage } : {});
+  return response.data;
+};
+
+export const restoreFantasyTeam = async (teamId) => {
+  const response = await api.post(`/fantasy-teams/${teamId}/restore`);
+  return response.data;
+};
+
 export const draftPlayer = async (playerName, fantasyTeamId) => {
   const response = await api.post('/draft-player', {
     player_name: playerName,

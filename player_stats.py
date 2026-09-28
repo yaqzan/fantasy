@@ -62,6 +62,7 @@ def load_player_stats():
             player_stats[player.name][f'AST-TOV{n}'] = player_stats[player.name][f'AST{n}'] - player_stats[player.name][f'TOV{n}']
             player_stats[player.name][f'PPS{n}'] = player_stats[player.name][f'PTS{n}'] / player_stats[player.name][f'FGA{n}'] if player_stats[player.name][f'FGA{n}'] != 0 else 0
             player_stats[player.name][f'NFT{n}'] = 2 * player_stats[player.name][f'FTM{n}'] - player_stats[player.name][f'FTA{n}']
+            player_stats[player.name][f'FG%{n}'] = player_stats[player.name][f'FGM{n}'] / player_stats[player.name][f'FGA{n}'] if player_stats[player.name][f'FGA{n}'] != 0 else 0
             player_stats[player.name][f'FT%{n}'] = player_stats[player.name][f'FTM{n}'] / player_stats[player.name][f'FTA{n}'] if player_stats[player.name][f'FTA{n}'] != 0 else 0
             player_stats[player.name][f'TS%{n}'] = player_stats[player.name][f'PTS{n}'] / (2 * (player_stats[player.name][f'FGA{n}'] + (0.44 * player_stats[player.name][f'FTA{n}']))) if player_stats[player.name][f'FGA{n}'] != 0 or player_stats[player.name][f'FTA{n}'] != 0 else 0
             player_stats[player.name][f'EFG%{n}'] = (player_stats[player.name][f'FGM{n}'] + 0.5 * player_stats[player.name][f'FG3M{n}']) / player_stats[player.name][f'FGA{n}'] if player_stats[player.name][f'FGA{n}'] != 0 else 0
@@ -212,6 +213,9 @@ def calculate_team_totals(roster, player_stats, player_games, player_wins, categ
         elif category == 'EFG%':
             fga = total('FGA')
             totals[key] = (total('FGM') + 0.5 * total('FG3M')) / fga if fga else 0
+        elif category == 'FG%':
+            fga = total('FGA')
+            totals[key] = total('FGM') / fga if fga else 0
         elif category == 'FT%':
             fta = total('FTA')
             totals[key] = total('FTM') / fta if fta else 0

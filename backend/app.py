@@ -4,6 +4,7 @@ from werkzeug.exceptions import HTTPException
 import sys
 import os
 import traceback
+import json
 
 # Add parent directory to path to import our existing modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,7 +74,7 @@ def league_team(league, team_id):
 
 
 def team_json(team):
-    return {'id': team.id, 'name': team.name, 'abbreviation': team.abv}
+    return {'id': team.id, 'name': team.name, 'abbreviation': team.abv, 'eliminated_stage': team.eliminated_stage}
 
 
 def league_config(league):
@@ -342,6 +343,53 @@ def delete_fantasy_team(team_id):
     return jsonify({'deleted': team_id})
 
 
+@fantasy_api.route('/fantasy-teams/<int:team_id>/eliminate', methods=['POST'])
+def eliminate_fantasy_team(team_id):
+    """Guillotine: knock a team out after a stage (default: the last stage that ended) and release
+    its players to free agency. The roster is kept on the team so /restore can undo it."""
+    league = current_league()
+    team = league_team(league, team_id)
+    if not league.is_guillotine:
+        return jsonify({'error': 'this league has no elimination stages (League settings > Guillotine)'}), 400
+    if team.eliminated_stage:
+        return jsonify({'error': f'{team.name} was already eliminated after stage {team.eliminated_stage}'}), 400
+    stage = (request.get_json() or {}).get('stage')
+    if not stage:
+        info = league.stage_info() or {}
+        stage = len(league.stage_weeks) - 1 if info.get('finished') else max((info.get('stage') or 1) - 1, 1)
+    roster = [ftp.player_name for ftp in FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id == team.id)]
+    with DB.atomic():
+        team.eliminated_stage = int(stage)
+        team.released_roster = json.dumps(roster)
+        team.save()
+        FantasyTeamPlayer.delete().where(FantasyTeamPlayer.fantasy_team_id == team.id).execute()
+    return jsonify({'team': team_json(team), 'released': roster})
+
+
+@fantasy_api.route('/fantasy-teams/<int:team_id>/restore', methods=['POST'])
+def restore_fantasy_team(team_id):
+    """Undo an elimination: the team is back in and gets back the players it held then, except
+    those another team in the league has picked up since."""
+    league = current_league()
+    team = league_team(league, team_id)
+    released = json.loads(team.released_roster or '[]')
+    taken = {ftp.player_name for ftp in FantasyTeamPlayer.select(FantasyTeamPlayer.player_name)
+             .where(FantasyTeamPlayer.fantasy_team_id.in_(league_team_ids(league)))}
+    restored, skipped = [], []
+    with DB.atomic():
+        for name in released:
+            player = Player.get_or_none(Player.name == name)
+            if player is None or name in taken:
+                skipped.append(name)
+                continue
+            FantasyTeamPlayer.create(player_id=player, fantasy_team_id=team, player_name=name, fantasy_team_name=team.name)
+            restored.append(name)
+        team.eliminated_stage = None
+        team.released_roster = None
+        team.save()
+    return jsonify({'team': team_json(team), 'restored': restored, 'skipped': skipped})
+
+
 @fantasy_api.route('/draft-player', methods=['POST'])
 def draft_player():
     """Put a player on a team in the current league (moving him if another team there has him)"""
@@ -411,7 +459,8 @@ def get_team_standings():
     player_stats = scored_players(league)
     injured = {p.name for p in Player.select(Player.name).where(Player.injured == 1)} if healthy_only else set()
 
-    teams = list(FantasyTeam.select().where(FantasyTeam.league == league.id))
+    # Guillotine: eliminated teams are out of the ranking (their players are free agents).
+    teams = list(FantasyTeam.select().where((FantasyTeam.league == league.id) & FantasyTeam.eliminated_stage.is_null()))
     rosters = {t.id: [] for t in teams}
     if teams:
         for ftp in FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id.in_(list(rosters))):
@@ -452,7 +501,7 @@ def get_team_standings():
     meta = category_meta(league.categories)
     return jsonify({'teams': teams_data, 'categories': [m['key'] for m in meta],
                     'category_names': {m['key']: m['label'] for m in meta}, 'category_meta': meta,
-                    'active_slots': league.active_slots, 'view': view,
+                    'active_slots': league.active_slots, 'view': view, 'stage': league.stage_info(),
                     'week_start': week_start.isoformat() if week_start else None,
                     'week_end': week_end.isoformat() if week_end else None})
 
