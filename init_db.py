@@ -45,6 +45,8 @@ def upgrade_schema(DB):
         ops.append(migrator.add_column('fantasy_teams', 'eliminated_stage', IntegerField(null=True)))
     if 'released_roster' not in team_cols:
         ops.append(migrator.add_column('fantasy_teams', 'released_roster', TextField(null=True)))
+    if 'fantrax_team_id' not in team_cols:
+        ops.append(migrator.add_column('fantasy_teams', 'fantrax_team_id', CharField(max_length=32, null=True)))
     if ops:
         migrate(*ops)
         print(f'added {len(ops)} column(s)')

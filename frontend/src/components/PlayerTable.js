@@ -5,17 +5,14 @@ import { calculateCustomZScores, calculateCustomAuctionValues } from '../service
 // API field suffix for each stats choice ('proj' = this season's projection).
 const PERIOD_SUFFIX = { season: '_season', '5': '_5', '10': '_10', projected: '_projected', proj: '_proj' };
 
-const formatWeekDate = (dateStr) => {
-  if (!dateStr) return '';
-  // Parse date string directly to avoid timezone issues
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
-  const monthName = date.toLocaleDateString('en-US', { month: 'short' });
-  return `${monthName} ${day}`;
+const formatWeekRange = ({ start, end }) => {
+  const [a, b] = [start, end].map(d => { const [y, m, day] = d.split('-').map(Number); return new Date(y, m - 1, day); });
+  const month = (d) => d.toLocaleDateString('en-US', { month: 'short' });
+  return a.getMonth() === b.getMonth() ? `${month(a)} ${a.getDate()}-${b.getDate()}` : `${month(a)} ${a.getDate()} - ${month(b)} ${b.getDate()}`;
 };
 
 // priceExponent: null means the league's own draft.price_exponent (the server's default values).
-// draftMode: before the league's draft, hide in-season columns (trends, fantasy points).
+// draftMode: before the league's draft, hide in-season columns (trends).
 // draftPlan: the Draft Day data (/api/draft-day) when it belongs to this league: adds Likely $ and
 // Max bid, the max following the Value column (share of it by price band, stars at break-even).
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', draftMode = false, draftPlan = null }) => {
@@ -310,27 +307,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     return null;
   };
 
-  // Hot/Cold indicator for FPts comparing 5-game to season
-  const getFptsHotColdIndicator = (player) => {
-    const diff = Math.round(player.hot_fpoints || 0);
-    const threshold = 3;
-    
-    if (diff >= threshold) {
-      return (
-        <span className={`${getHotAura(diff)}`} title={`5-game FPts is ${diff} higher than season`}>
-          <span className="text-xs">+{diff}</span>🔥
-        </span>
-      );
-    } else if (diff <= -threshold) {
-      return (
-        <span className={`${getColdAura(diff)}`} title={`5-game FPts is ${Math.abs(diff)} lower than season`}>
-          <span className="text-xs">{diff}</span>❄️
-        </span>
-      );
-    }
-    return null;
-  };
-
   const getZScoreColor = (score) => {
     if (score > 55) {
       // Green spectrum with clear text
@@ -520,25 +496,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   </th>
                 </>
               )}
-              {!draftMode && <>
-              <th 
-                className="table-header cursor-pointer hover:bg-gray-600 w-20"
-                onClick={() => handleSort('fpoints')}
-              >
-                <div className="flex items-center">
-                  FPts <SortIcon columnKey="fpoints" />
-                </div>
-              </th>
-              <th 
-                className="table-header cursor-pointer hover:bg-gray-600 w-10 text-center px-1"
-                onClick={() => handleSort('hot_fpoints')}
-                title="FPts Trend (5-game vs season)"
-              >
-                <div className="flex items-center justify-center">
-                  📈<SortIcon columnKey="hot_fpoints" />
-                </div>
-              </th>
-              </>}
               {CATEGORIES.map(category => {
                 const isPunted = !includedCategories.includes(category);
                 return (
@@ -610,28 +567,13 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     </div>
                     <div className="text-xs text-gray-400">
                       {player.position} | {player.team_abv || 'N/A'}
-                      {player.current_week_games !== undefined && player.current_week_start && (
-                        <>
+                      {[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined && (
+                        <React.Fragment key={i}>
                           {' | '}
-                          <span className="text-gray-300">
-                            {player.current_week_games} GP
-                          </span>
-                          <span className="text-gray-500">
-                            {' '}({formatWeekDate(player.current_week_start)})
-                          </span>
-                        </>
-                      )}
-                      {player.next_week_games !== undefined && player.next_week_start && (
-                        <>
-                          {' | '}
-                          <span className="text-gray-300">
-                            {player.next_week_games} GP
-                          </span>
-                          <span className="text-gray-500">
-                            {' '}({formatWeekDate(player.next_week_start)})
-                          </span>
-                        </>
-                      )}
+                          <span className="text-gray-300">{player[i ? 'next_week_games' : 'current_week_games']} GP</span>
+                          <span className="text-gray-500"> ({formatWeekRange(week)})</span>
+                        </React.Fragment>
+                      ))}
                     </div>
                   </div>
                 </td>
@@ -651,21 +593,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     </>
                   );
                 })()}
-                {!draftMode && <>
-                <td className="table-cell text-center">
-                  <div className="flex items-center justify-center space-x-2">
-                    <span className="text-blue-400 font-semibold">
-                      {player.fpoints ? player.fpoints.toFixed(1) : '0.0'}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      (#{player.fpoints_rank || '-'})
-                    </span>
-                  </div>
-                </td>
-                <td className="table-cell text-center px-1">
-                  {getFptsHotColdIndicator(player)}
-                </td>
-                </>}
                 {CATEGORIES.map(category => {
                   const stat = player.stats[category];
                   const isPunted = !includedCategories.includes(category);

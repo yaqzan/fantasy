@@ -6,7 +6,7 @@ from datetime import date
 from statistics import NormalDist, mean, pstdev
 from peewee import fn
 from fantasy_database import Player, Game
-from fantasy_config import API_ATTRIBUTES, FPOINTS_SCORING
+from fantasy_config import API_ATTRIBUTES
 from leagues import CATEGORY_CATALOG
 
 
@@ -379,7 +379,9 @@ def _z_scores(player_stats, categories, inverse, n, eligible, pool_size):
     The pool starts as every eligible player and becomes the top `pool_size` of them by summed z,
     re-ranked POOL_PASSES times: value is relative to the players who actually get drafted, not
     to hundreds of bench players (the average scorer in the whole pool is at 10 PPG, the average
-    drafted one at 17)."""
+    drafted one at 17). A single category (points leagues) isn't capped: there is nothing for one
+    freak number to outweigh, and a star's whole lead is what he is worth."""
+    cap = Z_CAP if len(categories) > 1 else float('inf')
     pool = sorted(eligible)
     z = {}
     for _ in range(POOL_PASSES):
@@ -394,7 +396,7 @@ def _z_scores(player_stats, categories, inverse, n, eligible, pool_size):
                 if p not in values:
                     z[p][category] = -Z_CAP
                 else:
-                    z[p][category] = max(-Z_CAP, min(Z_CAP, sign * (values[p] - mu) / sd)) if sd else 0.0
+                    z[p][category] = max(-cap, min(cap, sign * (values[p] - mu) / sd)) if sd else 0.0
         pool = sorted(eligible, key=lambda p: sum(z[p].values()), reverse=True)[:pool_size]
     return z
 
@@ -402,7 +404,7 @@ def _z_scores(player_stats, categories, inverse, n, eligible, pool_size):
 def _category_display(z):
     """0-100 display scale for one category's z: 50 is the average drafted player, 0 and 100
     are -/+Z_CAP."""
-    return 50.0 + 50.0 * z / Z_CAP
+    return max(0.0, min(100.0, 50.0 + 50.0 * z / Z_CAP))
 
 
 def _overall_display(player_stats, value_key, eligible, pool_size):
@@ -436,6 +438,8 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
     """
     if not player_stats:
         return
+    if league.is_points:
+        add_fantasy_points(player_stats, league)
     categories = league.categories
     inverse = set(league.inverse_categories)
     scored = [c for c in categories if c not in punt_categories]
@@ -464,19 +468,16 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
                 player_stats[p][rank_key] = i
                 player_stats[p][score_key] = display[p]
 
-def calculate_fantasy_points(player_stats):
-    for player_name, stats in player_stats.items():
-        for n in ['', '_5', '_10', '_projected']:
-            fpoints = 0
-            for stat, multiplier in FPOINTS_SCORING.items():
-                stat_key = f'{stat}{n}'
-                fpoints += stats.get(stat_key, 0) * multiplier
-            player_stats[player_name][f'FPOINTS{n}'] = round(fpoints, 2)
-    
-    for n in ['', '_5', '_10', '_projected']:
-        sorted_by_fpoints = sorted(player_stats.items(), key=lambda kv: kv[1].get(f'FPOINTS{n}', 0), reverse=True)
-        for i, (key, val) in enumerate(sorted_by_fpoints, start=1):
-            player_stats[key][f'FPOINTS-RANK{n}'] = i
+def add_fantasy_points(player_stats, league):
+    """Points leagues: FPTS{n} per game = the league's point weights x the per-game stats, for every
+    timeframe. A player with no projection gets no FPTS_proj (so he stays out of that timeframe)."""
+    weights = league.point_weights
+    for stats in player_stats.values():
+        for n in TIMEFRAMES:
+            if n == '_proj' and 'GP_proj' not in stats:
+                continue
+            stats[f'FPTS{n}'] = sum((stats.get(f'{stat}{n}') or 0) * w for stat, w in weights.items())
+
 
 def calculate_auction_values(player_stats, league, price_exponent=None, value_key='VALUE', out_key='AUCTION_VALUE'):
     """Whole-dollar auction values by value over replacement, written to `out_key`.

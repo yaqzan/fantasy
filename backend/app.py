@@ -12,13 +12,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats, LeaguePlayerFlag,
                               PlayerProjection, ProjectionAdjustment)
 from projections import season_label
-from player_stats import (load_player_stats, calculate_overall_scores, calculate_auction_values, calculate_fantasy_points,
+from player_stats import (load_player_stats, calculate_overall_scores, calculate_auction_values,
                           calculate_team_totals, week_schedule, team_games, player_week_games, best_starters,
                           games_floor, TEAM_DICT)
-from fantasy_config import TEAMNAMES
+from fantasy_config import TEAMNAMES, FPOINTS_SCORING
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
                                  league_team_ids, get_undroppable_players)
-from leagues import (get_league, list_leagues, create_league, update_league, activate_league, delete_league,
+from leagues import (POINT_STATS, get_league, list_leagues, create_league, update_league, activate_league, delete_league,
                      generate_weeks, category_meta, CATEGORY_CATALOG, DEFAULT_SETTINGS, NotFound)
 from datetime import date, datetime
 
@@ -80,18 +80,25 @@ def team_json(team):
     return {'id': team.id, 'name': team.name, 'abbreviation': team.abv, 'eliminated_stage': team.eliminated_stage}
 
 
+def _week_json(start, end):
+    return {'start': start.isoformat(), 'end': end.isoformat()} if start else None
+
+
 def league_config(league):
     """League rules the frontend renders from (categories, roster, draft). Before the league's
     first week the stats are last season's, and the full season is the basis to draft on; after,
     the projection (half season, half last 10 games)."""
     schedule = league.schedule
     preseason = bool(schedule) and date.today().isoformat() < schedule[0][0]
+    current_week = get_current_fantasy_week_dates(league)
+    next_week = get_next_week_dates(league, current_week[0])
     has_projections = PlayerProjection.select().where(PlayerProjection.season == season_label()).exists()
     return {
         'show_auction_price': league.settings['draft']['type'] == 'auction',
         'MY_TEAM_ABV': league.my_team,
         'league': league.to_dict(),
         'categories': category_meta(league.categories),
+        'current_week': _week_json(*current_week[:2]), 'next_week': _week_json(*next_week),
         # Before the season: this season's projection when there is one, else last season.
         'default_stat_type': ('proj' if has_projections else 'season') if preseason else 'projected',
         'projection_season': season_label() if has_projections else None,
@@ -124,7 +131,8 @@ def get_leagues():
     leagues = list_leagues()
     active = next((l.id for l in leagues if l.is_active), leagues[0].id if leagues else None)
     return jsonify({'leagues': [l.to_dict() for l in leagues], 'active': active,
-                    'category_catalog': category_meta(), 'defaults': DEFAULT_SETTINGS})
+                    'category_catalog': category_meta(), 'defaults': DEFAULT_SETTINGS,
+                    'point_stats': POINT_STATS, 'default_points': FPOINTS_SCORING})
 
 
 @fantasy_api.route('/leagues', methods=['POST'])
@@ -197,7 +205,6 @@ def get_fantasy_players():
     # A $ value per timeframe, so the price always matches the rank it is shown next to.
     for suffix in STAT_SUFFIXES.values():
         calculate_auction_values(player_stats, league, value_key=f'VALUE{suffix}', out_key=f'AUCTION_VALUE{suffix}')
-    calculate_fantasy_points(player_stats)
     floor = games_floor(player_stats)
 
     team_ids = league_team_ids(league)
@@ -252,8 +259,6 @@ def get_fantasy_players():
             'projected_games': round(stats.get('GP_proj', 0)),
             'current_week_games': current_week_games.get(full_team_name, 0),
             'next_week_games': next_week_games.get(full_team_name, 0),
-            'current_week_start': current_week_start.strftime('%Y-%m-%d') if current_week_start else None,
-            'next_week_start': next_week_start.strftime('%Y-%m-%d') if next_week_start else None,
             'stats': category_stats,
             'overall_rank': stats.get('Z-RANK_projected', 0),  # Default to projected
             'overall_rank_season': stats.get('Z-RANK', 0),
@@ -273,12 +278,7 @@ def get_fantasy_players():
             'auction_value_10': stats.get('AUCTION_VALUE_10', 0),
             'auction_value_projected': stats.get('AUCTION_VALUE_projected', 0),
             'auction_value_proj': stats.get('AUCTION_VALUE_proj', 0),
-            'fpoints': stats.get('FPOINTS_projected', 0),
-            'fpoints_season': stats.get('FPOINTS', 0),
-            'fpoints_5': stats.get('FPOINTS_5', 0),
-            'fpoints_rank': stats.get('FPOINTS-RANK_projected', 0),
             'hot_overall': round(stats.get('Z-SCORE_5', 0) - stats.get('Z-SCORE', 0), 1),
-            'hot_fpoints': round(stats.get('FPOINTS_5', 0) - stats.get('FPOINTS', 0), 1),
             'is_injured': bool(player and player.injured == 1),
             'is_undroppable': player_name in undroppable,
             'drafted': team_id is not None,

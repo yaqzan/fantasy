@@ -125,6 +125,7 @@ class FantasyTeam(BaseModel):
     id = IntegerField(primary_key=True)
     name = CharField()
     abv = CharField(max_length=10, null=True)
+    fantrax_team_id = CharField(max_length=32, null=True)  # permanent; names change, this doesn't
     league = ForeignKeyField(League, backref='teams', column_name='league_id', null=True)
     # Guillotine leagues: the stage the team was knocked out after (None = still in), and the
     # players it held then (JSON names), kept so an elimination can be undone.

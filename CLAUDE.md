@@ -20,6 +20,7 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 - `python pull_history.py` then `python pull_projections.py` - history, then our model + ESPN projections
 - `python import_projections.py players|teams <csv> [--source X]` - load another projection source
 - `python pull_fantrax.py projections|techs --league <fantrax id>` - Fantrax projections / past techs (saved login)
+- `python pull_fantrax.py teams --league <fantrax id> [--apply]` - sync team names by Fantrax team id
 - `python lineup_optimizer.py [--league <id>] [--pickup]` - this week's matchup in the terminal
 - `ops\windows\install-tasks.ps1 -Controller C:\Development\server.ps1` - watchdog task; ELEVATED shell
 
@@ -39,6 +40,6 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 
 Detail: leagues, categories, daily vs weekly lineups -> `.claude/docs/leagues.md`.
 Projections (players, rookies, team wins, sources, backtests) -> `.claude/docs/projections.md`.
-Hosting, tunnel, watchdog, cutover history -> `.claude/docs/ops.md`.
 Draft strategy: what the room pays for, price-tier returns, category pairs, anchor builds -> `.claude/docs/draft-strategy.md`.
+Hosting, tunnel, watchdog, cutover history -> `.claude/docs/ops.md`.
 Kanban -> vault `Engineering Wiki/Projects/Fantasy/`.

@@ -5,7 +5,7 @@ const leagueSummary = (league) => {
   if (!league) return '';
   const s = league.settings;
   const parts = [
-    `${s.categories.length} cats`,
+    s.scoring?.type === 'points' ? 'points' : `${s.categories.length} cats`,
     `${s.num_teams} teams`,
     `${s.roster.size} spots (${s.roster.active} active, ${s.roster.daily_lineups ? 'daily' : 'weekly'})`,
   ];

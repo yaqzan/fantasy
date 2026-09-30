@@ -38,7 +38,7 @@ function App() {
   };
   const [statType, setStatType] = useState('projected');
   const statTypePicked = useRef(false); // until the user picks one, the league's default applies
-  const [leaguesData, setLeaguesData] = useState({ leagues: [], category_catalog: [], defaults: null });
+  const [leaguesData, setLeaguesData] = useState({ leagues: [], category_catalog: [], defaults: null, point_stats: {}, default_points: {} });
   const [leagueId, setLeagueId] = useState(null);
   const [leagueModal, setLeagueModal] = useState(null); // 'create' | 'edit' | null
   const [loadError, setLoadError] = useState(null);
@@ -223,6 +223,8 @@ function App() {
       leagues={leaguesData.leagues}
       catalog={leaguesData.category_catalog}
       defaults={leaguesData.defaults}
+      pointStats={leaguesData.point_stats}
+      defaultPoints={leaguesData.default_points}
       teams={leagueModal === 'edit' ? fantasyTeams : []}
       onClose={() => setLeagueModal(null)}
       onSaved={handleLeagueSaved}

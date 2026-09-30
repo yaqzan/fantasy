@@ -8,12 +8,24 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
   it, `LeagueConfig` is what the stats code receives. `fantasy_teams.league_id` scopes teams;
   team names are unique per league, not globally. `league_player_flags` holds per-league
   `undroppable`. `Player.injured` stays NBA-wide.
+- **Team names change; ids don't.** `fantasy_teams.fantrax_team_id` is Fantrax's permanent team id
+  (`teamId=` in its URLs); `abv` is our own stable key. `python pull_fantrax.py teams --league <fantrax
+  id> [--apply]` renames teams to match Fantrax by id (dry run by default; a team with no id links
+  by its current name, else set the id by hand). Match rosters/schedules by id, never by name.
 - **Which league a request is about.** `X-League` header (the frontend's switcher, stored in
   localStorage `fantasy.league`), else `?league=`, else the active league. Switching in the UI
   also activates the league, so CLI scripts (`lineup_optimizer.py`, default `--league`) follow
   the last pick. Every league-scoped query must filter by league (`league_team_ids`,
   `get_team_by_abv`); draft/undraft only touch the current league's teams, so one player can be
   on a team in each league.
+- **Scoring mode.** `settings.scoring`: `{type: 'categories'|'points', points: {stat: weight}}`. A points
+  league's only category is `FPTS`: `player_stats.add_fantasy_points` folds the league's weights
+  (`POINT_STATS` keys) into a per-game `FPTS{n}` for every timeframe, then z-scores, totals, weekly
+  matchup, pickups and standings run unchanged on that one category. A single category isn't capped at
+  +/-3 z (stars keep their full lead). Its noise (2.5x mean per game) is an estimate, not measured.
+  `fantasy_config.FPOINTS_SCORING` is the default weight table (and the Daily Stats tab's); Courtside
+  Tamasha (Yahoo) uses it. There's no separate FPts column in the player table: it was the same idea
+  hard-coded for every league.
 - **Categories.** `CATEGORY_CATALOG` in `leagues.py`: key, label, `inverse` (lower wins), `kind`;
   ratios also carry `attempts` (per-game attempts formula) and `prior` (shrinkage strength in
   attempts, method of moments on 2025-26; FG% measured ~55, stored 60). Adding a category = a per-player per-period stat in
@@ -82,10 +94,10 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
   which marks the bottom `per_stage` rows. Records aren't imported, so the red rows are the power
   ranking's guess, not the real stage standings. Auction prices and z-score pools still use the
   starting `num_teams`. `waivers.faab_budget` / `faab_per_stage` are recorded, not enforced.
-- **Schedule.** `[[week start, opponent abbreviation], ...]`; a week ends the day before the next
+- **Schedule.** `LeagueConfig.weeks()` (in `to_dict()`) lists each week's start/end; the player table shows each NBA team's GP with the date range for this and next week (`config.current_week`/`next_week`). `[[week start, opponent abbreviation], ...]`; a week ends the day before the next
   starts (last week: 7 days). Empty schedule: Monday-Sunday weeks, no opponent, the optimizer
   answers 422 with a message. "Fill weeks from NBA calendar" (`/api/leagues/generate-weeks`) makes
   opening day + every Monday from the stored NBA schedule, opponents blank.
 - **Upgrade from the single-league app.** `init_db.py` adds the columns/tables and imports teams
-  with no league as `league-2025-26`, with the rules `fantasy_config.py` used to hard-code and
+  with no league as `league-2025-26` (that league was removed 2026-09-30; backup in `.horizon/league-2025-26-backup.json`), with the rules `fantasy_config.py` used to hard-code and
   `league.json`'s `my_team`/`schedule`. `league.json` is no longer read.

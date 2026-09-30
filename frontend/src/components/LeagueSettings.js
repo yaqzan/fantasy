@@ -19,7 +19,7 @@ const NumberField = ({ label, value, onChange, min = 0, step, title }) => (
 );
 
 // Create or edit a league: its rules, matchup schedule and notes. Teams are managed in the Team Manager.
-const LeagueSettings = ({ mode, league, leagues, catalog, defaults, teams = [], onClose, onSaved, onDeleted }) => {
+const LeagueSettings = ({ mode, league, leagues, catalog, defaults, pointStats = {}, defaultPoints = {}, teams = [], onClose, onSaved, onDeleted }) => {
   const initial = mode === 'edit' ? league.settings : defaults;
   const [name, setName] = useState(mode === 'edit' ? league.name : '');
   const [settings, setSettings] = useState(() => {
@@ -27,6 +27,7 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, teams = [], 
     // leagues saved before these keys existed
     s.elimination = { ...defaults?.elimination, ...s.elimination };
     s.waivers = { ...defaults?.waivers, ...s.waivers };
+    s.scoring = { ...defaults?.scoring, ...s.scoring };
     return s;
   });
   const [stageText, setStageText] = useState((initial.elimination?.stage_weeks || []).join(', '));
@@ -41,6 +42,13 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, teams = [], 
     const has = settings.categories.includes(key);
     set('categories', has ? settings.categories.filter(c => c !== key) : [...settings.categories, key]);
   };
+
+  const isPoints = settings.scoring.type === 'points';
+  const setScoring = (type) => setSettings(prev => ({
+    ...prev,
+    scoring: { type, points: type === 'points' && !Object.keys(prev.scoring.points).length ? { ...defaultPoints } : prev.scoring.points },
+  }));
+  const setPoint = (stat, value) => setSettings(prev => ({ ...prev, scoring: { ...prev.scoring, points: { ...prev.scoring.points, [stat]: value } } }));
 
   const setWeek = (index, field, value) => {
     const schedule = settings.schedule.map((week, i) => i === index ? (field === 0 ? [value, week[1]] : [week[0], value]) : week);
@@ -110,9 +118,18 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, teams = [], 
               <input value={settings.my_team} onChange={(e) => set('my_team', e.target.value)} className={inputClass} list="league-team-abvs" placeholder="matches a team in the Team Manager" />
             </div>
             <div>
-              <label className={labelClass}>Fantrax league id</label>
-              <input value={settings.fantrax_league_id} onChange={(e) => set('fantrax_league_id', e.target.value)} className={inputClass} placeholder="from the league URL" />
+              <label className={labelClass}>Platform</label>
+              <select value={settings.platform} onChange={(e) => set('platform', e.target.value)} className={inputClass}>
+                <option value="fantrax">Fantrax</option>
+                <option value="yahoo">Yahoo</option>
+              </select>
             </div>
+            {settings.platform === 'fantrax' && (
+              <div>
+                <label className={labelClass}>Fantrax league id</label>
+                <input value={settings.fantrax_league_id} onChange={(e) => set('fantrax_league_id', e.target.value)} className={inputClass} placeholder="from the league URL" />
+              </div>
+            )}
             {mode === 'create' && leagues.length > 0 && (
               <div className="sm:col-span-3">
                 <label className={labelClass}>Copy teams from (names only, rosters start empty)</label>
@@ -125,18 +142,35 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, teams = [], 
           </div>
         </Section>
 
-        <Section title={`Scoring categories (${settings.categories.length})`}>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {catalog.map(cat => (
-              <label key={cat.key} title={cat.name} className={`flex items-center gap-2 px-2 py-1.5 rounded border text-sm cursor-pointer ${
-                settings.categories.includes(cat.key) ? 'border-nba-orange bg-gray-700 text-white' : 'border-gray-700 text-gray-400'}`}>
-                <input type="checkbox" checked={settings.categories.includes(cat.key)} onChange={() => toggleCategory(cat.key)}
-                  className="h-4 w-4 text-nba-orange focus:ring-nba-orange border-gray-600 rounded bg-gray-700" />
-                <span className="truncate">{cat.name}{cat.inverse ? ' (neg)' : ''}</span>
-              </label>
-            ))}
-          </div>
-          <p className="text-xs text-gray-500 mt-2">(neg): lower wins. All categories count equally.</p>
+        <Section title="Scoring">
+          <select value={settings.scoring.type} onChange={(e) => setScoring(e.target.value)} className={`${inputClass} mb-3 max-w-xs`}>
+            <option value="categories">Categories (head to head)</option>
+            <option value="points">Points</option>
+          </select>
+          {isPoints ? (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {Object.entries(pointStats).map(([stat, label]) => (
+                  <NumberField key={stat} label={label} step="any" min={-100} value={settings.scoring.points[stat] ?? ''} onChange={(v) => setPoint(stat, v)} />
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">Points per unit; blank = not scored. Every stat line collapses into one number, fantasy points.</p>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {catalog.filter(cat => cat.key !== 'FPTS').map(cat => (
+                  <label key={cat.key} title={cat.name} className={`flex items-center gap-2 px-2 py-1.5 rounded border text-sm cursor-pointer ${
+                    settings.categories.includes(cat.key) ? 'border-nba-orange bg-gray-700 text-white' : 'border-gray-700 text-gray-400'}`}>
+                    <input type="checkbox" checked={settings.categories.includes(cat.key)} onChange={() => toggleCategory(cat.key)}
+                      className="h-4 w-4 text-nba-orange focus:ring-nba-orange border-gray-600 rounded bg-gray-700" />
+                    <span className="truncate">{cat.name}{cat.inverse ? ' (neg)' : ''}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">{settings.categories.length} categories. (neg): lower wins. All categories count equally.</p>
+            </>
+          )}
         </Section>
 
         <Section title="Roster">

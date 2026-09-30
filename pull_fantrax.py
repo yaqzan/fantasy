@@ -9,16 +9,21 @@
 
     python pull_fantrax.py projections --league <fantrax league id of this season>
     python pull_fantrax.py techs --league <any Fantrax NBA league id> [--seasons 2023-24 2024-25 2025-26]
-Read-only: only Fantrax's player-stats listing is requested.
+- teams: keep our team names in step with Fantrax, matched by Fantrax's permanent team id (names
+  change, ids don't). Teams without an id are linked by their current name. Dry run unless --apply.
+
+    python pull_fantrax.py teams --league <fantrax league id> [--apply]
+Read-only: only Fantrax's player-stats listing and standings are requested.
 """
 import argparse
+import json
 import os
 import pickle
 import time
 
 import requests
 
-from fantasy_database import DB, PlayerSeason
+from fantasy_database import DB, FantasyTeam, League, PlayerSeason
 from projections import name_index, norm_name, season_label, store
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -105,14 +110,54 @@ def pull_techs(league_id, seasons):
         print(f'{season}: technicals for {matched} players ({total} in all)')
 
 
+def sync_teams(fantrax_league_id, apply):
+    league = next((lg for lg in League.select() if json.loads(lg.settings).get('fantrax_league_id') == fantrax_league_id), None)
+    if league is None:
+        raise SystemExit(f'no league here has fantrax_league_id {fantrax_league_id}')
+    reply = session().post(URL, params={'leagueId': fantrax_league_id}, timeout=60,
+                           json={'msgs': [{'method': 'getStandings', 'data': {'leagueId': fantrax_league_id}}]})
+    reply.raise_for_status()
+    response = reply.json()['responses'][0]
+    if response.get('pageError'):
+        raise SystemExit(f"Fantrax: {response['pageError']} (log in again in the browser and re-save the cookie)")
+    theirs = {tid: info['name'] for tid, info in response['data']['fantasyTeamInfo'].items()}
+    teams = list(FantasyTeam.select().where(FantasyTeam.league == league.id))
+    by_id = {t.fantrax_team_id: t for t in teams if t.fantrax_team_id}
+    by_name = {t.name: t for t in teams if not t.fantrax_team_id}
+    changes = []
+    for tid, name in theirs.items():
+        team = by_id.get(tid) or by_name.get(name)
+        if team is None:
+            print(f'  no team here for Fantrax {tid} "{name}"; set its fantrax_team_id by hand')
+            continue
+        if team.fantrax_team_id != tid or team.name != name:
+            changes.append((team, tid, name))
+    for team in teams:
+        if team.fantrax_team_id and team.fantrax_team_id not in theirs:
+            print(f'  {team.name} ({team.abv}): id {team.fantrax_team_id} is not in the Fantrax league')
+    taken = {t.name for t in teams}
+    for team, tid, name in changes:
+        clash = name in taken and name != team.name
+        print(f'  {team.abv}: "{team.name}" -> "{name}"' + ('' if team.fantrax_team_id else f'  (link {tid})')
+              + ('  SKIPPED, name taken by another team' if clash else ''))
+        if apply and not clash:
+            team.fantrax_team_id, team.name = tid, name
+            team.save()
+            taken.add(name)
+    print(f'{len(changes)} change(s)' + ('' if apply else ' (dry run; pass --apply)'))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Fantrax projections and technical-foul history.')
-    parser.add_argument('what', choices=['projections', 'techs'])
+    parser.add_argument('what', choices=['projections', 'techs', 'teams'])
     parser.add_argument('--league', required=True, help='a Fantrax NBA league id (projections: this season\'s)')
     parser.add_argument('--season', default=season_label())
+    parser.add_argument('--apply', action='store_true', help='teams: write the changes')
     parser.add_argument('--seasons', nargs='+', default=['2023-24', '2024-25', '2025-26'])
     args = parser.parse_args()
-    if args.what == 'projections':
+    if args.what == 'teams':
+        sync_teams(args.league, args.apply)
+    elif args.what == 'projections':
         pull_projections(args.league, args.season)
     else:
         pull_techs(args.league, args.seasons)

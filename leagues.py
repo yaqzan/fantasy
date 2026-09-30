@@ -9,6 +9,7 @@ import json
 import re
 from datetime import date, datetime, timedelta
 
+from fantasy_config import FPOINTS_SCORING
 from fantasy_database import DB, League, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag
 
 
@@ -39,6 +40,10 @@ CATEGORY_CATALOG = {
     'BLKA': {'label': 'TB', 'name': 'Times blocked', 'kind': 'count', 'inverse': True, 'noise': [('BLKA', 1.0)]},
     'TECH': {'label': 'TF', 'name': 'Technical fouls', 'kind': 'count', 'inverse': True, 'noise': [('TECH', 1.0)]},
     'WIN%': {'label': 'W', 'name': 'Wins', 'kind': 'wins'},
+    # Points leagues: the league's own point weights (`scoring.points`) collapse every stat into this one
+    # category (player_stats.add_fantasy_points). Noise: fantasy points swing ~2.5x their mean per game
+    # (an estimate from the counting stats, not measured on game logs).
+    'FPTS': {'label': 'FPTS', 'name': 'Fantasy points', 'kind': 'count', 'noise': [('FPTS', 2.5)]},
     # Ratios are valued by impact (player_stats.py). `attempts`: the per-game attempts behind the
     # rate, as (stat, coefficient) terms. `prior`: attempts of league-average shooting a player's
     # rate is blended with before scoring (method of moments on 2025-26: TS% ~233, EFG% ~223,
@@ -58,12 +63,22 @@ CATEGORY_CATALOG = {
 CATEGORY_ORDER = ['TS%', 'EFG%', 'FG%', 'FT%', 'PPS', 'PTS', 'REB', 'AST', 'AST-TOV', 'STL', 'BLK', 'FG3M', 'NFT',
                   'DD2', 'TD3', 'WIN%', 'PLUS_MINUS', 'TOV', 'PF', 'BLKA', 'TECH']
 
+# Stats a points league can weight (per-player per-game keys in player_stats), with display names.
+POINT_STATS = {'PTS': 'Points', 'REB': 'Rebounds', 'AST': 'Assists', 'STL': 'Steals', 'BLK': 'Blocks',
+               'TOV': 'Turnovers', 'FGM': 'Field goals made', 'FGA': 'Field goals attempted',
+               'FTM': 'Free throws made', 'FTA': 'Free throws attempted', 'FG3M': 'Three-pointers made',
+               'PF': 'Personal fouls', 'DD2': 'Double-doubles', 'TD3': 'Triple-doubles',
+               'TECH': 'Technical fouls', 'BLKA': 'Times blocked'}
+
 DEFAULT_SETTINGS = {
     'season': '',                     # e.g. "2026-27", display only
-    'platform': 'fantrax',
+    'platform': 'fantrax',            # fantrax | yahoo, informational
     'fantrax_league_id': '',          # falls back to FANTRAX_LEAGUE_ID in .env
     'my_team': '',                    # your team's abbreviation in this league's fantasy_teams
     'num_teams': 12,
+    # Scoring: 'categories' = head-to-head over `categories`; 'points' = the weights in `points`
+    # ({stat: points per unit}, keys from POINT_STATS) and the only category is FPTS.
+    'scoring': {'type': 'categories', 'points': {}},
     'categories': ['PTS', 'REB', 'AST', 'STL', 'BLK', 'FG3M', 'TOV', 'TS%', 'FT%'],
     'roster': {
         'size': 13,                   # total roster spots
@@ -113,12 +128,29 @@ def _parse_date(value):
 def validate_settings(settings):
     """Merge onto the defaults and check every value; raises ValueError with a readable message."""
     s = _merge(DEFAULT_SETTINGS, settings)
-    unknown = [c for c in s['categories'] if c not in CATEGORY_CATALOG]
-    if unknown:
-        raise ValueError(f"unknown categories: {', '.join(unknown)}")
-    if not s['categories']:
-        raise ValueError('pick at least one category')
-    s['categories'] = list(dict.fromkeys(s['categories']))
+    scoring = s['scoring']
+    if scoring['type'] == 'points':
+        try:
+            points = {k: float(v) for k, v in (scoring['points'] or {}).items() if v not in ('', None)}
+        except (TypeError, ValueError):
+            raise ValueError('point weights must be numbers')
+        unknown = [k for k in points if k not in POINT_STATS]
+        if unknown:
+            raise ValueError(f"unknown point stats: {', '.join(unknown)}")
+        if not any(points.values()):
+            raise ValueError('a points league needs at least one point weight')
+        scoring['points'] = points
+        s['categories'] = ['FPTS']
+    elif scoring['type'] == 'categories':
+        scoring['points'] = {}
+        unknown = [c for c in s['categories'] if c not in CATEGORY_CATALOG or c == 'FPTS']
+        if unknown:
+            raise ValueError(f"unknown categories: {', '.join(unknown)}")
+        if not s['categories']:
+            raise ValueError('pick at least one category')
+        s['categories'] = list(dict.fromkeys(s['categories']))
+    else:
+        raise ValueError("scoring type must be 'categories' or 'points'")
     try:
         s['num_teams'] = int(s['num_teams'])
         for key in ('size', 'active', 'min_guards', 'min_forwards', 'min_centers'):
@@ -179,7 +211,9 @@ class LeagueConfig:
         self.is_active = bool(row.is_active)
         self.settings = validate_settings(json.loads(row.settings or '{}'))
 
-    categories = property(lambda self: list(self.settings['categories']))
+    categories = property(lambda self: list(self.settings['categories']))  # ['FPTS'] in a points league
+    is_points = property(lambda self: self.settings['scoring']['type'] == 'points')
+    point_weights = property(lambda self: dict(self.settings['scoring']['points']))
     inverse_categories = property(lambda self: [c for c in self.categories if CATEGORY_CATALOG[c].get('inverse')])
     my_team = property(lambda self: self.settings['my_team'])
     num_teams = property(lambda self: self.settings['num_teams'])
@@ -210,6 +244,16 @@ class LeagueConfig:
     def schedule_dict(self):
         return {start: opponent for start, opponent in self.schedule}
 
+    def weeks(self):
+        """[{week, start, end, opponent}]: a week ends the day before the next starts (last: 7 days)."""
+        schedule = self.schedule
+        out = []
+        for i, (start, opponent) in enumerate(schedule):
+            end = (_parse_date(schedule[i + 1][0]) - timedelta(days=1) if i + 1 < len(schedule)
+                   else _parse_date(start) + timedelta(days=6))
+            out.append({'week': i + 1, 'start': start, 'end': end.isoformat(), 'opponent': opponent})
+        return out
+
     def stage_of_week(self, week_index):
         """1-based stage a 0-based schedule week belongs to, None past the last stage."""
         end = 0
@@ -238,8 +282,7 @@ class LeagueConfig:
         per_stage = self.settings['elimination']['per_stage']
         teams = self.num_teams - per_stage * (stage - 1)
         final = stage == len(self.stage_weeks)
-        end = (_parse_date(schedule[last + 1][0]) - timedelta(days=1) if last + 1 < len(schedule)
-               else _parse_date(schedule[last][0]) + timedelta(days=6))
+        end = _parse_date(self.weeks()[last]['end'])
         if today > end.isoformat():  # past the last scheduled week
             return {'stage': None, 'stages': len(self.stage_weeks), 'finished': True}
         return {'stage': stage, 'stages': len(self.stage_weeks), 'started': started, 'final': final,
@@ -251,7 +294,8 @@ class LeagueConfig:
 
     def to_dict(self):
         return {'id': self.id, 'name': self.name, 'is_active': self.is_active, 'settings': self.settings,
-                'categories': category_meta(self.categories), 'stage': self.stage_info()}
+                'categories': category_meta(self.categories), 'stage': self.stage_info(),
+                'weeks': self.weeks()}
 
 
 def slugify(name):
