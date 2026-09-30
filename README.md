@@ -183,6 +183,8 @@ it), else the active league.
 - `GET /api/analyze`: matchup analysis for a week (best lineup, or best pickup with `pickup=true`)
 - `POST /api/analyze/custom`: what-if for a chosen pickup and drop, every timeframe
 - `GET /api/pickups`: free agents ranked by expected categories gained in a week, with the best drop
+- `GET/PUT /api/projections/teams`, `GET /api/projections/players`, `PUT /api/projections/players/<id>`:
+  projected team wins and player lines by source, and the owner's adjustments
 - `GET /api/daily-stats`: daily fantasy point stats
 - `POST /api/daily-stats/update`: trigger a daily stats refresh
 

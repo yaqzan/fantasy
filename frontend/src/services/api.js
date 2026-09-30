@@ -164,6 +164,15 @@ export const analyze = async (weekStart = null, timeframe = 'projected', pickup 
   return response.data;
 };
 
+// Projections (NBA-wide): team wins by source + the owner's adjustments, player lines by source.
+export const getTeamProjections = async () => (await api.get('/projections/teams')).data;
+export const setTeamAdjustment = async (team, adjustment) =>
+  (await api.put('/projections/teams', { team, adjustment })).data;
+export const getPlayerProjections = async (q = '') =>
+  (await api.get('/projections/players', { params: { ...(q && { q }) } })).data;
+export const setPlayerAdjustment = async (playerId, production, games = null) =>
+  (await api.put(`/projections/players/${playerId}`, { production, games })).data;
+
 // Free agents ranked by the categories they'd add in a week (weekStart null: the current week).
 export const getPickups = async (weekStart = null, timeframe = 'projected') => {
   const params = { ...(weekStart && { week_start: weekStart }), timeframe };

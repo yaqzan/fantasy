@@ -36,3 +36,7 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   (wins + 20 x projected %) / (games + 20) once this season's record exists
   (`teams.record_season`; `pull_standings` stores it from game 1). Used by Wins (per game) and
   every game's log5 chance.
+- **Owner adjustments** (Projections tab): `GET/PUT /api/projections/teams` (per-team +/- wins,
+  stored as source `owner`), `GET /api/projections/players` (blended line, every source's line,
+  this league's projection rank and $), `PUT /api/projections/players/<id>` (`production` factor
+  on counting stats and minutes, `games` override; 1.0 and no games deletes the row).

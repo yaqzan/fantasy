@@ -10,7 +10,7 @@ import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats, LeaguePlayerFlag,
-                              PlayerProjection)
+                              PlayerProjection, ProjectionAdjustment)
 from projections import season_label
 from player_stats import (load_player_stats, calculate_overall_scores, calculate_auction_values, calculate_fantasy_points,
                           calculate_team_totals, week_schedule, team_games, player_week_games, best_starters,
@@ -543,6 +543,123 @@ def analyze():
         return jsonify(analysis_data), 422
     analysis_data['categories'] = category_meta(league.categories)
     return jsonify(analysis_data)
+
+
+# ---------------------------------------------------------------- projections (NBA-wide)
+
+def _projection_season():
+    return request.args.get('season') or season_label()
+
+
+@fantasy_api.route('/projections/teams', methods=['GET'])
+def get_team_projections():
+    """Each team's projected wins: every source, the accuracy-weighted index, its range, the owner's
+    adjustment, and last season's record."""
+    from projections import team_projection_index, team_strength, TEAM_SOURCE_WEIGHT
+    season = _projection_season()
+    index = team_projection_index(season)
+    strength = team_strength(season)
+    sources = sorted({s for row in index.values() for s in row['sources']},
+                     key=lambda s: -TEAM_SOURCE_WEIGHT.get(s, 1.0))
+    teams = []
+    for team in Team.select().order_by(Team.name):
+        row = index.get(team.name)
+        teams.append({'team': team.name, 'abbreviation': team.abv,
+                      'sources': row['sources'] if row else {}, 'index': round(row['wins'], 1) if row else None,
+                      'low': row['low'] if row else None, 'high': row['high'] if row else None,
+                      'adjustment': row['adjustment'] if row else 0.0,
+                      'final': round(row['final'], 1) if row else None,
+                      'strength': round(strength.get(team.name, 0.5), 3),
+                      'last_record': [team.wins, team.losses] if team.record_season != season else None})
+    return jsonify({'season': season, 'teams': teams,
+                    'sources': [{'key': s, 'weight': TEAM_SOURCE_WEIGHT.get(s, 1.0)} for s in sources]})
+
+
+@fantasy_api.route('/projections/teams', methods=['PUT'])
+def put_team_projection():
+    """The owner's adjustment to a team's projected wins (+/- wins; 0 removes it)."""
+    from fantasy_database import TeamProjection
+    data = request.get_json() or {}
+    season = data.get('season') or season_label()
+    team = Team.get_or_none(Team.name == data.get('team'))
+    if team is None:
+        return jsonify({'error': f"no team {data.get('team')!r}"}), 400
+    try:
+        adjustment = float(data.get('adjustment') or 0)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'the adjustment must be a number of wins'}), 400
+    if abs(adjustment) > 40:
+        return jsonify({'error': 'the adjustment must be within 40 wins'}), 400
+    TeamProjection.delete().where((TeamProjection.season == season) & (TeamProjection.source == 'owner')
+                                  & (TeamProjection.team == team.name)).execute()
+    if adjustment:
+        TeamProjection.create(season=season, source='owner', team=team.name, wins=adjustment)
+    return jsonify({'team': team.name, 'adjustment': adjustment})
+
+
+@fantasy_api.route('/projections/players', methods=['GET'])
+def get_player_projections():
+    """Players' projections for the current league's view: the blended line, each source's line,
+    the owner's adjustment, and the league's projection rank and $."""
+    from projections import player_lines
+    season = _projection_season()
+    league = current_league()
+    lines = player_lines(season)
+    by_player = {}
+    for row in PlayerProjection.select().where(PlayerProjection.season == season).dicts():
+        by_player.setdefault(row['player_id'], {})[row['source']] = row
+    player_stats = scored_players(league)
+    calculate_auction_values(player_stats, league, value_key='VALUE_proj', out_key='AUCTION_VALUE_proj')
+    ids = {p.name: p for p in Player.select(Player.id, Player.name, Player.team, Player.pos)
+           .where(Player.id.in_(list(lines)))}
+    search = (request.args.get('q') or '').strip().lower()
+    try:
+        limit = max(1, min(int(request.args.get('limit', 250)), 600))
+    except ValueError:
+        return jsonify({'error': 'limit must be a whole number'}), 400
+    adjustments = {a.player_id: a for a in ProjectionAdjustment.select().where(ProjectionAdjustment.season == season)}
+    shown = ['gp', 'min', 'pts', 'reb', 'ast', 'stl', 'blk', 'fg3m', 'tov', 'fga', 'fta']
+    rows = []
+    for name, stats in player_stats.items():
+        player = ids.get(name)
+        if player is None or 'RANK_proj' not in stats:
+            continue
+        if search and search not in name.lower():
+            continue
+        line = lines[player.id]
+        adj = adjustments.get(player.id)
+        rows.append({'id': player.id, 'name': name, 'team': player.team, 'position': player.pos,
+                     'type': line['type'], 'expert_weight': line['expert_weight'],
+                     'rank': stats['RANK_proj'], 'auction_value': stats.get('AUCTION_VALUE_proj', 1),
+                     'line': {k: round(line[k], 2) for k in shown},
+                     'sources': {s: {k: round(r[k], 2) if r.get(k) is not None else None for k in shown}
+                                 for s, r in by_player.get(player.id, {}).items()},
+                     'adjustment': {'production': adj.production, 'games': adj.games, 'note': adj.note} if adj else None})
+    rows.sort(key=lambda r: r['rank'])
+    return jsonify({'season': season, 'players': rows[:limit], 'total': len(rows)})
+
+
+@fantasy_api.route('/projections/players/<int:player_id>', methods=['PUT'])
+def put_player_projection(player_id):
+    """The owner's adjustment to a player's projection: `production` scales every counting stat and
+    minutes (1.1 = +10%), `games` replaces projected games; 1.0 and no games removes it."""
+    data = request.get_json() or {}
+    season = data.get('season') or season_label()
+    if Player.get_or_none(Player.id == player_id) is None:
+        return jsonify({'error': f'no player {player_id}'}), 404
+    try:
+        production = float(data.get('production') if data.get('production') not in (None, '') else 1.0)
+        games = float(data['games']) if data.get('games') not in (None, '') else None
+    except (TypeError, ValueError):
+        return jsonify({'error': 'production and games must be numbers'}), 400
+    if not 0.3 <= production <= 2.0 or (games is not None and not 0 <= games <= 82):
+        return jsonify({'error': 'production must be 0.3-2.0 and games 0-82'}), 400
+    ProjectionAdjustment.delete().where((ProjectionAdjustment.season == season)
+                                        & (ProjectionAdjustment.player_id == player_id)).execute()
+    if production != 1.0 or games is not None:
+        ProjectionAdjustment.create(season=season, player_id=player_id, production=production, games=games,
+                                    note=(data.get('note') or '')[:255] or None)
+    return jsonify({'id': player_id, 'production': production, 'games': games})
 
 
 @fantasy_api.route('/pickups')
