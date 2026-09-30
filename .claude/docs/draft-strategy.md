@@ -29,24 +29,30 @@ per-game category z-scores (`market.py`), pooled, log-price per 1 z (90% bootstr
   Dollar error is big: MAE $13-16 on $20+ players, only ~40% within $10. Treat gaps under ~$15 as noise.
 - Position premium: centers +$0.6, nothing. Games played matters (more games, higher price).
 - The league never pays past ~$102 (top prices 100, 102; 91-100 in 2024).
-- Output: `out/f2026.csv` (per player: our $, market $, edge, category z). Biggest projected gaps
-  (our $ vs likely market $): buy Kawhi, Haliburton, Curry, Holmgren, Derrick White, Reaves, Lillard,
-  Paul George (market pays $15-27 less than value); fade Cade Cunningham (-55), Giannis (-28),
-  Doncic (-25), Edwards (-25), Banchero (-30), Jaylen Brown, Sengun, Trae Young, Flagg.
+- Output: `out/f2026.csv` (per player: our $, market $, edge, category z). Player-level gaps
+  (buy/fade), prices and targets stay out of this public doc: `out/player_notes.md`.
 
-## Return by price tier (another session, 2025 auction graded on 2025-26 finishes)
-| Price | Players | Return per $1 | Median finish |
+## Return by price tier (past auctions, graded on the season after)
+Return per $1 = the room's price at the player's finish rank / price paid. The original grade
+(another session: 2025 auction, that league's own categories, finish ranked per game) against a
+regrade in WSOP's 11 categories with missed games counted (`regrade.py`, `out/regrade.txt`):
+
+| Price | 2025, its categories (original) | 2025, WSOP | 2024 WSOP auction, WSOP |
 |---|---|---|---|
-| $75+ | 5 | 0.89 | #4 |
-| $40-74 | 14 | **0.70 (worst)** | #30 |
-| $25-39 | 20 | 0.82 | #38 |
-| $15-24 | 30 | 0.91 | #60 |
-| $8-14 | 23 | **1.22** | #86 |
-| $3-7 | 22 | 1.30 | #131 |
-| $1-2 | 34 | 3.18 (21 of 34 busts) | #198 |
-Stars hold value; the $40-74 tier is where this room burns money (Trae $51, Sengun $44, AD $58,
-Giannis $75). 18 undrafted players finished top 100, but only 1 waiver claim a week.
-Its source was the session "Fantasy auction draft bidding analysis"; target list `.archive/draft-2026-targets.csv`.
+| $75+ | 0.89 | 0.88 | 0.71 |
+| $40-74 | **0.70** | **0.71** | **0.67** |
+| $25-39 | 0.82 | 0.69 | 1.16 |
+| $15-24 | 0.91 | 0.81 | 1.02 |
+| $8-14 | 1.22 | 1.17 | 1.39 |
+| $3-7 | 1.30 | 1.35 | 1.72 |
+| $1-2 | 3.18 (21 of 34 busts) | 3.96 | 2.49 |
+- **Only "$40-74 is the worst tier" holds in both auctions**; stars and $25-39 swing by season. In z
+  bought per $ (value above replacement x games share) $40-74 is also the lowest or second-lowest
+  of the $8+ tiers both years.
+- The metric tilts toward cheap tiers by construction: a star can't earn above ~$102 (finish #1),
+  a $1 player can't earn under $1.
+- 18 undrafted players finished top 100 in 2025-26, but only 1 waiver claim a week.
+Source: session "Fantasy auction draft bidding analysis"; target list `.archive/draft-2026-targets.csv`.
 
 ## Category structure (2026-27 projections, 140 likely-drafted players)
 - **NFT and PTS are near-duplicates (.89 player-level; .52 in matchups).** Two categories that win
@@ -63,38 +69,69 @@ Its source was the session "Fantasy auction draft bidding analysis"; target list
   nothing else. Tables: `out/pairs.txt`, `out/pair_builds.csv`.
 
 ## 10 spots, 6 active, no positions
-- Bench = 4 x $1 (only 1 waiver claim a week), so actives share ~$196.
-- The app's auction $ price a 140-player pool (`num_teams x roster.size`). Pricing for the 84
-  actives instead: the top 14 rise ~$30 each (Jokic 100 -> 159, SGA 165 uncapped), ranks 15-40
-  +$6, everyone ranked 41+ loses $5-10. Not applied in the app (owner's call; see kanban).
+- **The bench plays.** On an average day only ~4.6 of 10 rostered players have a game, so daily
+  lineups count 97/92/84/69% of the 7th-10th best players' healthy games (2026-27 schedule;
+  `recon.Season`, identical to the app's `player_week_games`). A team fields ~9.4 players' worth of games.
+- The app's auction $ price a 140-player pool (`num_teams x roster.size`). Pricing only the 84
+  actives would add ~$30 to each of the top 14, +$6 to ranks 15-40, and take $5-10 from everyone
+  ranked 41+. With the bench playing (~132 players' worth league-wide) 140 is the right pool.
+  **Recommendation: keep 140 and the 1.1 exponent** (owner's call; the app is unchanged).
 - No positions: the center premium above is gone, so don't price bigs up.
 
-## Build results (`strategy.py`, `out/strategy.txt`)
-Anchor star at likely $105 (Giannis $81), five complements under $40 each, expected categories won
-vs random budget teams (projected games scale each player's z; no weekly noise):
-- Jokic 7.7: covers A-TO, REB, TS%, NFT, PTS; open: BLK, 3PM, TF, TB, W. Fill with BLK/W bigs
-  (Holmgren, Mobley, Hartenstein), 3PM/TB wings (White, Murphy), shooters (Curry, Lillard).
-- SGA 7.8: concedes REB (.12); needs REB/BLK bigs (Adebayo, Mobley, Towns, Hartenstein, Poeltl).
-- Wemby 7.6: concedes REB/PTS; needs guards with A-TO, STL, 3PM (Haliburton, Quickley, Murray, Reaves).
-- Luka 7.4: TF z -2.8 and BLK conceded; fill with BLK bigs; the weakest anchor.
-- Giannis 7.5: REB conceded, 3PM -1.2, TB -1.6.
-- **No star, nobody over $45: 8.1; any six: 8.2.** Balanced $20-45 teams score ~0.4-0.6 cats above
-  one-star builds in this model.
+## Star vs balanced: the draft-night rule
+Tested 2026-09-30 (kanban "Reconcile Star Vs Balanced Draft Strategy"; scripts and outputs in the
+`.horizon/wsop-auction-2026/` README). **The data can't separate one star from a balanced roster.**
+At the room's real prices the gap is within ±0.2 categories a week, and its sign flips between
+seasons and between price stand-ins; who you buy inside a tier matters ~3x more (a team's sd
+inside one price structure is .5-.8 categories a week).
+**Default: bid on price, not structure.**
+- **At most one star, and only at or under his break-even.** Of the five players the room will
+  likely price highest, only two are worth about its price for their rank (#1 $102, #2-4 $90-92,
+  #5 $75) in the weekly model; the other three fall $10-40 short. Per-star numbers: `out/player_notes.md`. Past the break-even each $10 costs
+  ~0.08 categories a week. **Never two $60+ players** (worst structure in 2025, no better in 2024).
+- **Skip $40-74** unless the price falls well under value.
+- **Pick the 4 bench players like starters.** The right four $1 players for your core beat four
+  random ones by 0.5-0.6 categories a week, more than the star question; re-spending the budget
+  across all 10 spots added only 0-0.2 on top.
+- Unchanged: $8-25 players with 65+ projected games and value in the categories the room doesn't
+  price (A-TO, 3PM, TS%, TB, TF, W).
 
-**Unresolved conflict.** The tier grade says stars hold value and $25-39 returned 0.82; the build
-model likes $20-45 players and says a star costs ~0.5 categories. Model error on the $ side is
-larger than the gap. Where both agree: **cheap to lower-middle ($8-25) players with 65+ projected
-games and value in categories the room doesn't price (A-TO, 3PM, TS%, TB, TF, W)**, e.g. White,
-Reaves, Lillard, Paul George, Markkanen, Vassell, Hartenstein, Quickley, Murphy. Fade the $40-74
-tier unless the price falls below value. Decide star vs balanced at the draft from what the room
-actually does to prices. Investigation: kanban "Reconcile Star Vs Balanced Draft Strategy".
+Why the two analyses disagreed (the ticket's six causes, in its order):
+1. **Cost basis: the cause.** `strategy.py` charged the market model's predicted prices: the top 4
+   at its $105 cap (the room paid 102/92/91/90) and ranks 15-84 16% under the room's 2025 curve
+   ($1,387 vs $1,649). The same search at the curve (by the model's bid rank or by general rank):
+   the best one-star build beats nobody-over-$45 by 0.2 (it had trailed by 0.3). `builds_z.py`
+2. **Weekly noise.** The app's weekly H2H model (real 2026-27 schedule, daily best 6 of 10,
+   whole-week injuries at GP/82, catalog noise) shrinks the z-model's 7.4-8.2 categories to 6.3-6.9
+   and the gap to noise: best star build vs balanced 6.85 vs 6.64 (curve by model rank), 6.65 vs
+   6.55 (general rank); whole 10-man rosters 7.16 vs 7.25 and 7.20 vs 7.12. `builds_week.py`
+3. **Games.** Every tier played 57-61 games the season after its auction (stars 65 -> 58 from the
+   season before); 2026-27 projections run 5-11 games high in every tier. Not a separator.
+4. **The grade's categories.** In WSOP's 11 the grade flips on stars vs $25-39 between seasons
+   (table above). `regrade.py`
+5. **Z cap.** Uncapped z moves anchors -0.2 to +0.25; the star-vs-balanced sign doesn't change.
+6. **84 vs 140 pool.** Wrong premise: the bench plays (above).
+
+Direct tests on what happened (`retro.py`: past auctions at real prices, graded on the season after
+in WSOP categories with the weekly model; against the real room, whose average is 5.5 a week):
+- Random teams inside a price structure (se .03-.04): 2025 one star + five under $40 5.43, nobody
+  over $45 5.63, two $60+ 5.24; 2024: 5.35, 5.26, 5.29. Spreading the money over all 10 spots
+  instead of 6 + four random $1 players: +0.45 on average in 2024, 0 in 2025.
+- Real teams with a $75+ player: 5.71 vs 5.38 without (2025, 5 vs 9 teams); 5.39 vs 5.66 (2024, 7 vs 5).
+- The build model's own picks at the time (last season's stats, real prices): unconstrained it took
+  one star both years and won 6.0 and 6.3 a week; its balanced build won 5.5 and 5.4. Its forecasts
+  (7.4-8.5) ran ~2.5 categories high: read z-model numbers as rankings only.
 
 ## Caveats
 - Market z use last season's stats; 2026 z use blended projections. Rookies have no prior.
 - TB and TF projections are our model's (per shot / per minute); Fantrax projects neither.
-- Build search compares against random budget teams, not real opponents; weekly noise, injuries
-  beyond the games scaling, and the 1-claim waiver limit are not modelled
-  (see kanban "Punt Strategy From Matchup Simulation").
-- Dollar gaps under ~$15 and any single-player "steal" are within model error.
-- Rerun after projection edits (owner adjustments live in MySQL): `apply2026.py`, `pairs.py`,
-  `strategy.py`, in that order from the repo root.
+- "Likely price" = the room's 2025 curve at a predicted bid rank (rho .83 on hold-out). The $1-10
+  players the searches lean on are where that guess is weakest; the room may pay more. Anything
+  "at market prices" above (pair builds) used the model's prices, which undercharge ranks 15-84.
+- Past rooms filled 11-13 spots; bidding with 6 actives and a bench that plays is unobserved.
+- Weekly model: two past seasons and 26 real teams; injuries as whole-week draws; W counted as wins
+  (Fantrax may score wins per game); waivers (1 claim a week) and trades not modelled.
+- Dollar gaps under ~$15, single-player "steals", and build differences under ~0.15 categories a
+  week (the searches' own noise) are within model error.
+- Rerun after projection edits (owner adjustments live in MySQL), from the repo root: `apply2026.py`,
+  `pairs.py`, `strategy.py`, then `builds_z.py`, `builds_week.py`, `bench.py`, `breakeven.py`.
