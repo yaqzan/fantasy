@@ -106,6 +106,19 @@ def scored_players(league, punt_categories=()):
 
 # ---------------------------------------------------------------- leagues
 
+DRAFT_DAY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'draft_day.json')
+
+
+@fantasy_api.route('/draft-day', methods=['GET'])
+def get_draft_day():
+    """The Draft Day tab's numbers (targets, max bids, past-auction evidence). Owner data: a gitignored
+    draft_day.json written by the owner's research scripts; 404 when this install has none."""
+    if not os.path.isfile(DRAFT_DAY_FILE):
+        return jsonify({'error': "no draft_day.json on this server: the Draft Day tab needs the owner's research data"}), 404
+    with open(DRAFT_DAY_FILE, encoding='utf-8') as f:
+        return jsonify(json.load(f))
+
+
 @fantasy_api.route('/leagues', methods=['GET'])
 def get_leagues():
     leagues = list_leagues()

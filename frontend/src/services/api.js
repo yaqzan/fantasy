@@ -38,6 +38,9 @@ api.interceptors.request.use((config) => {
 });
 
 // The backend's error message, when it sent one.
+// Draft Day tab: targets, max bids and past-auction evidence (the owner's gitignored draft_day.json).
+export const getDraftDay = async () => (await api.get('/draft-day')).data;
+
 export const errorMessage = (error) => error?.response?.data?.error || error?.message || 'Request failed';
 
 export const getLeagues = async () => {

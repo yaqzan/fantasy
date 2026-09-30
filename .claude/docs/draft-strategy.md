@@ -89,7 +89,12 @@ inside one price structure is .5-.8 categories a week).
   likely price highest, only two are worth about its price for their rank (#1 $102, #2-4 $90-92,
   #5 $75) in the weekly model; the other three fall $10-40 short. Per-star numbers: `out/player_notes.md`. Past the break-even each $10 costs
   ~0.08 categories a week. **Never two $60+ players** (worst structure in 2025, no better in 2024).
-- **Skip $40-74** unless the price falls well under value.
+- **Max bid = a share of the app's $: 85% at $40-74, 80% at $15-39, 100% under $15** (lower when he
+  projects under ~60 games; the app's $ is per game). Backtest on both auctions (`below_value.py`,
+  value from the season before, delivery with games counted): $40-74 picks bought above app value
+  returned 0.59 per $1 (21 of 28), at or under it 0.97 (7), 15-30% under 1.19 (3). The tier loses
+  because the room overpays in it, and the app's own value ran high there: its $40-74 players
+  delivered 86% of it, $15-39 77%, under $15 121%.
 - **Pick the 4 bench players like starters.** The right four $1 players for your core beat four
   random ones by 0.5-0.6 categories a week, more than the star question; re-spending the budget
   across all 10 spots added only 0-0.2 on top.
@@ -134,4 +139,11 @@ in WSOP categories with the weekly model; against the real room, whose average i
 - Dollar gaps under ~$15, single-player "steals", and build differences under ~0.15 categories a
   week (the searches' own noise) are within model error.
 - Rerun after projection edits (owner adjustments live in MySQL), from the repo root: `apply2026.py`,
-  `pairs.py`, `strategy.py`, then `builds_z.py`, `builds_week.py`, `bench.py`, `breakeven.py`.
+  `pairs.py`, `strategy.py`, then `builds_z.py`, `builds_week.py`, `bench.py`, `breakeven.py`,
+  `draft_day.py`.
+
+## Draft Day tab (`/draft`)
+The app's cheat sheet: steps, diagrams, star break-evens, a max-bid lookup, bench targets. It reads
+`/api/draft-day`, which serves a gitignored `draft_day.json` (repo root) written by
+`.horizon/wsop-auction-2026/draft_day.py`; without the file the tab shows the 404 message. The page
+is public (owner's choice, 2026-09-30); the player data stays out of git.

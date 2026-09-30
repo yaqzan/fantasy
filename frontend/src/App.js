@@ -8,6 +8,7 @@ import TeamStandings from './components/TeamStandings';
 import WeeklyPickups from './components/WeeklyPickups';
 import Projections from './components/Projections';
 import LeagueSettings from './components/LeagueSettings';
+import DraftDay from './components/DraftDay';
 import {
   getPlayers, getFantasyTeams, draftPlayer, undraftPlayer, updatePlayer,
   getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage
@@ -27,7 +28,14 @@ function App() {
     C: true
   });
   const [priceExponent, setPriceExponent] = useState(null); // null: the league's own exponent
-  const [activeTab, setActiveTab] = useState('players');
+  // /draft opens the Draft Day tab directly (Flask serves index.html for every non-API path).
+  const [activeTab, setActiveTabState] = useState(
+    window.location.pathname.replace(/\/+$/, '') === '/draft' ? 'draft' : 'players');
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    const path = tab === 'draft' ? '/draft' : '/';
+    if (window.location.pathname !== path) window.history.replaceState(null, '', path);
+  };
   const [statType, setStatType] = useState('projected');
   const statTypePicked = useRef(false); // until the user picks one, the league's default applies
   const [leaguesData, setLeaguesData] = useState({ leagues: [], category_catalog: [], defaults: null });
@@ -301,6 +309,16 @@ function App() {
               >
                 Team Standings
               </button>
+              <button
+                onClick={() => setActiveTab('draft')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'draft'
+                    ? 'border-nba-orange text-nba-orange'
+                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                Draft Day
+              </button>
             </nav>
           </div>
         </div>
@@ -436,6 +454,10 @@ function App() {
 
         {activeTab === 'standings' && (
           <TeamStandings config={config} />
+        )}
+
+        {activeTab === 'draft' && (
+          <DraftDay />
         )}
       </main>
     </div>

@@ -19,6 +19,8 @@ ops/cloudflared-config.yml
 
 # League auction bidding history (owner data, see CLAUDE.md)
 draft_history_price_curve.json
+# Draft Day tab data (player targets and max bids), written by a local research script
+draft_day.json
 
 # Long-horizon task state: owner strategy and research data, stays on this machine
 .horizon/
