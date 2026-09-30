@@ -15,7 +15,10 @@ const formatWeekDate = (dateStr) => {
 };
 
 // priceExponent: null means the league's own draft.price_exponent (the server's default values).
-const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected' }) => {
+// draftMode: before the league's draft, hide in-season columns (trends, fantasy points).
+// draftPlan: the Draft Day data (/api/draft-day) when it belongs to this league: adds Likely $ and
+// Max bid, the max following the Value column (share of it by price band, stars at break-even).
+const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', draftMode = false, draftPlan = null }) => {
   // The league's categories, in display order, with labels and percent/inverse flags.
   const categoryMeta = config?.categories || [];
   const CATEGORIES = categoryMeta.map(c => c.key);
@@ -78,6 +81,16 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
   // Auction value on the same stats as the rank (custom slider/punt values when set)
   const getAuctionValue = (player) => {
     return customAuctionValues[player.name]?.auction_value || (player[periodKey('auction_value')] ?? player.auction_value);
+  };
+
+  const likelyPrice = (player) => draftPlan?.likely?.[player.name] ?? null;
+  const maxBid = (player) => {
+    if (!draftPlan) return null;
+    const star = draftPlan.rule.stars[player.name];
+    if (star != null) return star;
+    const value = getAuctionValue(player) || 1;
+    const [, share] = draftPlan.rule.shares.find(([floor]) => value >= floor) || [0, 1];
+    return Math.max(1, Math.round(value * share));
   };
 
   // Handle category inclusion changes (unchecked = punt)
@@ -387,6 +400,14 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
       aValue = getAuctionValue(a);
       bValue = getAuctionValue(b);
     }
+    else if (sortConfig.key === 'max_bid') {
+      aValue = maxBid(a) ?? 0;
+      bValue = maxBid(b) ?? 0;
+    }
+    else if (sortConfig.key === 'likely') {
+      aValue = likelyPrice(a) ?? 0;
+      bValue = likelyPrice(b) ?? 0;
+    }
     // Handle nested stat properties like "stats.PTS.value"
     else if (sortConfig.key.startsWith('stats.')) {
       const parts = sortConfig.key.split('.');
@@ -460,7 +481,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   OVR <SortIcon columnKey="z_score" />
                 </div>
               </th>
-              <th 
+              {!draftMode && <th 
                 className="table-header cursor-pointer hover:bg-gray-600 w-10 text-center px-1"
                 onClick={() => handleSort('hot_overall')}
                 title="OVR Trend (5-game vs season)"
@@ -468,7 +489,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 <div className="flex items-center justify-center">
                   📈<SortIcon columnKey="hot_overall" />
                 </div>
-              </th>
+              </th>}
               <th 
                 className="table-header cursor-pointer hover:bg-gray-600 w-48"
                 onClick={() => handleSort('name')}
@@ -487,6 +508,19 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   </div>
                 </th>
               )}
+              {draftPlan && (
+                <>
+                  <th className="table-header cursor-pointer hover:bg-gray-600 w-16" onClick={() => handleSort('likely')}
+                      title="What this room paid for his likely bid rank in 2025 (a guess: misses by $13-16 on $20+ players)">
+                    <div className="flex items-center">Likely <SortIcon columnKey="likely" /></div>
+                  </th>
+                  <th className="table-header cursor-pointer hover:bg-gray-600 w-16" onClick={() => handleSort('max_bid')}
+                      title="Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even. Green: the room will likely let him go at or under it.">
+                    <div className="flex items-center">Max bid <SortIcon columnKey="max_bid" /></div>
+                  </th>
+                </>
+              )}
+              {!draftMode && <>
               <th 
                 className="table-header cursor-pointer hover:bg-gray-600 w-20"
                 onClick={() => handleSort('fpoints')}
@@ -504,6 +538,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   📈<SortIcon columnKey="hot_fpoints" />
                 </div>
               </th>
+              </>}
               {CATEGORIES.map(category => {
                 const isPunted = !includedCategories.includes(category);
                 return (
@@ -560,9 +595,9 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     {getCustomScoreDisplay(player.name, getZScore(player))}
                   </div>
                 </td>
-                <td className="table-cell text-center px-1">
+                {!draftMode && <td className="table-cell text-center px-1">
                   {getHotColdIndicator(player)}
-                </td>
+                </td>}
                 <td className="table-cell">
                   <div>
                     <div className="flex items-center space-x-2">
@@ -605,6 +640,18 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     ${getAuctionValue(player)}
                   </td>
                 )}
+                {draftPlan && (() => {
+                  const likely = likelyPrice(player);
+                  const max = maxBid(player);
+                  const target = likely != null && likely <= max;
+                  return (
+                    <>
+                      <td className="table-cell text-gray-400">{likely != null ? `$${likely}` : '-'}</td>
+                      <td className={`table-cell font-semibold ${target ? 'text-green-400' : 'text-nba-orange'}`}>${max}</td>
+                    </>
+                  );
+                })()}
+                {!draftMode && <>
                 <td className="table-cell text-center">
                   <div className="flex items-center justify-center space-x-2">
                     <span className="text-blue-400 font-semibold">
@@ -618,6 +665,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 <td className="table-cell text-center px-1">
                   {getFptsHotColdIndicator(player)}
                 </td>
+                </>}
                 {CATEGORIES.map(category => {
                   const stat = player.stats[category];
                   const isPunted = !includedCategories.includes(category);

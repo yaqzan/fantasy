@@ -11,7 +11,7 @@ import LeagueSettings from './components/LeagueSettings';
 import DraftDay from './components/DraftDay';
 import {
   getPlayers, getFantasyTeams, draftPlayer, undraftPlayer, updatePlayer,
-  getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage
+  getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage, getDraftDay
 } from './services/api';
 
 function App() {
@@ -44,6 +44,40 @@ function App() {
   const [loadError, setLoadError] = useState(null);
 
   const currentLeague = leaguesData.leagues.find(l => l.id === leagueId) || null;
+
+  // Draft mode: an auction league before its draft (until 6 hours past the start) shows only what
+  // matters for bidding. The header toggle overrides it per league (localStorage).
+  const [draftModeOverride, setDraftModeOverride] = useState({});
+  const draftDate = currentLeague?.settings?.draft?.date ? new Date(currentLeague.settings.draft.date) : null;
+  const draftAhead = Boolean(currentLeague?.settings?.draft?.type === 'auction' && draftDate && !isNaN(draftDate)
+    && Date.now() < draftDate.getTime() + 6 * 3600 * 1000);
+  const storedDraftMode = (() => {
+    try { return leagueId ? localStorage.getItem(`fantasy.draftMode.${leagueId}`) : null; } catch (e) { return null; }
+  })();
+  const draftMode = (draftModeOverride[leagueId] ?? storedDraftMode ?? (draftAhead ? 'on' : 'off')) === 'on';
+  const toggleDraftMode = () => {
+    const next = draftMode ? 'off' : 'on';
+    setDraftModeOverride(prev => ({ ...prev, [leagueId]: next }));
+    try { localStorage.setItem(`fantasy.draftMode.${leagueId}`, next); } catch (e) { /* storage blocked */ }
+  };
+  const [draftPlanData, setDraftPlanData] = useState(null);
+  useEffect(() => {
+    getDraftDay().then(setDraftPlanData).catch(() => setDraftPlanData(null));
+  }, []);
+  const draftPlan = draftMode && draftPlanData?.league === leagueId ? draftPlanData : null;
+  // Leagues without position minimums don't need the filter while drafting.
+  const rosterRules = currentLeague?.settings?.roster || {};
+  const showPositionFilter = !draftMode || Boolean(rosterRules.min_guards || rosterRules.min_forwards || rosterRules.min_centers);
+
+  const TABS = [
+    ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true], ['pickups', 'Weekly Pickups', true],
+    ['projections', 'Projections'], ['daily', 'Daily Stats', true], ['standings', 'Team Standings', true],
+    ['draft', 'Draft Day'],
+  ].filter(([, , inSeason]) => !(draftMode && inSeason));
+  useEffect(() => {
+    if (!TABS.some(([key]) => key === activeTab)) setActiveTab('players');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftMode]);
   const leagueExponent = config?.league?.settings?.draft?.price_exponent ?? 1;
 
   useEffect(() => {
@@ -164,7 +198,7 @@ function App() {
     const isMyTeamPlayer = player.fantasy_team?.abbreviation === config?.MY_TEAM_ABV;
     // Always show my team players, otherwise respect the available filter
     const matchesFilter = isMyTeamPlayer ? true : (showAvailableOnly ? !player.drafted : true);
-    const matchesPosition = positionFilters[player.position] || false;
+    const matchesPosition = !showPositionFilter || positionFilters[player.position] || false;
     // Health filter: if showHealthyOnly is false (unchecked), show all players
     // If showHealthyOnly is true (checked), only show healthy players (is_injured !== true)
     const matchesHealth = !showHealthyOnly ? true : (player.is_injured !== true);
@@ -248,76 +282,28 @@ function App() {
         {/* Tab Navigation */}
         <div className="mb-6">
           <div className="border-b border-gray-700">
-            <nav className="-mb-px flex space-x-8">
+            <nav className="-mb-px flex items-center space-x-8">
+              {TABS.map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === key
+                      ? 'border-nba-orange text-nba-orange'
+                      : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
               <button
-                onClick={() => setActiveTab('players')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'players'
-                    ? 'border-nba-orange text-nba-orange'
-                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
+                onClick={toggleDraftMode}
+                title="Draft mode shows only what matters for the auction: max bids, no in-season tabs or columns. On by default until the draft."
+                className={`ml-auto mb-1 px-3 py-1 rounded-full text-xs font-medium border ${
+                  draftMode ? 'bg-nba-orange text-gray-900 border-nba-orange' : 'text-gray-400 border-gray-600 hover:text-gray-200'
                 }`}
               >
-                Player Rankings
-              </button>
-              <button
-                onClick={() => setActiveTab('lineup')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'lineup'
-                    ? 'border-nba-orange text-nba-orange'
-                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
-                }`}
-              >
-                Lineup Optimizer
-              </button>
-              <button
-                onClick={() => setActiveTab('pickups')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'pickups'
-                    ? 'border-nba-orange text-nba-orange'
-                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
-                }`}
-              >
-                Weekly Pickups
-              </button>
-              <button
-                onClick={() => setActiveTab('projections')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'projections'
-                    ? 'border-nba-orange text-nba-orange'
-                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
-                }`}
-              >
-                Projections
-              </button>
-              <button
-                onClick={() => setActiveTab('daily')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'daily'
-                    ? 'border-nba-orange text-nba-orange'
-                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
-                }`}
-              >
-                Daily Stats
-              </button>
-              <button
-                onClick={() => setActiveTab('standings')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'standings'
-                    ? 'border-nba-orange text-nba-orange'
-                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
-                }`}
-              >
-                Team Standings
-              </button>
-              <button
-                onClick={() => setActiveTab('draft')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'draft'
-                    ? 'border-nba-orange text-nba-orange'
-                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
-                }`}
-              >
-                Draft Day
+                Draft mode {draftMode ? 'on' : 'off'}
               </button>
             </nav>
           </div>
@@ -358,6 +344,7 @@ function App() {
                   </div>
                 </div>
                 
+                {showPositionFilter && (
                 <div className="flex items-center space-x-4">
                   <span className="text-sm text-gray-300">Position:</span>
                   {['G', 'F', 'C'].map(position => (
@@ -375,6 +362,7 @@ function App() {
                     </label>
                   ))}
                 </div>
+                )}
                 
                 {config.show_auction_price && (
                   <div
@@ -432,6 +420,8 @@ function App() {
             priceExponent={priceExponent}
             config={config}
             statType={statType}
+            draftMode={draftMode}
+            draftPlan={draftPlan}
           />
         </div>
         )}

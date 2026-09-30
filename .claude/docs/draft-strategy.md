@@ -147,3 +147,11 @@ The app's cheat sheet: steps, diagrams, star break-evens, a max-bid lookup, benc
 `/api/draft-day`, which serves a gitignored `draft_day.json` (repo root) written by
 `.horizon/wsop-auction-2026/draft_day.py`; without the file the tab shows the 404 message. The page
 is public (owner's choice, 2026-09-30); the player data stays out of git.
+
+**Draft mode** (header toggle, per league in localStorage): on by default for an auction league until
+6 hours past `draft.date`. It hides the in-season tabs (lineups, pickups, daily stats, standings),
+the trend and fantasy-points columns, and the position filter when the league has no position
+minimums. When `draft_day.json`'s `league` is the selected league, Player Rankings adds **Likely**
+and **Max bid**. Max bid follows the Value column (so the stats basis and star-premium slider move
+it) by the file's `rule`: stars at their break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0.
+Fantasy points stay hidden only in draft mode; dropping them for category leagues is a later job.
