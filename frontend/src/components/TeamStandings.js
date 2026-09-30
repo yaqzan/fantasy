@@ -1,53 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { getTeamStandings } from '../services/api';
+import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
+import { selectClass, shortDate } from '../weeks';
 
 const TeamStandings = ({ config }) => {
-  const [statType, setStatType] = useState(config?.default_stat_type || 'projected');
-  const [healthyOnly, setHealthyOnly] = useState(true);
-  const [view, setView] = useState('per_game');
+  const [{ statType, healthy: healthyOnly, view }, setViewState] = useLeagueViewState(config?.league?.id, 'standings', {
+    statType: config?.default_stat_type || 'projected', healthy: true, view: 'per_game',
+  }, validStat(config));
+  const points = config?.capabilities?.scoring === 'points';
   const [standingsData, setStandingsData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [dataCache, setDataCache] = useState({});
 
   useEffect(() => {
-    const cacheKey = `teamStandings2_${config?.league?.id}_${statType}_${healthyOnly}_${view}`;
-    
-    // Check sessionStorage first
-    const cachedData = sessionStorage.getItem(cacheKey);
-    if (cachedData) {
-      try {
-        const parsed = JSON.parse(cachedData);
-        setStandingsData(parsed);
-        return;
-      } catch (e) {
-        // Invalid cache, continue to fetch
-      }
-    }
-    
-    // Check in-memory cache
-    if (dataCache[cacheKey]) {
-      setStandingsData(dataCache[cacheKey]);
-      return;
-    }
-
-    // Load data if not cached
-    const loadStandings = async () => {
-      setLoading(true);
-      try {
-        const data = await getTeamStandings(statType, healthyOnly, view);
-        setStandingsData(data);
-        setDataCache(prev => ({ ...prev, [cacheKey]: data }));
-        // Cache in sessionStorage
-        sessionStorage.setItem(cacheKey, JSON.stringify(data));
-      } catch (error) {
-        console.error('Error loading team standings:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadStandings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    setLoading(true);
+    getTeamStandings(statType, healthyOnly, view)
+      .then(data => { if (!cancelled) setStandingsData(data); })
+      .catch(error => console.error('Error loading team standings:', error))
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [statType, healthyOnly, view]);
 
   const formatValue = (category, value) => {
@@ -152,19 +123,18 @@ const TeamStandings = ({ config }) => {
     );
   }
 
-  const { teams, categories, category_names, category_meta = [], active_slots, week_start, week_end, stage } = standingsData;
+  const { teams, categories, category_names, category_meta = [], active_slots, week_start, week_end, stage, playoffs } = standingsData;
   // Guillotine: the bottom rows a stage would knock out, if this ranking were the stage's record.
   const choppedFrom = stage?.stage && stage.eliminated ? teams.length - stage.eliminated : Infinity;
+  // Playoff leagues: the line under the last team that would make it on this ranking.
+  const playoffTeams = playoffs?.teams || 0;
   const shownView = standingsData.view || 'per_game';
-  const formatDay = (iso) => {
-    if (!iso) return '';
-    const [y, m, d] = iso.split('-').map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+  const lineup = config?.capabilities?.positions?.length ? `best ${active_slots} who fit the starting slots` : `best ${active_slots}`;
   const viewNote = shownView === 'week'
-    ? `Projected totals for the week of ${formatDay(week_start)} to ${formatDay(week_end)}: only games NBA teams actually play${
-        config?.league?.settings?.roster?.daily_lineups ? `, each day's best ${active_slots} counting (bench players fill empty days)` : ', starters only'}.`
-    : `Per game: one game each of every team's best ${active_slots} players. Roster strength, no schedule.`;
+    ? `Projected totals for the week of ${shortDate(week_start)} to ${shortDate(week_end)}: only games NBA teams actually play${
+        config?.league?.settings?.roster?.daily_lineups ? `, each day's ${lineup} counting (bench players fill empty days)` : ', starters only'}.`
+    : `Per game: one game each of every team's ${lineup} players. Roster strength, no schedule.`;
+  const rankedBy = points ? 'Ranked by projected fantasy points.' : 'Ranked by the sum of category ranks.';
   const PERCENTAGE_CATEGORIES = category_meta.filter(c => c.percent).map(c => c.key);
   const isMyTeam = (team) => team.abbreviation === config?.MY_TEAM_ABV;
 
@@ -178,11 +148,7 @@ const TeamStandings = ({ config }) => {
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-300">View:</span>
-            <select
-              value={view}
-              onChange={(e) => setView(e.target.value)}
-              className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent"
-            >
+            <select value={view} onChange={(e) => setViewState({ view: e.target.value })} className={selectClass}>
               <option value="per_game">Per game</option>
               <option value="week">This week</option>
             </select>
@@ -190,16 +156,8 @@ const TeamStandings = ({ config }) => {
 
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-300">Stats:</span>
-            <select
-              value={statType}
-              onChange={(e) => setStatType(e.target.value)}
-              className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent"
-            >
-              {config?.projection_season && <option value="proj">{config.projection_season} projection</option>}
-              <option value="season">Season Average</option>
-              <option value="5">Last 5 Games</option>
-              <option value="10">Last 10 Games</option>
-              <option value="projected">Projected</option>
+            <select value={statType} onChange={(e) => setViewState({ statType: e.target.value })} className={selectClass}>
+              {statOptions(config).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </div>
 
@@ -207,14 +165,15 @@ const TeamStandings = ({ config }) => {
             <input
               type="checkbox"
               checked={healthyOnly}
-              onChange={(e) => setHealthyOnly(e.target.checked)}
+              onChange={(e) => setViewState({ healthy: e.target.checked })}
               className="h-4 w-4 text-nba-orange focus:ring-nba-orange border-gray-600 rounded bg-gray-700"
             />
             <span className="ml-2 text-sm text-gray-300">Healthy</span>
           </label>
         </div>
         <p className="mt-3 text-xs text-gray-400">
-          {viewNote} Ranked by the sum of category ranks. A power ranking, not the league's real standings.
+          {viewNote} {rankedBy} A power ranking, not the league's real standings.
+          {playoffTeams > 0 && ` The top ${playoffTeams} make the playoffs${playoffs.first_week ? ` (week ${playoffs.first_week} on)` : ''}: the green line.`}
         </p>
         {stage?.stage && (
           <p className="mt-1 text-xs text-gray-400">
@@ -254,6 +213,7 @@ const TeamStandings = ({ config }) => {
                   <tr
                     key={team.id}
                     className={`hover:bg-gray-700 transition-colors ${index >= choppedFrom ? 'border-l-4 border-red-500 bg-red-900/20 ' : ''}${
+                      index === playoffTeams - 1 ? 'border-b-2 border-b-green-500 ' : ''}${
                       myTeam
                         ? 'bg-gradient-to-r from-nba-orange/10 via-nba-orange/5 to-transparent shadow-[0_0_8px_rgba(251,146,60,0.25)] ring-1 ring-nba-orange/30'
                         : ''
@@ -276,8 +236,8 @@ const TeamStandings = ({ config }) => {
                         {team.name || team.abbreviation}
                       </div>
                       <div className="text-xs text-gray-400">
-                        Rank Sum: {teamData.total_rank_sum}
-                        {shownView === 'week' && ` · ${teamData.games} games`}
+                        {!points && `Rank Sum: ${teamData.total_rank_sum}`}
+                        {shownView === 'week' && `${points ? '' : ' · '}${teamData.games} games`}
                       </div>
                     </td>
                     {categories.map(category => {

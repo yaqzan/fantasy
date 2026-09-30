@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getTeamProjections, setTeamAdjustment, getPlayerProjections, setPlayerAdjustment, errorMessage } from '../services/api';
+import useLeagueViewState from '../useLeagueViewState';
 
 const inputClass = 'px-2 py-1 bg-gray-700 border border-gray-600 rounded text-white text-sm w-20 text-right focus:outline-none focus:ring-2 focus:ring-nba-orange';
 const SOURCE_NAMES = {
@@ -91,7 +92,9 @@ const TeamWins = () => {
 };
 
 // Players: the blended line, each source's line, and the owner's adjustment.
-const PlayerLines = () => {
+const PlayerLines = ({ caps }) => {
+  const auction = Boolean(caps.auction);
+  const points = caps.scoring === 'points';
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
@@ -126,8 +129,9 @@ const PlayerLines = () => {
     <div>
       <p className="text-sm text-gray-400 mb-3">
         Each player's line is the experts' average blended with our model (more expert weight for rookies and young
-        players, more model for veterans and players who changed teams). Rank and $ are this league's. Adjust
-        production (all counting stats and minutes, in %) or games if you see it differently. Click a player to compare sources.
+        players, more model for veterans and players who changed teams). Rank{auction ? ' and $ are' : ' is'} this league's{points ? ', from its point weights (FPTS per game)' : ''}. Adjust
+        production (all counting stats and minutes, in %) or games if you see it differently: adjustments are NBA-wide, so they
+        change every league. Click a player to compare sources.
       </p>
       <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search a player"
              className="mb-3 px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm w-64" />
@@ -140,7 +144,8 @@ const PlayerLines = () => {
                 <th className="table-header text-center">#</th>
                 <th className="table-header text-left">Player</th>
                 {LINE_STATS.map(([k, label]) => <th key={k} className="table-header text-center">{label}</th>)}
-                <th className="table-header text-center">$</th>
+                {points && <th className="table-header text-center" title="Fantasy points per game, this league's weights">FPTS</th>}
+                {auction && <th className="table-header text-center">$</th>}
                 <th className="table-header text-center" title="Production +/- %">Prod %</th>
                 <th className="table-header text-center" title="Replace projected games">Games</th>
               </tr>
@@ -155,7 +160,8 @@ const PlayerLines = () => {
                       <div className="text-xs text-gray-400">{p.team} · {p.position} · {p.type} · {Object.keys(p.sources).length} sources</div>
                     </td>
                     {LINE_STATS.map(([k, , d]) => <td key={k} className="table-cell text-center text-gray-200">{fmt(p.line[k], d)}</td>)}
-                    <td className="table-cell text-center text-green-400 font-semibold">${p.auction_value}</td>
+                    {points && <td className="table-cell text-center text-white font-semibold">{fmt(p.fpts, 1)}</td>}
+                    {auction && <td className="table-cell text-center text-green-400 font-semibold">${p.auction_value}</td>}
                     <td className="table-cell text-center">
                       <input type="number" step="1" className={inputClass} placeholder="0"
                              value={drafts[p.id]?.pct ?? (p.adjustment ? Math.round((p.adjustment.production - 1) * 100) : '')}
@@ -199,20 +205,25 @@ const PlayerLines = () => {
   );
 };
 
-const Projections = () => {
-  const [view, setView] = useState('teams');
+// Player lines for every league; team wins only where Wins is a category (capability team_wins).
+const Projections = ({ config }) => {
+  const caps = config?.capabilities || {};
+  const tabs = [...(caps.team_wins ? [['teams', 'Team wins']] : []), ['players', 'Players']];
+  const [{ view: picked }, setViewState] = useLeagueViewState(config?.league?.id, 'projections', { view: tabs[0][0] });
+  const view = tabs.some(([key]) => key === picked) ? picked : tabs[0][0];
+  const setView = (v) => setViewState({ view: v });
   return (
     <div className="p-6">
       <h2 className="text-2xl font-bold text-white mb-4">Projections</h2>
       <div className="flex gap-2 mb-4">
-        {[['teams', 'Team wins'], ['players', 'Players']].map(([key, label]) => (
+        {tabs.map(([key, label]) => (
           <button key={key} onClick={() => setView(key)}
                   className={`px-3 py-1.5 rounded text-sm ${view === key ? 'bg-nba-orange text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
             {label}
           </button>
         ))}
       </div>
-      {view === 'teams' ? <TeamWins /> : <PlayerLines />}
+      {view === 'teams' ? <TeamWins /> : <PlayerLines caps={caps} />}
     </div>
   );
 };

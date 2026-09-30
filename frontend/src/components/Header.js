@@ -7,8 +7,9 @@ const leagueSummary = (league) => {
   const parts = [
     s.scoring?.type === 'points' ? 'points' : `${s.categories.length} cats`,
     `${s.num_teams} teams`,
-    `${s.roster.size} spots (${s.roster.active} active, ${s.roster.daily_lineups ? 'daily' : 'weekly'})`,
+    `${s.roster.size} spots (${s.roster.active} active${s.roster.slots?.length ? ' in slots' : ''}, ${s.roster.daily_lineups ? 'daily' : 'weekly'})`,
   ];
+  if (s.draft.type !== 'auction') parts.push(`${s.draft.type} draft`);
   if (s.draft.type === 'auction') {
     let draft = `$${s.draft.budget} auction`;
     if (s.draft.date) {

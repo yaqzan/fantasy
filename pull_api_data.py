@@ -156,7 +156,7 @@ def update_team_rosters(season=SEASON):
             player.name = unidecode(row['PLAYER'])
             position = row.get('POSITION')
             if isinstance(position, str) and position:  # blank (NaN) for some new signings
-                player.pos = position[0]
+                player.pos, player.positions = position[0], position
             if created:
                 print(Fore.GREEN + f"Created Player: {player.name}")
             player.save()

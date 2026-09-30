@@ -20,7 +20,8 @@ LEGACY_SETTINGS = {
     'season': '2025-26',
     'num_teams': 14,
     'categories': ['PTS', 'FG3M', 'AST', 'TOV', 'REB', 'STL', 'BLK', 'PF', 'TS%', 'NFT', 'PLUS_MINUS'],
-    'roster': {'size': 14, 'active': 11, 'daily_lineups': False, 'min_guards': 2, 'min_forwards': 2, 'min_centers': 1},
+    'roster': {'size': 14, 'active': 11, 'daily_lineups': False,
+               'slots': ['G', 'G', 'F', 'F', 'C'] + ['UTIL'] * 6},
     'draft': {'type': 'auction', 'budget': 200, 'date': ''},
     'waivers': {'claims_per_week': 1},
 }
@@ -45,11 +46,17 @@ def upgrade_schema(DB):
         ops.append(migrator.add_column('fantasy_teams', 'eliminated_stage', IntegerField(null=True)))
     if 'released_roster' not in team_cols:
         ops.append(migrator.add_column('fantasy_teams', 'released_roster', TextField(null=True)))
-    if 'fantrax_team_id' not in team_cols:
-        ops.append(migrator.add_column('fantasy_teams', 'fantrax_team_id', CharField(max_length=32, null=True)))
+    if 'fantrax_team_id' in team_cols and 'platform_team_id' not in team_cols:  # named for Fantrax until Yahoo
+        ops.append(migrator.rename_column('fantasy_teams', 'fantrax_team_id', 'platform_team_id'))
+    elif 'platform_team_id' not in team_cols:
+        ops.append(migrator.add_column('fantasy_teams', 'platform_team_id', CharField(max_length=32, null=True)))
+    if 'positions' not in player_cols:
+        ops.append(migrator.add_column('players', 'positions', CharField(max_length=16, null=True)))
+    if 'positions' not in {c.name for c in DB.get_columns('league_player_flags')}:
+        ops.append(migrator.add_column('league_player_flags', 'positions', CharField(max_length=32, null=True)))
     if ops:
         migrate(*ops)
-        print(f'added {len(ops)} column(s)')
+        print(f'applied {len(ops)} column change(s)')
     indexes = DB.get_indexes('fantasy_teams')
     for index in indexes:  # team names were unique across the whole app; now per league
         if index.unique and index.columns == ['name']:
@@ -78,7 +85,7 @@ def import_legacy_league():
     moved = FantasyTeam.update(league=league.id).where(FantasyTeam.league.is_null()).execute()
     flags = 0
     for player in Player.select().where(Player.undroppable == 1):
-        LeaguePlayerFlag.replace(league=league.id, player=player.id, undroppable=True).execute()
+        LeaguePlayerFlag.create(league=league.id, player=player.id, undroppable=True)
         flags += 1
     print(f"imported the pre-league setup as league '{league.id}': {moved} teams, {flags} undroppable flags"
           + (', schedule from league.json (no longer read; safe to delete)' if os.path.exists(path) else ''))

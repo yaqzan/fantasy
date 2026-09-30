@@ -1,23 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getPickups, errorMessage } from '../services/api';
-
-const selectClass = 'px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent';
-
-const parseDay = (iso) => {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d);
-};
-const shortDate = (iso) => parseDay(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-const weekdayLetter = (iso) => parseDay(iso).toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2);
-
-// Every day of the fantasy week, so each player's games line up in the same columns.
-const weekDays = (start, end) => {
-  const days = [];
-  for (let d = parseDay(start); d <= parseDay(end); d.setDate(d.getDate() + 1)) {
-    days.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-  }
-  return days;
-};
+import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
+import { WeekSelect, defaultWeekStart, validWeek, selectClass, shortDate, weekdayLetter, weekDays } from '../weeks';
 
 const chanceColor = (chance) => {
   if (chance >= 0.75) return 'bg-green-800 text-green-100';
@@ -27,11 +11,17 @@ const chanceColor = (chance) => {
   return 'bg-red-800 text-red-100';
 };
 
-// Free agents ranked by how many more categories they'd win you in a fantasy week, from the NBA
-// schedule (who plays how often, and against whom for Wins), with the best drop for each.
+// Free agents ranked by how many more categories they'd win you in a fantasy week (points leagues:
+// how much they raise the chance of winning it), from the NBA schedule (who plays how often, and
+// against whom for Wins), with the best drop for each.
 const WeeklyPickups = ({ config }) => {
-  const [weekStart, setWeekStart] = useState(null);
-  const [timeframe, setTimeframe] = useState(config?.default_stat_type || 'projected');
+  const weeks = config?.league?.weeks || [];
+  const caps = config?.capabilities || {};
+  const points = caps.scoring === 'points';
+  const waivers = config?.league?.settings?.waivers || {};
+  const [{ week: weekStart, statType: timeframe }, setView] = useLeagueViewState(config?.league?.id, 'pickups', {
+    week: defaultWeekStart(weeks), statType: config?.default_stat_type || 'projected',
+  }, (picked) => validWeek(weeks)(validStat(config)(picked)));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -49,7 +39,6 @@ const WeeklyPickups = ({ config }) => {
 
   const categoryMeta = data?.categories || config?.categories || [];
   const label = Object.fromEntries(categoryMeta.map(c => [c.key, c.label]));
-  const weeks = data?.weeks || (config?.league?.settings?.schedule || []).map(([start]) => start);
   const days = data ? weekDays(data.week_start, data.week_end) : [];
   const opponentText = data?.opponent === 'league average' ? "the league's average team"
     : data?.opponent ? data.opponent : 'a team exactly as strong as yours';
@@ -59,23 +48,11 @@ const WeeklyPickups = ({ config }) => {
       <div className="mb-4">
         <h2 className="text-2xl font-bold text-white mb-4">Weekly Pickups</h2>
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-300">Week:</span>
-            <select value={weekStart || data?.week_start || ''} onChange={(e) => setWeekStart(e.target.value || null)} className={selectClass}>
-              {weeks.length === 0 && <option value="">This week</option>}
-              {weeks.map((start, i) => (
-                <option key={start} value={start}>Week {i + 1}: {shortDate(start)}</option>
-              ))}
-            </select>
-          </div>
+          <WeekSelect weeks={weeks} value={weekStart || data?.week_start} onChange={(week) => setView({ week })} />
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-300">Stats:</span>
-            <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className={selectClass}>
-              <option value="projected">Projected</option>
-              {config?.projection_season && <option value="proj">{config.projection_season} projection</option>}
-              <option value="season">Season Average</option>
-              <option value="10">Last 10 Games</option>
-              <option value="5">Last 5 Games</option>
+            <select value={timeframe} onChange={(e) => setView({ statType: e.target.value })} className={selectClass}>
+              {statOptions(config).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </div>
         </div>
@@ -86,9 +63,12 @@ const WeeklyPickups = ({ config }) => {
       {data && (
         <div className="mb-4 text-sm text-gray-300">
           <p className="mb-2">
-            {shortDate(data.week_start)} to {shortDate(data.week_end)}, against {opponentText}: you're projected to win{' '}
-            <span className="font-semibold text-white">{data.expected_categories}</span> of {categoryMeta.length} categories.
-            {data.claims_per_week === 1 ? ' One claim a week, so pick one.' : ` ${data.claims_per_week} claims a week.`}
+            {shortDate(data.week_start)} to {shortDate(data.week_end)}, against {opponentText}:{' '}
+            {points
+              ? <>you have a <span className="font-semibold text-white">{Math.round(data.expected_categories * 100)}%</span> chance of winning the week.</>
+              : <>you're projected to win <span className="font-semibold text-white">{data.expected_categories}</span> of {categoryMeta.length} categories.</>}
+            {data.claims_per_week === 1 ? ' One claim a week, so pick one.' : ` ${data.claims_per_week} claims a week (the Lineup Optimizer finds the best set).`}
+            {caps.faab && ` FAAB: $${waivers.faab_budget} for the season${waivers.faab_per_stage ? `, ${waivers.faab_per_stage} wins per stage` : ''} (spending isn't tracked here).`}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {categoryMeta.map(c => {
@@ -117,7 +97,7 @@ const WeeklyPickups = ({ config }) => {
                 <th className="table-header text-center" title="Days his NBA team plays this week">Games</th>
                 <th className="table-header text-center" title="Games he'd actually play in your lineup">Plays</th>
                 <th className="table-header text-center" title="Expected wins from his games (Wins category)">W</th>
-                <th className="table-header text-center" title="Extra categories you'd expect to win this week">Gain</th>
+                <th className="table-header text-center" title={points ? 'How much he raises your chance of winning the week' : "Extra categories you'd expect to win this week"}>Gain</th>
                 <th className="table-header text-left">Drop</th>
                 <th className="table-header text-left" title="Biggest changes in your chance of winning a category">Moves</th>
               </tr>
@@ -133,7 +113,7 @@ const WeeklyPickups = ({ config }) => {
                     <td className="table-cell">
                       <div className="font-medium text-white">{p.name}</div>
                       <div className="text-xs text-gray-400">
-                        {p.team_abv} · {p.position}
+                        {p.team_abv} · {p.positions.join('/')}
                         {p.small_sample && (
                           <span className="ml-1 text-amber-400" title="Small sample: his numbers come from only a few games">· {p.gp} GP</span>
                         )}
@@ -156,7 +136,7 @@ const WeeklyPickups = ({ config }) => {
                     <td className="table-cell text-center text-white">{p.plays}/{p.games}</td>
                     <td className="table-cell text-center text-gray-200">{p.expected_wins.toFixed(1)}</td>
                     <td className={`table-cell text-center font-semibold ${p.gain > 0 ? 'text-green-400' : 'text-gray-400'}`}>
-                      {p.gain > 0 ? '+' : ''}{p.gain.toFixed(2)}
+                      {points ? `${p.gain > 0 ? '+' : ''}${Math.round(p.gain * 100)}%` : `${p.gain > 0 ? '+' : ''}${p.gain.toFixed(2)}`}
                     </td>
                     <td className="table-cell text-gray-300">{p.drop || 'open spot'}</td>
                     <td className="table-cell">
@@ -178,8 +158,9 @@ const WeeklyPickups = ({ config }) => {
 
       {data && (
         <p className="mt-3 text-xs text-gray-500">
-          Gain is how many more categories you'd expect to win this week with him in your lineup and the drop shown out.
-          Only his team's games count, and in daily-lineup leagues only days he'd make your best {config?.league?.settings?.roster?.active} lineup.
+          Gain is how much {points ? 'your chance of winning the week rises' : "more categories you'd expect to win this week"} with him in your lineup and the drop shown out.
+          Only his team's games count, and in daily-lineup leagues only days he'd make your lineup ({config?.league?.settings?.roster?.active} starters{caps.positions?.length ? ' who fit the slots' : ''}).
+          
           Opponents come from the league schedule; until a week's opponent and roster are in, pickups are judged against {opponentText}.
           Tried the {data.tried} best free agents with games this week.
         </p>

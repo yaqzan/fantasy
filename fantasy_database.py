@@ -71,7 +71,8 @@ class Player(BaseModel):
     plus_minus_10 = FloatField(null=True)
     dd2_10 = IntegerField(null=True)
     td3_10 = IntegerField(null=True)
-    pos = CharField(null=True)
+    pos = CharField(null=True)        # primary position, G/F/C
+    positions = CharField(max_length=16, null=True)  # NBA's full listing, e.g. "G-F" (every position he plays)
     gp = IntegerField(null=True)
     pf = IntegerField(null=True)
     pf_5 = IntegerField(null=True)
@@ -125,7 +126,7 @@ class FantasyTeam(BaseModel):
     id = IntegerField(primary_key=True)
     name = CharField()
     abv = CharField(max_length=10, null=True)
-    fantrax_team_id = CharField(max_length=32, null=True)  # permanent; names change, this doesn't
+    platform_team_id = CharField(max_length=32, null=True)  # the platform's permanent team id; names change
     league = ForeignKeyField(League, backref='teams', column_name='league_id', null=True)
     # Guillotine leagues: the stage the team was knocked out after (None = still in), and the
     # players it held then (JSON names), kept so an elimination can be undone.
@@ -151,6 +152,8 @@ class LeaguePlayerFlag(BaseModel):
     league = ForeignKeyField(League, column_name='league_id')
     player = ForeignKeyField(Player, column_name='player_id')
     undroppable = BooleanField(default=False)
+    # The league platform's position eligibility, e.g. "PG,SG" (pull_yahoo.py); None = NBA's positions.
+    positions = CharField(max_length=32, null=True)
 
     class Meta:
         table_name = 'league_player_flags'

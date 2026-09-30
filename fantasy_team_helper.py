@@ -81,31 +81,10 @@ def _team_players(team, healthy_only):
     return [player.name for player in query]
 
 
-def get_my_team_players(league):
-    """Healthy players on my team in this league."""
-    team = get_team_by_abv(league, league.my_team)
-    if team is None:
-        print(f"Warning: no team '{league.my_team}' in league {league.id}")
-        return []
-    return _team_players(team, healthy_only=True)
-
-
 def get_all_my_team_players(league):
     """Every player on my team in this league, injured included."""
     team = get_team_by_abv(league, league.my_team)
     return _team_players(team, healthy_only=False) if team else []
-
-
-def get_opponent_team_players(league, target_date=None):
-    """Healthy players on the opponent for the week containing target_date."""
-    _, _, opponent_abv = get_current_fantasy_week_dates(league, target_date)
-    if not opponent_abv:
-        return []
-    team = get_team_by_abv(league, opponent_abv)
-    if team is None:
-        print(f"Warning: no team '{opponent_abv}' in league {league.id}")
-        return []
-    return _team_players(team, healthy_only=True)
 
 
 def get_all_taken_players(league):
@@ -122,14 +101,26 @@ def get_undroppable_players(league):
             .join(Player).where((LeaguePlayerFlag.league == league.id) & (LeaguePlayerFlag.undroppable == True))]  # noqa: E712
 
 
+def league_positions(league):
+    """{player name: positions} the league's platform lists (pull_yahoo.py); players without an
+    import fall back to NBA's positions (player_stats.nba_positions)."""
+    rows = (LeaguePlayerFlag.select(LeaguePlayerFlag.positions, Player.name).join(Player)
+            .where((LeaguePlayerFlag.league == league.id) & LeaguePlayerFlag.positions.is_null(False)))
+    return {row.player.name: tuple(p for p in row.positions.split(',') if p) for row in rows}
+
+
+def set_league_flags(league, player_id, **fields):
+    """Upsert one player's per-league flags, touching only `fields` (undroppable, positions)."""
+    updated = (LeaguePlayerFlag.update(**fields)
+               .where((LeaguePlayerFlag.league == league.id) & (LeaguePlayerFlag.player == player_id)).execute())
+    if not updated and not LeaguePlayerFlag.select().where((LeaguePlayerFlag.league == league.id)
+                                                           & (LeaguePlayerFlag.player == player_id)).exists():
+        LeaguePlayerFlag.create(league=league.id, player=player_id, **fields)
+
+
 def get_injured_players():
     """Injured players (NBA-wide, not per league)."""
     return [player.name for player in Player.select(Player.name).where(Player.injured == 1)]
-
-
-def is_player_injured(player_name):
-    player = Player.get_or_none(Player.name == player_name)
-    return bool(player and player.injured == 1)
 
 
 def get_available_players(league, player_stats):

@@ -19,6 +19,10 @@ const NumberField = ({ label, value, onChange, min = 0, step, title }) => (
 );
 
 // Create or edit a league: its rules, matchup schedule and notes. Teams are managed in the Team Manager.
+// The starting-slot editor counts each slot type; whatever is left of the active spots is UTIL.
+const POSITION_SLOTS = ['PG', 'SG', 'G', 'SF', 'PF', 'F', 'C'];
+const slotCounts = (slots) => Object.fromEntries(POSITION_SLOTS.map(s => [s, (slots || []).filter(x => x === s).length]));
+
 const LeagueSettings = ({ mode, league, leagues, catalog, defaults, pointStats = {}, defaultPoints = {}, teams = [], onClose, onSaved, onDeleted }) => {
   const initial = mode === 'edit' ? league.settings : defaults;
   const [name, setName] = useState(mode === 'edit' ? league.name : '');
@@ -28,8 +32,11 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, pointStats =
     s.elimination = { ...defaults?.elimination, ...s.elimination };
     s.waivers = { ...defaults?.waivers, ...s.waivers };
     s.scoring = { ...defaults?.scoring, ...s.scoring };
+    s.playoffs = { ...defaults?.playoffs, ...s.playoffs };
     return s;
   });
+  const [slots, setSlots] = useState(() => slotCounts(initial.roster?.slots));
+  const positionSlots = POSITION_SLOTS.reduce((n, s) => n + (Number(slots[s]) || 0), 0);
   const [stageText, setStageText] = useState((initial.elimination?.stage_weeks || []).join(', '));
   const [copyFrom, setCopyFrom] = useState('');
   const [saving, setSaving] = useState(false);
@@ -70,7 +77,11 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, pointStats =
     setSaving(true);
     setError(null);
     try {
-      const toSave = { ...settings, elimination: { ...settings.elimination, stage_weeks: stageText } };
+      const active = Number(settings.roster.active) || 0;
+      const positionList = POSITION_SLOTS.flatMap(s => Array(Math.max(Number(slots[s]) || 0, 0)).fill(s));
+      const rosterSlots = positionList.length ? [...positionList, ...Array(Math.max(active - positionList.length, 0)).fill('UTIL')] : [];
+      const toSave = { ...settings, roster: { ...settings.roster, slots: rosterSlots },
+                       elimination: { ...settings.elimination, stage_weeks: stageText } };
       const saved = mode === 'edit'
         ? await updateLeague(league.id, name, toSave)
         : await createLeague(name, toSave, copyFrom || null);
@@ -124,12 +135,10 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, pointStats =
                 <option value="yahoo">Yahoo</option>
               </select>
             </div>
-            {settings.platform === 'fantrax' && (
-              <div>
-                <label className={labelClass}>Fantrax league id</label>
-                <input value={settings.fantrax_league_id} onChange={(e) => set('fantrax_league_id', e.target.value)} className={inputClass} placeholder="from the league URL" />
-              </div>
-            )}
+            <div>
+              <label className={labelClass}>{settings.platform === 'yahoo' ? 'Yahoo league number' : 'Fantrax league id'}</label>
+              <input value={settings.platform_league_id || ''} onChange={(e) => set('platform_league_id', e.target.value)} className={inputClass} placeholder="from the league URL" />
+            </div>
             {mode === 'create' && leagues.length > 0 && (
               <div className="sm:col-span-3">
                 <label className={labelClass}>Copy teams from (names only, rosters start empty)</label>
@@ -184,11 +193,23 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, pointStats =
                 <option value="weekly">Weekly lineup (same starters all week)</option>
               </select>
             </div>
-            <NumberField label="Min guards" value={settings.roster.min_guards} onChange={(v) => setIn('roster', 'min_guards', v)} />
-            <NumberField label="Min forwards" value={settings.roster.min_forwards} onChange={(v) => setIn('roster', 'min_forwards', v)} />
-            <NumberField label="Min centers" value={settings.roster.min_centers} onChange={(v) => setIn('roster', 'min_centers', v)} />
           </div>
-          <p className="text-xs text-gray-500 mt-2">All minimums at 0 = all flex.</p>
+          <label className={`${labelClass} mt-3`}>Starting slots by position</label>
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+            {POSITION_SLOTS.map(s => (
+              <NumberField key={s} label={s} value={slots[s]} onChange={(v) => setSlots(prev => ({ ...prev, [s]: v }))} />
+            ))}
+            <div>
+              <label className={labelClass}>UTIL</label>
+              <p className={`py-2 text-sm ${positionSlots > Number(settings.roster.active) ? 'text-red-400' : 'text-gray-300'}`}>
+                {Number(settings.roster.active) - positionSlots}
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            The active spots not given a position are UTIL (anyone). All 0 = all flex. G takes any guard, F any forward;
+            a player fills a slot when one of his positions reaches it (platform positions after an import, else NBA's).
+          </p>
         </Section>
 
         <Section title="Draft and waivers">
@@ -206,6 +227,9 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, pointStats =
               <input type="datetime-local" value={settings.draft.date} onChange={(e) => setIn('draft', 'date', e.target.value)} className={inputClass} />
             </div>
             <NumberField label="Waiver claims / week" value={settings.waivers.claims_per_week} onChange={(v) => setIn('waivers', 'claims_per_week', v)} />
+            <NumberField label="FAAB budget ($, season)" value={settings.waivers.faab_budget} onChange={(v) => setIn('waivers', 'faab_budget', v)} title="0 = no free agent auction" />
+            <NumberField label="Playoff teams" value={settings.playoffs.teams} onChange={(v) => setIn('playoffs', 'teams', v)} title="0 = no playoffs" />
+            <NumberField label="First playoff week" value={settings.playoffs.first_week} onChange={(v) => setIn('playoffs', 'first_week', v)} title="Schedule week number" />
             <NumberField
               label="Auction star premium"
               value={settings.draft.price_exponent ?? 1}
@@ -225,8 +249,7 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, pointStats =
             </div>
             <NumberField label="Teams out per stage" value={settings.elimination.per_stage} onChange={(v) => setIn('elimination', 'per_stage', v)} />
             <div />
-            <NumberField label="FAAB budget ($, season)" value={settings.waivers.faab_budget} onChange={(v) => setIn('waivers', 'faab_budget', v)} />
-            <NumberField label="FAAB wins per stage" value={settings.waivers.faab_per_stage} onChange={(v) => setIn('waivers', 'faab_per_stage', v)} title="0 = no limit" />
+            <NumberField label="FAAB wins per stage"  value={settings.waivers.faab_per_stage} onChange={(v) => setIn('waivers', 'faab_per_stage', v)} title="0 = no limit" />
           </div>
           <p className="text-xs text-gray-500 mt-2">
             Stages run over consecutive schedule weeks. After each stage but the last, the worst records over it are eliminated:

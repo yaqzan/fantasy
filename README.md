@@ -61,8 +61,7 @@ MySQL:
 - `pull_history.py`: past seasons' player totals (one call a season), the model's history.
 - `pull_projections.py`: this season's projections: our model and ESPN's. Other sources load
   with `import_projections.py players <csv> --source <name>` (team wins: `teams <csv>`).
-- `update_daily_stats.py` / `update_daily_stats_efficient.py`: daily fantasy-point updates,
-  scoped to teams that played on a given date
+- `update_daily_stats.py`: daily box scores, scoped to teams that played on a given date
 - `create_daily_stats_table.py`: one-time table setup
 
 `stats.nba.com` rate-limits aggressively and occasionally goes fully unresponsive; the ingest
@@ -86,8 +85,7 @@ Fantasy/
 │   └── package.json
 ├── requirements.txt             # Dependencies for the data-ingest scripts (root level)
 ├── pull_api_data.py             # NBA API backfill (players, rosters, game logs)
-├── update_daily_stats.py        # Daily fantasy stats updater
-├── update_daily_stats_efficient.py
+├── update_daily_stats.py        # Daily box scores (Daily Stats tab)
 ├── fantasy_database.py          # Peewee models: Player, Team, Game, FantasyTeam, DailyPlayerStats
 ├── pull_technical_fouls.py      # Technical fouls from play-by-play
 ├── leagues.py                   # League rules: category catalog, settings schema, CRUD

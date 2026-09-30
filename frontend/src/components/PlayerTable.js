@@ -1,30 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import DraftModal from './DraftModal';
 import { calculateCustomZScores, calculateCustomAuctionValues } from '../services/api';
+import { weekRange } from '../weeks';
 
 // API field suffix for each stats choice ('proj' = this season's projection).
 const PERIOD_SUFFIX = { season: '_season', '5': '_5', '10': '_10', projected: '_projected', proj: '_proj' };
 
-const formatWeekRange = ({ start, end }) => {
-  const [a, b] = [start, end].map(d => { const [y, m, day] = d.split('-').map(Number); return new Date(y, m - 1, day); });
-  const month = (d) => d.toLocaleDateString('en-US', { month: 'short' });
-  return a.getMonth() === b.getMonth() ? `${month(a)} ${a.getDate()}-${b.getDate()}` : `${month(a)} ${a.getDate()} - ${month(b)} ${b.getDate()}`;
-};
-
 // priceExponent: null means the league's own draft.price_exponent (the server's default values).
+// punts: categories left out of value (the tab's view state), changed through onPuntsChange.
 // draftMode: before the league's draft, hide in-season columns (trends).
 // draftPlan: the Draft Day data (/api/draft-day) when it belongs to this league: adds Likely $ and
 // Max bid, the max following the Value column (share of it by price band, stars at break-even).
-const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', draftMode = false, draftPlan = null }) => {
+const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange, draftMode = false, draftPlan = null }) => {
   // The league's categories, in display order, with labels and percent/inverse flags.
   const categoryMeta = config?.categories || [];
   const CATEGORIES = categoryMeta.map(c => c.key);
   const CATEGORY_NAMES = Object.fromEntries(categoryMeta.map(c => [c.key, c.label]));
   const PERCENTAGE_CATEGORIES = categoryMeta.filter(c => c.percent).map(c => c.key);
+  const caps = config?.capabilities || {};
+  // Snake and offline drafts: the round a player's rank goes in, from the team count.
+  const numTeams = config?.league?.settings?.num_teams || 1;
   const [sortConfig, setSortConfig] = useState({ key: 'overall_rank', direction: 'asc' });
   const [draftModalPlayer, setDraftModalPlayer] = useState(null);
-  const [puntCategories, setPuntCategories] = useState([]);
-  const [includedCategories, setIncludedCategories] = useState(CATEGORIES);
+  const includedCategories = CATEGORIES.filter(c => !puntCategories.includes(c));
   const [customScores, setCustomScores] = useState({});
   const [loadingCustomScores, setLoadingCustomScores] = useState(false);
   const [customAuctionValues, setCustomAuctionValues] = useState({});
@@ -38,14 +36,22 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     }
   }, [customScores]);
 
-  // Punted scores are per timeframe: refetch them when the timeframe changes
+  // Punted scores are per timeframe: fetched for the punts (restored ones too) and the timeframe.
+  const puntKey = puntCategories.join(',');
   useEffect(() => {
-    if (puntCategories.length === 0) return;
+    if (puntCategories.length === 0) {
+      setCustomScores({});
+      return;
+    }
+    let cancelled = false;
+    setLoadingCustomScores(true);
     calculateCustomZScores(puntCategories, statType)
-      .then(response => setCustomScores(response.custom_scores))
-      .catch(error => console.error('Error calculating custom z-scores:', error));
+      .then(response => { if (!cancelled) setCustomScores(response.custom_scores); })
+      .catch(error => console.error('Error calculating custom z-scores:', error))
+      .finally(() => { if (!cancelled) setLoadingCustomScores(false); });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statType]);
+  }, [puntKey, statType]);
 
   // Force re-sort when statType changes to update OVR and rankings
   useEffect(() => {
@@ -70,7 +76,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
       })
       .finally(() => { if (!cancelled) setLoadingAuctionValues(false); });
     return () => { cancelled = true; };
-  }, [priceExponent, puntCategories, statType]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceExponent, puntKey, statType]);
 
   // The field for the selected stats: periodKey('z_score') -> 'z_score_season' etc.
   const periodKey = (base) => `${base}${PERIOD_SUFFIX[statType] || '_projected'}`;
@@ -90,32 +97,9 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     return Math.max(1, Math.round(value * share));
   };
 
-  // Handle category inclusion changes (unchecked = punt)
-  const handleCategoryInclusionChange = async (category) => {
-    const newIncludedCategories = includedCategories.includes(category)
-      ? includedCategories.filter(cat => cat !== category)
-      : [...includedCategories, category];
-    
-    setIncludedCategories(newIncludedCategories);
-    
-    // Calculate punt categories (excluded from included categories)
-    const newPuntCategories = CATEGORIES.filter(cat => !newIncludedCategories.includes(cat));
-    setPuntCategories(newPuntCategories);
-    
-    if (newPuntCategories.length > 0) {
-      setLoadingCustomScores(true);
-      try {
-        const response = await calculateCustomZScores(newPuntCategories, statType);
-        setCustomScores(response.custom_scores);
-      } catch (error) {
-        console.error('Error calculating custom z-scores:', error);
-      } finally {
-        setLoadingCustomScores(false);
-      }
-    } else {
-      setCustomScores({});
-    }
-  };
+  // Unchecking a category punts it (the scores refetch through the effect above)
+  const handleCategoryInclusionChange = (category) => onPuntsChange?.(puntCategories.includes(category)
+    ? puntCategories.filter(c => c !== category) : [...puntCategories, category]);
 
   // Get custom rank display with change
   const getCustomRankDisplay = (playerName, originalRank) => {
@@ -474,8 +458,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   Player <SortIcon columnKey="name" />
                 </div>
               </th>
-              {config.show_auction_price && (
-                <th 
+              {caps.auction ? (
+                <th
                   className="table-header cursor-pointer hover:bg-gray-600 w-16"
                   onClick={() => handleSort('auction_value')}
                 >
@@ -483,6 +467,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     Value <SortIcon columnKey="auction_value" />
                   </div>
                 </th>
+              ) : (
+                <th className="table-header w-12" title={`The draft round his rank goes in (${numTeams} teams)`}>Rd</th>
               )}
               {draftPlan && (
                 <>
@@ -504,12 +490,15 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     className={`table-header w-24 ${isPunted ? 'opacity-40' : ''}`}
                   >
                     <div className="flex items-center justify-center space-x-1">
-                      <input
-                        type="checkbox"
-                        checked={includedCategories.includes(category)}
-                        onChange={() => handleCategoryInclusionChange(category)}
-                        className="h-3 w-3 text-nba-orange focus:ring-nba-orange border-gray-500 rounded bg-gray-600"
-                      />
+                      {caps.punts && (
+                        <input
+                          type="checkbox"
+                          checked={includedCategories.includes(category)}
+                          onChange={() => handleCategoryInclusionChange(category)}
+                          title="Uncheck to punt: leave it out of value"
+                          className="h-3 w-3 text-nba-orange focus:ring-nba-orange border-gray-500 rounded bg-gray-600"
+                        />
+                      )}
                       <div 
                         className="flex items-center cursor-pointer hover:bg-gray-600 px-2 py-1 rounded"
                         onClick={() => handleSort(`stats.${category}.value`)}
@@ -566,20 +555,24 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                       )}
                     </div>
                     <div className="text-xs text-gray-400">
-                      {player.position} | {player.team_abv || 'N/A'}
+                      {player.positions?.length ? player.positions.join('/') : player.position} | {player.team_abv || 'N/A'}
                       {[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined && (
                         <React.Fragment key={i}>
                           {' | '}
                           <span className="text-gray-300">{player[i ? 'next_week_games' : 'current_week_games']} GP</span>
-                          <span className="text-gray-500"> ({formatWeekRange(week)})</span>
+                          <span className="text-gray-500"> ({weekRange(week)})</span>
                         </React.Fragment>
                       ))}
                     </div>
                   </div>
                 </td>
-                {config.show_auction_price && (
+                {caps.auction ? (
                   <td className="table-cell text-gray-300 font-medium">
                     ${getAuctionValue(player)}
+                  </td>
+                ) : (
+                  <td className="table-cell text-gray-400">
+                    {Math.ceil((customScores[player.name]?.custom_z_rank || getOverallRank(player) || 0) / numTeams) || '-'}
                   </td>
                 )}
                 {draftPlan && (() => {

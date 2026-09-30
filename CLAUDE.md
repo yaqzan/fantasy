@@ -21,7 +21,7 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 - `python import_projections.py players|teams <csv> [--source X]` - load another projection source
 - `python pull_fantrax.py projections|techs --league <fantrax id>` - Fantrax projections / past techs (saved login)
 - `python pull_fantrax.py teams --league <fantrax id> [--apply]` - sync team names by Fantrax team id
-- `python lineup_optimizer.py [--league <id>] [--pickup]` - this week's matchup in the terminal
+- `python lineup_optimizer.py [--league <id>] [--moves]` - this week's matchup (and best pickups) in the terminal
 - `ops\windows\install-tasks.ps1 -Controller C:\Development\server.ps1` - watchdog task; ELEVATED shell
 
 ## Invariants

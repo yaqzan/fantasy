@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getDailyStats, updateDailyStats } from '../services/api';
 
-const DailyStats = () => {
+// NBA box scores for a date. Points leagues rank by the league's own fantasy points; category
+// leagues have no points column.
+const DailyStats = ({ config }) => {
+  const points = config?.capabilities?.scoring === 'points';
   const [dailyStats, setDailyStats] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -149,7 +152,7 @@ const DailyStats = () => {
                 <th className="table-header w-16 text-center">3P%</th>
                 <th className="table-header w-16 text-center">FT%</th>
                 <th className="table-header w-16 text-center">+/-</th>
-                <th className="table-header w-20 text-center">FP</th>
+                {points && <th className="table-header w-20 text-center" title="Fantasy points, this league's weights">FP</th>}
               </tr>
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
@@ -206,11 +209,13 @@ const DailyStats = () => {
                   <td className="table-cell text-center text-gray-300">
                     {stat.plus_minus || 0}
                   </td>
-                  <td className="table-cell text-center">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-nba-orange text-white">
-                      {stat.fantasy_points || 0}
-                    </span>
-                  </td>
+                  {points && (
+                    <td className="table-cell text-center">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-nba-orange text-white">
+                        {stat.fantasy_points || 0}
+                      </span>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

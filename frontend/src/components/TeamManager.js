@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  createFantasyTeam, deleteFantasyTeam, getTeamPlayers, undraftPlayer, updateFantasyTeam, eliminateFantasyTeam, restoreFantasyTeam,
+  createFantasyTeam, deleteFantasyTeam, getTeamRosters, undraftPlayer, updateFantasyTeam, eliminateFantasyTeam, restoreFantasyTeam,
   errorMessage,
 } from '../services/api';
 
-const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, rosterSize = 14, guillotine = false }) => {
+// The league's teams and rosters. Roster size and slots follow the league; Eliminate/Restore only
+// show in guillotine leagues.
+const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
+  const rosterSize = config?.league?.settings?.roster?.size || 13;
+  const guillotine = Boolean(config?.capabilities?.guillotine);
+  const hasSlots = Boolean(config?.capabilities?.positions?.length);
+  const [teamScores, setTeamScores] = useState({});
   const [showModal, setShowModal] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamAbbrev, setNewTeamAbbrev] = useState('');
@@ -41,27 +47,15 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
     return () => window.removeEventListener('resize', handleResize);
   }, [teams.length, calculateTeamBlockWidth]);
 
-  // Load team players when teams change
+  // Every roster in one request (starters and scores come from the league's slots).
   useEffect(() => {
-    const loadTeamPlayers = async () => {
-      const playersData = {};
-      for (const team of teams) {
-        try {
-          const response = await getTeamPlayers(team.id);
-          playersData[team.id] = response.players || [];
-          console.log(`Loaded ${playersData[team.id].length} players for team ${team.id} (${team.name})`);
-        } catch (error) {
-          console.error(`Error loading players for team ${team.id} (${team.name}):`, error);
-          playersData[team.id] = [];
-        }
-      }
-      console.log('All team players loaded:', playersData);
-      setTeamPlayers(playersData);
-    };
-
-    if (teams.length > 0) {
-      loadTeamPlayers();
-    }
+    if (teams.length === 0) return;
+    getTeamRosters()
+      .then(data => {
+        setTeamPlayers(Object.fromEntries(teams.map(t => [t.id, data.teams[t.id]?.players || []])));
+        setTeamScores(Object.fromEntries(teams.map(t => [t.id, data.teams[t.id]?.score || 0])));
+      })
+      .catch(error => console.error('Error loading rosters:', error));
   }, [teams, refreshTrigger]);
 
   const handleCreateTeam = async (e) => {
@@ -191,22 +185,8 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
     return 'text-gray-400';                          // Neutral gray
   };
 
-  // Team average score over its best `activeSlots` players (the ones that score)
-  const getTeamAverageScore = (teamId) => {
-    const players = teamPlayers[teamId] || [];
-    if (players.length === 0) return 0;
-    
-    // Filter out players with 0 z_score and sort by z_score descending
-    const activePlayers = players
-      .filter(player => (player.z_score || 0) > 0)
-      .sort((a, b) => (b.z_score || 0) - (a.z_score || 0));
-    
-    if (activePlayers.length === 0) return 0;
-    
-    const starters = activePlayers.slice(0, activeSlots);
-    const totalScore = starters.reduce((sum, player) => sum + (player.z_score || 0), 0);
-    return Math.round(totalScore / starters.length);
-  };
+  // The starters' average OVR (the server picks the starters that fit the league's slots)
+  const getTeamAverageScore = (teamId) => teamScores[teamId] || 0;
 
   // Sort teams by average score (descending)
   const sortedTeams = [...teams].sort((a, b) => {
@@ -216,12 +196,6 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
     return scoreB - scoreA;
   });
   
-  // Debug: Log the last team in sorted order
-  if (sortedTeams.length > 0) {
-    const lastTeam = sortedTeams[sortedTeams.length - 1];
-    const lastTeamPlayers = teamPlayers[lastTeam.id] || [];
-    console.log(`Last team in sorted order: ${lastTeam.name} (ID: ${lastTeam.id}) with ${lastTeamPlayers.length} players`);
-  }
 
   return (
     <div className="bg-gray-800 rounded-lg shadow-lg p-6">
@@ -250,6 +224,12 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
                     {getTeamAverageScore(team.id)}
                   </div>
                 )}
+                {(teamPlayers[team.id] || []).length > 0 && (
+                  <p className={`text-[10px] leading-tight ${(teamPlayers[team.id] || []).length > rosterSize ? 'text-red-400' : 'text-gray-500'}`}
+                     title={`Roster spots used (the league has ${rosterSize})`}>
+                    {(teamPlayers[team.id] || []).length}/{rosterSize}
+                  </p>
+                )}
                 
                 {/* Edit icon - only visible on hover */}
                 <button
@@ -267,7 +247,6 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
                 {teamPlayers[team.id] && teamPlayers[team.id].length > 0 ? (
                   <div className="space-y-0.5">
                     {teamPlayers[team.id]
-                      .sort((a, b) => (b.z_score || 0) - (a.z_score || 0))
                       .slice(0, Math.max(rosterSize, 10))
                       .map((player, index) => (
                       <div key={index} className="text-xs text-gray-400 truncate flex items-center justify-between group/item">
@@ -275,6 +254,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, activeSlots = 11, ro
                           <span className={`font-medium ${getZScoreColor(player.z_score)} w-8 text-right inline-block`}>
                             {player.z_score !== 0 ? player.z_score : '-'}
                           </span>
+                          {hasSlots && <span className="text-gray-500 text-[10px] w-7 inline-block" title="Starting slot">{player.slot || 'BN'}</span>}
                           {player.player_name}
                           {player.is_injured && (
                             <span className="inline-flex items-center px-1 py-0.5 rounded-full text-[10px] font-semibold bg-red-600 text-white">

@@ -1,860 +1,195 @@
-import React, { useState, useEffect } from 'react';
-import { analyze, analyzeCustom, errorMessage } from '../services/api';
+import React, { useEffect, useState } from 'react';
+import { analyze, errorMessage } from '../services/api';
+import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
+import { WeekSelect, defaultWeekStart, validWeek, selectClass, shortDate } from '../weeks';
 
-const LineupOptimizer = ({ league, onEditLeague }) => {
-  // The league's categories in display order, with labels
-  const CATEGORY_ORDER = (league?.categories || []).map(c => c.key);
-  const CATEGORY_LABELS = Object.fromEntries((league?.categories || []).map(c => [c.key, c.label]));
-  const totalCategories = CATEGORY_ORDER.length || 1;
-  const [errorSchedule, setErrorSchedule] = useState(null);
-  const [analysisData, setAnalysisData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [contentLoading, setContentLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [activeWeek, setActiveWeek] = useState(0);
-  const [hasSetDefaultWeek, setHasSetDefaultWeek] = useState(false);
-  const [pickupAnalyses, setPickupAnalyses] = useState({
-    '5_5': null,
-    '5_10': null,
-    '5_projected': null,
-    '10_5': null,
-    '10_10': null,
-    '10_projected': null,
-    'projected_5': null,
-    'projected_10': null,
-    'projected_projected': null
-  });
-  const [currentAnalyses, setCurrentAnalyses] = useState({
-    'season': null,
-    '5': null,
-    '10': null,
-    'projected': null
-  });
-  const [customPickup, setCustomPickup] = useState(null);
-  const [customDrop, setCustomDrop] = useState(null);
-  const [customAnalysis, setCustomAnalysis] = useState(null);
-  const [loadingCustom, setLoadingCustom] = useState(false);
-  const [pickupSearchTerm, setPickupSearchTerm] = useState('');
-  const [showPickupDropdown, setShowPickupDropdown] = useState(false);
+const pct = (x) => `${Math.round(x * 100)}%`;
+const chanceClass = (chance) => chance == null ? 'text-gray-200' : chance > 0.55 ? 'text-emerald-300' : chance < 0.45 ? 'text-red-300' : 'text-gray-200';
 
-  const fetchAnalysis = async (weekStart = null, isInitialLoad = false) => {
-    if (isInitialLoad) {
-    setLoading(true);
-    } else {
-      setContentLoading(true);
-    }
-    setError(null);
-    
-    // Clear stale data to prevent race conditions
-    setCurrentAnalyses({ 'season': null, '5': null, '10': null, 'projected': null });
-    setPickupAnalyses({
-      '5_5': null, '5_10': null, '5_projected': null,
-      '10_5': null, '10_10': null, '10_projected': null,
-      'projected_5': null, 'projected_10': null, 'projected_projected': null
-    });
-    
-    try {
-      const data = await analyze(weekStart, 'projected', false);
-      setAnalysisData(data);
-      setErrorSchedule(null);
-      
-      // After main analysis loads, start loading current analyses and pickups sequentially
-      if (!isInitialLoad) {
-        fetchCurrentAnalyses(weekStart);
-        fetchPickupAnalyses(weekStart);
-      }
-    } catch (err) {
-      setError(errorMessage(err));
-      setErrorSchedule(err?.response?.data?.fantasy_schedule || null);
-    } finally {
-      if (isInitialLoad) {
-      setLoading(false);
-      } else {
-        setContentLoading(false);
-      }
-    }
+// One side of the week: my roster as it is, after the best pickups, or a what-if. Categories
+// leagues show each category with my chance of winning it; points leagues the points and the chance
+// of winning the week. With no opponent yet, my totals only.
+const WeekCard = ({ title, side, meta, points, opponent, note }) => {
+  if (!side) return null;
+  const format = (key, value) => {
+    const m = meta[key] || {};
+    if (value == null) return '-';
+    return m.percent ? value.toFixed(3) : (key === 'WIN%' || key === 'TECH') ? value.toFixed(2) : value.toFixed(1);
   };
-
-  const fetchCurrentAnalyses = async (weekStart = null) => {
-    const timeframes = ['season', '5', '10', 'projected'];
-    
-    for (const timeframe of timeframes) {
-      try {
-        // For season average, pass empty string or 'season' - backend should handle it
-        const timeframeParam = timeframe === 'season' ? '' : timeframe;
-        const data = await analyze(weekStart, timeframeParam, false);
-        setCurrentAnalyses(prev => ({
-          ...prev,
-          [timeframe]: data
-        }));
-      } catch (err) {
-        console.error(`Error loading current analysis for ${timeframe} stats:`, err);
-      }
-    }
-  };
-
-  const fetchPickupAnalyses = async (weekStart = null) => {
-    const pickupTimeframes = ['5', '10', 'projected'];
-    const statTimeframes = ['5', '10', 'projected'];
-    
-    // Fetch all 9 combinations (3 pickup timeframes × 3 stat timeframes)
-    for (const pickupTimeframe of pickupTimeframes) {
-      for (const statTimeframe of statTimeframes) {
-        try {
-          const data = await analyze(weekStart, statTimeframe, true, pickupTimeframe);
-          setPickupAnalyses(prev => ({
-            ...prev,
-            [`${pickupTimeframe}_${statTimeframe}`]: data
-          }));
-        } catch (err) {
-          console.error(`Error loading pickup analysis for ${pickupTimeframe} pickup, ${statTimeframe} stats:`, err);
-        }
-      }
-    }
-  };
-
-  const calculateCustomLineup = async () => {
-    if (!customPickup) return;
-    setLoadingCustom(true);
-    try {
-      // The backend re-picks the best lineup with the pickup in (and the drop out) for every timeframe
-      const data = await analyzeCustom(analysisData?.matchup?.week_start, customPickup, customDrop || null);
-      setCustomAnalysis(data);
-    } catch (err) {
-      console.error('Error calculating custom lineup:', err);
-      setCustomAnalysis(null);
-    } finally {
-      setLoadingCustom(false);
-    }
-  };
-
-  useEffect(() => {
-    // Initial fetch to get fantasy schedule
-    const initializeAnalysis = async () => {
-      await fetchAnalysis(null, true);
-      // Start loading current analyses and pickups after initial load
-      fetchCurrentAnalyses(null);
-      fetchPickupAnalyses(null);
-    };
-    initializeAnalysis();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    // Set default active week once we have the schedule (only once)
-    if (analysisData?.fantasy_schedule && !hasSetDefaultWeek) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); // Normalize to start of day
-      const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Saturday or Sunday
-      
-      // Find the current week (week that contains today)
-      let currentWeekIndex = analysisData.fantasy_schedule.findIndex(([dateStr]) => {
-        // Parse date string directly to avoid timezone issues
-        const [year, month, day] = dateStr.split('-').map(Number);
-        const weekStart = new Date(year, month - 1, day);
-        weekStart.setHours(0, 0, 0, 0);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 6); // Week is 7 days
-        return today >= weekStart && today <= weekEnd;
-      });
-      
-      // If current week not found, default to first week
-      if (currentWeekIndex === -1) {
-        currentWeekIndex = 0;
-      }
-      
-      // If it's Saturday or Sunday, show upcoming week instead
-      let selectedWeekIndex = currentWeekIndex;
-      if (isWeekend) {
-        // Find the next week after current week
-        const upcomingWeekIndex = analysisData.fantasy_schedule.findIndex(([dateStr], index) => {
-          return index > currentWeekIndex;
-        });
-        
-        if (upcomingWeekIndex !== -1) {
-          selectedWeekIndex = upcomingWeekIndex;
-        }
-      }
-      
-      setActiveWeek(selectedWeekIndex);
-      setHasSetDefaultWeek(true);
-      
-      // Fetch analysis for the selected week
-      const [weekStart] = analysisData.fantasy_schedule[selectedWeekIndex];
-      fetchAnalysis(weekStart);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysisData, hasSetDefaultWeek]);
-
-  const formatScore = (score, category = null) => {
-    if (typeof score !== 'number') return '0.0';
-    
-    // For percentage categories, show 3 decimal places
-    if (category && category.includes('%') && category !== 'WIN%') {
-      return score.toFixed(3);
-    }
-    if (category === 'TECH' || category === 'WIN%') return score.toFixed(2);
-    
-    return score.toFixed(1);
-  };
-
-  const formatMatchupScore = (score) => {
-    if (typeof score !== 'number') return '0-0';
-    // Score represents the actual number of wins
-    const wins = Math.round(score);
-    const losses = totalCategories - wins;
-    return `${wins}-${losses}`;
-  };
-
-  const getScoreColor = (score) => {
-    const halfCategories = totalCategories / 2;
-    
-    if (score > halfCategories) return 'text-green-600'; // Winning
-    if (score < halfCategories) return 'text-red-600';   // Losing
-    return 'text-gray-600'; // Tied
-  };
-
-  // const getMarginColor = (margin) => {
-  //   if (margin > 0) return 'text-green-600 font-semibold';
-  //   if (margin < 0) return 'text-red-600 font-semibold';
-  //   return 'text-gray-600';
-  // };
-
-  const getCategoryName = (category) => CATEGORY_LABELS[category] || category;
-
-  const formatWeekTab = (weekIndex, scheduleEntry) => {
-    const [startDate] = scheduleEntry;
-    const weekNum = weekIndex + 1;
-    // Parse date string directly to avoid timezone issues
-    const [year, month, day] = startDate.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    const monthName = date.toLocaleDateString('en-US', { month: 'short' });
-    return `Week ${weekNum} (${monthName} ${day})`;
-  };
-
-  const renderTableCell = (matchupData, headerText, pickupDropInfo = null) => {
-    if (!matchupData) {
-      return (
-        <div className="flex flex-col min-h-[200px] items-center">
-          {pickupDropInfo && <div className="h-16 mb-2 flex items-center justify-center">{pickupDropInfo}</div>}
-          <div className="bg-gray-700 rounded border border-gray-600 p-4 text-center text-gray-500 text-sm max-w-[256px] w-full">
-            No data
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex flex-col items-center">
-        {pickupDropInfo && (
-          <div className="h-16 mb-2 flex items-center justify-center w-full">
-            {pickupDropInfo}
-          </div>
+  const fpts = side.categories.FPTS;
+  return (
+    <div className="bg-gray-700 rounded-lg border border-gray-600 p-4 flex-1 min-w-[280px]">
+      <h3 className="text-sm font-semibold text-gray-300 mb-1">{title}</h3>
+      {note}
+      <div className="mb-3">
+        {points && fpts ? (
+          <p className="text-2xl font-bold text-white">
+            {fpts.mine.toFixed(0)}
+            {fpts.theirs != null && <span className="text-gray-400 text-lg"> vs {fpts.theirs.toFixed(0)}</span>}
+            {fpts.chance != null && <span className={`ml-2 text-lg ${chanceClass(fpts.chance)}`}>{pct(fpts.chance)} to win</span>}
+          </p>
+        ) : side.expected != null ? (
+          <p className="text-2xl font-bold text-white">{side.expected.toFixed(1)}<span className="text-gray-400 text-lg"> of {Object.keys(side.categories).length} categories expected</span></p>
+        ) : (
+          <p className="text-sm text-gray-400">Opponent TBD: your projected week only.</p>
         )}
-        {!pickupDropInfo && <div className="h-16 mb-2"></div>}
-        
-        <h4 className="text-sm font-semibold text-gray-400 mb-2">{headerText}</h4>
-        <div className="flex items-center justify-between mb-2 max-w-[256px] w-full">
-          <div className="text-center">
-            <p className="text-lg font-semibold text-white">
-              {Object.values(matchupData.my_team_player_games || {}).reduce((sum, games) => sum + games, 0)}
-            </p>
-            <p className="text-xs text-gray-400">Your Games</p>
-          </div>
-          <div className="text-center">
-            <p className={`text-2xl font-bold ${getScoreColor(matchupData.score)}`}>
-              {formatMatchupScore(matchupData.score)}
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="text-lg font-semibold text-white">
-              {Object.values(matchupData.their_team_player_games || {}).reduce((sum, games) => sum + games, 0)}
-            </p>
-            <p className="text-xs text-gray-400">{matchupData.opponent} Games</p>
-          </div>
-        </div>
-        
-        <div className="bg-gray-600 rounded border border-gray-500 overflow-hidden max-w-[256px] w-full">
-          <div className="text-xs text-gray-400 bg-gray-700 px-3 py-2 border-b border-gray-500">
-            <div className="grid grid-cols-3 gap-2">
-              <div className="text-center">Your Team</div>
-              <div className="text-center">Category</div>
-              <div className="text-center">Opponent</div>
-            </div>
-          </div>
-          <div>
-            {Object.entries(matchupData.categories || {})
-              .sort(([a], [b]) => {
-                const indexA = CATEGORY_ORDER.indexOf(a);
-                const indexB = CATEGORY_ORDER.indexOf(b);
-                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                if (indexA !== -1) return -1;
-                if (indexB !== -1) return 1;
-                return 0;
-              })
-              .map(([category, data]) => {
-                const isWin = data.margin > 0;
-                const isLoss = data.margin < 0;
-                
-                return (
-                  <div key={category} className="relative px-3 py-2 border-b border-gray-600/30 last:border-b-0 hover:bg-gray-600/20 transition-all duration-200">
-                    {isWin && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-emerald-400/8 to-transparent rounded-md"></div>
-                    )}
-                    {isLoss && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 via-red-400/8 to-transparent rounded-md"></div>
-                    )}
-                    
-                    <div className="relative grid grid-cols-3 gap-3 items-center">
-                      <div className="text-right">
-                        <div className={`text-lg font-bold ${isWin ? 'text-emerald-300' : isLoss ? 'text-red-300' : 'text-gray-200'}`}>
-                          {formatScore(data.your_team, category)}
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-gray-500 text-xs font-medium uppercase tracking-wide">
-                          {getCategoryName(category)}
-                        </div>
-                        <div className={`text-xs font-semibold ${
-                          isWin ? 'text-emerald-400' : 
-                          isLoss ? 'text-red-400' : 
-                          'text-gray-500'
-                        }`}>
-                          {data.margin > 0 ? '+' : ''}{formatScore(data.margin, category)}
-                        </div>
-                      </div>
-                      <div className="text-left">
-                        <div className={`text-lg font-bold ${isLoss ? 'text-emerald-300' : isWin ? 'text-red-300' : 'text-gray-200'}`}>
-                          {formatScore(data.opponent, category)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
       </div>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="bg-gray-800 rounded-lg shadow-xl p-6">
-        <div className="flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-nba-orange"></div>
-          <span className="ml-2 text-white">Analyzing lineup...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    const schedule = errorSchedule || analysisData?.fantasy_schedule || [];
-    return (
-      <div className="bg-gray-800 rounded-lg shadow-xl p-6">
-        {schedule.length > 0 && (
-          <div className="mb-6 flex flex-wrap gap-2">
-            {schedule.map((scheduleEntry, index) => (
-              <button
-                key={index}
-                onClick={() => { setActiveWeek(index); setHasSetDefaultWeek(true); fetchAnalysis(scheduleEntry[0]); }}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeWeek === index ? 'bg-nba-orange text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-                }`}
-              >
-                {formatWeekTab(index, scheduleEntry)}{scheduleEntry[1] ? '' : ' ?'}
-              </button>
+      {!points && (
+        <table className="w-full text-sm mb-3">
+          <thead>
+            <tr className="text-xs text-gray-400">
+              <th className="text-left font-normal">Category</th><th className="text-right font-normal">You</th>
+              {opponent && <><th className="text-right font-normal">{opponent}</th><th className="text-right font-normal">Win</th></>}
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(side.categories).map(([key, row]) => (
+              <tr key={key} className="border-t border-gray-600/40">
+                <td className="text-gray-400 py-0.5">{meta[key]?.label || key}</td>
+                <td className={`text-right font-semibold ${chanceClass(row.chance)}`}>{format(key, row.mine)}</td>
+                {opponent && <><td className="text-right text-gray-300">{format(key, row.theirs)}</td>
+                  <td className={`text-right ${chanceClass(row.chance)}`}>{pct(row.chance)}</td></>}
+              </tr>
             ))}
+          </tbody>
+        </table>
+      )}
+      <div className="text-xs text-gray-400 space-y-0.5">
+        {side.players.map(p => (
+          <div key={p.name} className={`flex justify-between ${p.plays ? '' : 'opacity-50'}`}>
+            <span className="text-gray-200">{p.name} <span className="text-gray-500">{p.positions.join('/')}</span>{p.injured && <span className="text-red-400"> INJ</span>}</span>
+            <span title="Games he counts for / games his team plays">{p.plays}/{p.games}</span>
           </div>
-        )}
-        <div className="text-center">
-          <p className="font-semibold text-red-400">No analysis for this week</p>
-          <p className="text-sm text-gray-300 mt-1">{error}</p>
-          <div className="mt-3 flex justify-center gap-3">
-            <button onClick={() => fetchAnalysis(schedule[activeWeek]?.[0] || null)} className="px-4 py-2 bg-nba-orange text-white rounded hover:bg-orange-600">
-              Retry
-            </button>
-            {onEditLeague && (
-              <button onClick={onEditLeague} className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500">
-                League settings
-              </button>
-            )}
-          </div>
-        </div>
+        ))}
       </div>
-    );
-  }
+    </div>
+  );
+};
 
-  if (!analysisData) {
-    return (
-      <div className="bg-gray-800 rounded-lg shadow-xl p-6">
-        <p className="text-gray-300 text-center">No analysis data available</p>
-      </div>
-    );
-  }
+// The week's matchup, the best pickups for the week's claims and a what-if, on one model
+// (lineup_optimizer.py): expected categories won, or the chance of winning a points week.
+const LineupOptimizer = ({ config, onEditLeague }) => {
+  const league = config.league;
+  const weeks = league?.weeks || [];
+  const points = config.capabilities?.scoring === 'points';
+  const meta = Object.fromEntries((config.categories || []).map(c => [c.key, c]));
+  const [view, setView] = useLeagueViewState(league?.id, 'lineup', {
+    week: defaultWeekStart(weeks), statType: config.default_stat_type || 'projected',
+  }, (picked) => validWeek(weeks)(validStat(config)(picked)));
+  const [data, setData] = useState(null);
+  const [moves, setMoves] = useState(null);
+  const [whatIf, setWhatIf] = useState(null);
+  const [adds, setAdds] = useState([]);
+  const [drops, setDrops] = useState([]);
+  const [pickSearch, setPickSearch] = useState('');
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [reload, setReload] = useState(0);
 
-  const { matchup, pickups = [] } = analysisData;
-  
-  // Use consistent player games from main analysis for all Current column cells
-  const canonicalMyTeamPlayerGames = matchup?.my_team_player_games || {};
-  const canonicalTheirTeamPlayerGames = matchup?.their_team_player_games || {};
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setData(null);
+    setMoves(null);
+    setWhatIf(null);
+    analyze(view.week, view.statType)
+      .then(result => {
+        if (cancelled) return;
+        setData(result);
+        return analyze(view.week, view.statType, { moves: true }).then(m => { if (!cancelled) setMoves(m.moves); });
+      })
+      .catch(err => { if (!cancelled) setError(errorMessage(err)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [view.week, view.statType, reload]);
+
+  const runWhatIf = () => {
+    analyze(view.week, view.statType, { adds, drops })
+      .then(result => setWhatIf(result.what_if))
+      .catch(err => setError(errorMessage(err)));
+  };
+
+  const opponent = data?.opponent === 'league average' ? 'League avg' : data?.opponent;
+  const matches = pickSearch ? (data?.free_agents || []).filter(p => p.toLowerCase().includes(pickSearch.toLowerCase())).slice(0, 8) : [];
+  const claims = data?.claims_per_week || config.capabilities?.claims_per_week || 1;
 
   return (
     <div className="bg-gray-800 rounded-lg shadow-xl p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-nba-orange">Lineup Optimizer</h2>
-        <button 
-          onClick={() => fetchAnalysis(analysisData?.matchup?.week_start || null)}
-          className="px-4 py-2 bg-nba-orange text-white rounded hover:bg-orange-600 transition-colors"
-        >
-          Refresh Analysis
-        </button>
-      </div>
-
-      {/* Matchup Analysis */}
-      <div className="mb-8">
-        {/* Week Tabs */}
-        {analysisData?.fantasy_schedule && (
-          <div className="mb-4">
-            <div className="flex flex-wrap gap-2">
-              {analysisData.fantasy_schedule.map((scheduleEntry, index) => (
-                <button
-                  key={index}
-                  onClick={() => {
-                    setActiveWeek(index);
-                    const [weekStart] = scheduleEntry;
-                    console.log('scheduleEntry:', scheduleEntry, 'weekStart:', weekStart);
-                    fetchAnalysis(weekStart);
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeWeek === index
-                      ? 'bg-nba-orange text-white'
-                      : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-                  }`}
-                >
-                  {formatWeekTab(index, scheduleEntry)}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        <div className="relative overflow-x-auto w-full">
-          {/* Content Loading Overlay */}
-          {contentLoading && (
-            <div className="absolute inset-0 bg-gray-800 bg-opacity-75 rounded-lg flex items-center justify-center z-10">
-              <div className="text-white text-lg">Loading...</div>
-            </div>
-          )}
-          
-          {/* 4x5 Grid Layout: Rows (season average, last 5, last 10, projected) × Columns (Current, last 5 pickup, last 10 pickup, projected pickup, Manual pickup) */}
-          <div style={{ display: 'grid', gridTemplateColumns: '120px repeat(5, minmax(280px, 1fr))', gridTemplateRows: '40px repeat(4, auto)', gap: '1rem', alignItems: 'start', minWidth: '1600px' }}>
-            {/* Header row */}
-            <div style={{ gridColumn: 1, gridRow: 1 }}></div>
-            <div style={{ gridColumn: 2, gridRow: 1 }} className="text-sm font-semibold text-gray-400 text-center">Current</div>
-            <div style={{ gridColumn: 3, gridRow: 1 }} className="text-sm font-semibold text-gray-400 text-center">Last 5 pickup</div>
-            <div style={{ gridColumn: 4, gridRow: 1 }} className="text-sm font-semibold text-gray-400 text-center">Last 10 pickup</div>
-            <div style={{ gridColumn: 5, gridRow: 1 }} className="text-sm font-semibold text-gray-400 text-center">Projected pickup</div>
-            <div style={{ gridColumn: 6, gridRow: 1 }} className="text-sm font-semibold text-gray-400 text-center">Manual pickup</div>
-            
-            {/* Row 1: Season Average */}
-            <div style={{ gridColumn: 1, gridRow: 2 }} className="text-sm font-semibold text-gray-400 flex items-center">Season Avg</div>
-            {/* Column 1: Current */}
-            <div style={{ gridColumn: 2, gridRow: 2 }}>
-              {(() => {
-                const currentMatchup = currentAnalyses.season?.matchup ? {
-                  ...currentAnalyses.season.matchup,
-                  my_team_player_games: canonicalMyTeamPlayerGames,
-                  their_team_player_games: canonicalTheirTeamPlayerGames
-                } : matchup;
-                const dropsInfo = currentMatchup?.drops && currentMatchup.drops.length > 0 ? (
-                  <div className="text-sm mb-2 text-center">
-                    <div>
-                      <span className="text-red-400 font-semibold">↓ </span>
-                      <span className="text-white text-xs">{currentMatchup.drops.join(', ')}</span>
-                    </div>
-                  </div>
-                ) : null;
-                return renderTableCell(currentMatchup, 'Current', dropsInfo);
-              })()}
-            </div>
-            {/* Column 2: Last 5 pickup */}
-            <div style={{ gridColumn: 3, gridRow: 2 }}>
-              {(() => {
-                const pickupData = pickupAnalyses['5_projected']; // Use projected as closest to season average
-                const pickupInfo = pickupData?.matchup?.pickups && pickupData.matchup.pickups.length > 0 ? (
-                  <div className="text-sm mb-2 text-center">
-                    <div className="mb-1">
-                      <span className="text-green-400 font-semibold">↑ </span>
-                      <span className="text-white text-xs">{pickupData.matchup.pickups.join(', ')}</span>
-                    </div>
-                    {pickupData.matchup.drops && pickupData.matchup.drops.length > 0 && (
-                      <div>
-                        <span className="text-red-400 font-semibold">↓ </span>
-                        <span className="text-white text-xs">{pickupData.matchup.drops.join(', ')}</span>
-                      </div>
-                    )}
-                  </div>
-                ) : null;
-                return renderTableCell(pickupData?.matchup, 'Last 5 pickup', pickupInfo);
-              })()}
-            </div>
-            {/* Column 3: Last 10 pickup */}
-            <div style={{ gridColumn: 4, gridRow: 2 }}>
-              {(() => {
-                const pickupData = pickupAnalyses['10_projected'];
-                const pickupInfo = pickupData?.matchup?.pickups && pickupData.matchup.pickups.length > 0 ? (
-                  <div className="text-sm mb-2 text-center">
-                    <div className="mb-1">
-                      <span className="text-green-400 font-semibold">↑ </span>
-                      <span className="text-white text-xs">{pickupData.matchup.pickups.join(', ')}</span>
-                    </div>
-                    {pickupData.matchup.drops && pickupData.matchup.drops.length > 0 && (
-                      <div>
-                        <span className="text-red-400 font-semibold">↓ </span>
-                        <span className="text-white text-xs">{pickupData.matchup.drops.join(', ')}</span>
-                      </div>
-                    )}
-                  </div>
-                ) : null;
-                return renderTableCell(pickupData?.matchup, 'Last 10 pickup', pickupInfo);
-              })()}
-            </div>
-            {/* Column 4: Projected pickup */}
-            <div style={{ gridColumn: 5, gridRow: 2 }}>
-              {(() => {
-                const pickupData = pickupAnalyses['projected_projected'];
-                const pickupInfo = pickupData?.matchup?.pickups && pickupData.matchup.pickups.length > 0 ? (
-                  <div className="text-sm mb-2 text-center">
-                    <div className="mb-1">
-                      <span className="text-green-400 font-semibold">↑ </span>
-                      <span className="text-white text-xs">{pickupData.matchup.pickups.join(', ')}</span>
-                    </div>
-                    {pickupData.matchup.drops && pickupData.matchup.drops.length > 0 && (
-                      <div>
-                        <span className="text-red-400 font-semibold">↓ </span>
-                        <span className="text-white text-xs">{pickupData.matchup.drops.join(', ')}</span>
-                      </div>
-                    )}
-                  </div>
-                ) : null;
-                return renderTableCell(pickupData?.matchup, 'Projected pickup', pickupInfo);
-              })()}
-            </div>
-            {/* Column 5: Manual pickup */}
-            <div style={{ gridColumn: 6, gridRow: 2 }} className="flex flex-col items-center">
-              <div className="h-16 mb-2 flex items-center justify-center w-full max-w-[256px] gap-2">
-                <div className="text-sm relative flex-1">
-                  <div className="relative mb-1">
-                    <input
-                      type="text"
-                      value={customPickup || pickupSearchTerm}
-                      onChange={(e) => {
-                        setPickupSearchTerm(e.target.value);
-                        setShowPickupDropdown(true);
-                        if (!e.target.value) {
-                          setCustomPickup(null);
-                        }
-                      }}
-                      onFocus={() => setShowPickupDropdown(true)}
-                      onBlur={() => setTimeout(() => setShowPickupDropdown(false), 200)}
-                      placeholder="Select pickup..."
-                      className="w-full px-2 py-1 bg-gray-600 text-white text-xs rounded border border-gray-500 focus:outline-none focus:border-nba-orange"
-                    />
-                    {showPickupDropdown && analysisData?.available_players && (
-                      <div className="absolute z-50 w-full mt-1 bg-gray-700 border border-gray-500 rounded max-h-60 overflow-y-auto">
-                        {analysisData.available_players
-                          .filter(p => !pickupSearchTerm || p.toLowerCase().includes(pickupSearchTerm.toLowerCase()))
-                          .slice(0, 100)
-                          .map(player => (
-                            <div
-                              key={player}
-                              onClick={() => {
-                                setCustomPickup(player);
-                                setPickupSearchTerm(player);
-                                setShowPickupDropdown(false);
-                              }}
-                              className="px-2 py-1 text-white text-xs hover:bg-gray-600 cursor-pointer"
-                            >
-                              {player}
-                            </div>
-                          ))
-                        }
-                        {analysisData.available_players.filter(p => !pickupSearchTerm || p.toLowerCase().includes(pickupSearchTerm.toLowerCase())).length === 0 && (
-                          <div className="px-2 py-1 text-gray-400 text-xs">No players found</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <select 
-                    value={customDrop || ''} 
-                    onChange={(e) => setCustomDrop(e.target.value)}
-                    className="w-full px-2 py-1 bg-gray-600 text-white text-xs rounded border border-gray-500"
-                  >
-                    <option value="">Select drop...</option>
-                    {(analysisData?.all_my_team_players || analysisData?.best_lineup || [])
-                      .filter(player => {
-                        return !analysisData?.undroppable_players?.includes(player);
-                      })
-                      .map(player => (
-                        <option key={player} value={player}>{player}</option>
-                      ))
-                    }
-                  </select>
-                </div>
-                <button
-                  onClick={calculateCustomLineup}
-                  disabled={!customPickup || loadingCustom}
-                  className="px-3 py-2 bg-nba-orange text-white text-sm rounded hover:bg-orange-600 disabled:bg-gray-600 disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                  {loadingCustom ? 'Calculating...' : 'Calculate'}
-                </button>
-              </div>
-              
-              <h4 className="text-sm font-semibold text-gray-400 mb-2">Manual pickup</h4>
-              
-              {customAnalysis?.current ? (
-                <>
-                  <div className="flex items-center justify-between mb-2 max-w-[256px] w-full">
-                    <div className="text-center">
-                      <p className="text-lg font-semibold text-white">
-                        {Object.values(customAnalysis.current.my_team_player_games || {}).reduce((sum, games) => sum + games, 0)}
-                      </p>
-                      <p className="text-xs text-gray-400">Your Games</p>
-                    </div>
-                    <div className="text-center">
-                      <p className={`text-2xl font-bold ${getScoreColor(customAnalysis.current.score)}`}>
-                        {formatMatchupScore(customAnalysis.current.score)}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-semibold text-white">
-                        {Object.values(customAnalysis.current.their_team_player_games || {}).reduce((sum, games) => sum + games, 0)}
-                      </p>
-                      <p className="text-xs text-gray-400">{customAnalysis.current.opponent} Games</p>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gray-600 rounded border border-gray-500 overflow-hidden max-w-[256px] w-full">
-                    <div className="text-xs text-gray-400 bg-gray-700 px-3 py-2 border-b border-gray-500">
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="text-center">Your Team</div>
-                        <div className="text-center">Category</div>
-                        <div className="text-center">Opponent</div>
-                      </div>
-                    </div>
-                    <div>
-                      {Object.entries(customAnalysis.current.categories || {})
-                        .sort(([a], [b]) => {
-                          const indexA = CATEGORY_ORDER.indexOf(a);
-                          const indexB = CATEGORY_ORDER.indexOf(b);
-                          if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                          if (indexA !== -1) return -1;
-                          if (indexB !== -1) return 1;
-                          return 0;
-                        })
-                        .map(([category, data]) => {
-                          const isWin = data.margin > 0;
-                          const isLoss = data.margin < 0;
-                          
-                          return (
-                            <div key={category} className="relative px-3 py-2 border-b border-gray-600/30 last:border-b-0 hover:bg-gray-600/20 transition-all duration-200">
-                              {isWin && (
-                                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-emerald-400/8 to-transparent rounded-md"></div>
-                              )}
-                              {isLoss && (
-                                <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 via-red-400/8 to-transparent rounded-md"></div>
-                              )}
-                              
-                              <div className="relative grid grid-cols-3 gap-3 items-center">
-                                <div className="text-right">
-                                  <div className={`text-lg font-bold ${isWin ? 'text-emerald-300' : isLoss ? 'text-red-300' : 'text-gray-200'}`}>
-                                    {formatScore(data.your_team, category)}
-                                  </div>
-                                </div>
-                                <div className="text-center">
-                                  <div className="text-gray-500 text-xs font-medium uppercase tracking-wide">
-                                    {getCategoryName(category)}
-                                  </div>
-                                  <div className={`text-xs font-semibold ${
-                                    isWin ? 'text-emerald-400' : 
-                                    isLoss ? 'text-red-400' : 
-                                    'text-gray-500'
-                                  }`}>
-                                    {data.margin > 0 ? '+' : ''}{formatScore(data.margin, category)}
-                                  </div>
-                                </div>
-                                <div className="text-left">
-                                  <div className={`text-lg font-bold ${isLoss ? 'text-emerald-300' : isWin ? 'text-red-300' : 'text-gray-200'}`}>
-                                    {formatScore(data.opponent, category)}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="bg-gray-700 rounded border border-gray-600 p-4 text-center text-gray-500 text-sm max-w-[256px] w-full">
-                  No data
-                </div>
-              )}
-            </div>
-
-            {/* Row 2: Last 5 */}
-            <div style={{ gridColumn: 1, gridRow: 3 }} className="text-sm font-semibold text-gray-400 flex items-center">Last 5</div>
-            <div style={{ gridColumn: 2, gridRow: 3 }}>
-              {(() => {
-                const currentMatchup = currentAnalyses['5']?.matchup ? {
-                  ...currentAnalyses['5'].matchup,
-                  my_team_player_games: canonicalMyTeamPlayerGames,
-                  their_team_player_games: canonicalTheirTeamPlayerGames
-                } : matchup;
-                const dropsInfo = currentMatchup?.drops && currentMatchup.drops.length > 0 ? (
-                  <div className="text-sm mb-2 text-center">
-                    <div>
-                      <span className="text-red-400 font-semibold">↓ </span>
-                      <span className="text-white text-xs">{currentMatchup.drops.join(', ')}</span>
-                    </div>
-                  </div>
-                ) : null;
-                return renderTableCell(currentMatchup, 'Current', dropsInfo);
-              })()}
-            </div>
-            <div style={{ gridColumn: 3, gridRow: 3 }}>
-              {renderTableCell(pickupAnalyses['5_5']?.matchup, 'Last 5 pickup', null)}
-            </div>
-            <div style={{ gridColumn: 4, gridRow: 3 }}>
-              {renderTableCell(pickupAnalyses['10_5']?.matchup, 'Last 10 pickup', null)}
-            </div>
-            <div style={{ gridColumn: 5, gridRow: 3 }}>
-              {renderTableCell(pickupAnalyses['projected_5']?.matchup, 'Projected pickup', null)}
-            </div>
-            <div style={{ gridColumn: 6, gridRow: 3 }}>
-              {renderTableCell(customAnalysis?.last_5, 'Manual pickup', null)}
-            </div>
-
-            {/* Row 3: Last 10 */}
-            <div style={{ gridColumn: 1, gridRow: 4 }} className="text-sm font-semibold text-gray-400 flex items-center">Last 10</div>
-            <div style={{ gridColumn: 2, gridRow: 4 }}>
-              {(() => {
-                const currentMatchup = currentAnalyses['10']?.matchup ? {
-                  ...currentAnalyses['10'].matchup,
-                  my_team_player_games: canonicalMyTeamPlayerGames,
-                  their_team_player_games: canonicalTheirTeamPlayerGames
-                } : matchup;
-                const dropsInfo = currentMatchup?.drops && currentMatchup.drops.length > 0 ? (
-                  <div className="text-sm mb-2 text-center">
-                    <div>
-                      <span className="text-red-400 font-semibold">↓ </span>
-                      <span className="text-white text-xs">{currentMatchup.drops.join(', ')}</span>
-                    </div>
-                  </div>
-                ) : null;
-                return renderTableCell(currentMatchup, 'Current', dropsInfo);
-              })()}
-            </div>
-            <div style={{ gridColumn: 3, gridRow: 4 }}>
-              {renderTableCell(pickupAnalyses['5_10']?.matchup, 'Last 5 pickup', null)}
-            </div>
-            <div style={{ gridColumn: 4, gridRow: 4 }}>
-              {renderTableCell(pickupAnalyses['10_10']?.matchup, 'Last 10 pickup', null)}
-            </div>
-            <div style={{ gridColumn: 5, gridRow: 4 }}>
-              {renderTableCell(pickupAnalyses['projected_10']?.matchup, 'Projected pickup', null)}
-            </div>
-            <div style={{ gridColumn: 6, gridRow: 4 }}>
-              {renderTableCell(customAnalysis?.last_10, 'Manual pickup', null)}
-            </div>
-
-            {/* Row 4: Projected */}
-            <div style={{ gridColumn: 1, gridRow: 5 }} className="text-sm font-semibold text-gray-400 flex items-center">Projected</div>
-            <div style={{ gridColumn: 2, gridRow: 5 }}>
-              {(() => {
-                const currentMatchup = currentAnalyses.projected?.matchup ? {
-                  ...currentAnalyses.projected.matchup,
-                  my_team_player_games: canonicalMyTeamPlayerGames,
-                  their_team_player_games: canonicalTheirTeamPlayerGames
-                } : matchup;
-                const dropsInfo = currentMatchup?.drops && currentMatchup.drops.length > 0 ? (
-                  <div className="text-sm mb-2 text-center">
-                    <div>
-                      <span className="text-red-400 font-semibold">↓ </span>
-                      <span className="text-white text-xs">{currentMatchup.drops.join(', ')}</span>
-                    </div>
-                  </div>
-                ) : null;
-                return renderTableCell(currentMatchup, 'Current', dropsInfo);
-              })()}
-            </div>
-            <div style={{ gridColumn: 3, gridRow: 5 }}>
-              {renderTableCell(pickupAnalyses['5_projected']?.matchup, 'Last 5 pickup', null)}
-            </div>
-            <div style={{ gridColumn: 4, gridRow: 5 }}>
-              {renderTableCell(pickupAnalyses['10_projected']?.matchup, 'Last 10 pickup', null)}
-            </div>
-            <div style={{ gridColumn: 5, gridRow: 5 }}>
-              {renderTableCell(pickupAnalyses['projected_projected']?.matchup, 'Projected pickup', null)}
-            </div>
-            <div style={{ gridColumn: 6, gridRow: 5 }}>
-              {renderTableCell(customAnalysis?.projected, 'Manual pickup', null)}
-            </div>
-          </div>
+      <div className="flex flex-wrap items-center gap-4 mb-4">
+        <h2 className="text-2xl font-bold text-nba-orange mr-4">Lineup Optimizer</h2>
+        <WeekSelect weeks={weeks} value={view.week} onChange={(week) => setView({ week })} />
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-300">Stats:</span>
+          <select value={view.statType} onChange={(e) => setView({ statType: e.target.value })} className={selectClass}>
+            {statOptions(config).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
         </div>
+        <button onClick={() => setReload(n => n + 1)} className="btn-secondary text-sm">Refresh</button>
       </div>
 
-      {/* Pickup Suggestions */}
-      {pickups && pickups.length > 0 && (
-        <div>
-          <h3 className="text-xl font-semibold mb-4 text-white">Pickup Suggestions</h3>
-          <div className="space-y-3">
-            {pickups.slice(0, 5).map((pickup, index) => (
-              <div key={index} className="border border-gray-600 rounded-lg p-4 bg-gray-700">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h4 className="font-semibold text-white">{pickup.player}</h4>
-                    <p className="text-sm text-gray-300">{pickup.position} • {pickup.team}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-lg font-bold ${getScoreColor(pickup.score_improvement)}`}>
-                      {pickup.score_improvement > 0 ? '+' : ''}{formatScore(pickup.score_improvement)}
-                    </p>
-                    <p className="text-sm text-gray-300">score improvement</p>
-                  </div>
-                </div>
-                
-                <div className="text-sm text-gray-300">
-                  <p>New projected score: {formatScore(pickup.new_projected_score)}</p>
-                </div>
+      {data && (
+        <p className="text-sm text-gray-300 mb-4">
+          {shortDate(data.week_start)} to {shortDate(data.week_end)} ({data.days} days) against{' '}
+          <span className="text-white font-semibold">
+            {data.opponent === 'league average' ? "the league's average team" : data.opponent || 'an opponent not set yet'}
+          </span>
+          {data.opponent === 'league average' && data.scheduled_opponent && ` (${data.scheduled_opponent} has no roster yet)`}
+          {!data.scheduled_opponent && ' (no opponent in the schedule for this week)'}.
+          {config.league?.settings?.roster?.daily_lineups
+            ? ' Daily lineups: each day your best players who play and fit the starting slots count.'
+            : ' Weekly lineup: your best starters who fit the slots play every game.'}
+        </p>
+      )}
 
-                {/* Category Impact */}
-                <div className="mt-2">
-                  <p className="text-xs font-medium text-gray-200 mb-1">Category Impact:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {Object.entries(pickup.category_impact || {}).map(([cat, impact]) => (
-                      <span 
-                        key={cat}
-                        className={`px-2 py-1 rounded text-xs ${
-                          impact > 0 ? 'bg-green-600 text-green-100' : 
-                          impact < 0 ? 'bg-red-600 text-red-100' : 
-                          'bg-gray-600 text-gray-200'
-                        }`}
-                      >
-                        {cat}: {impact > 0 ? '+' : ''}{formatScore(impact)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+      {error && (
+        <div className="mb-4 p-3 rounded bg-red-900/40 border border-red-700 text-red-200 text-sm flex items-center justify-between">
+          <span>{error}</span>
+          {onEditLeague && <button onClick={onEditLeague} className="btn-secondary text-xs">League settings</button>}
+        </div>
+      )}
+      {loading && !data && <div className="py-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-nba-orange"></div></div>}
+
+      {data && (
+        <div className="flex flex-wrap gap-4">
+          <WeekCard title="Your roster" side={data.current} meta={meta} points={points} opponent={opponent} />
+          <WeekCard
+            title={`Best pickups (${claims} claim${claims === 1 ? '' : 's'} a week)`}
+            side={moves} meta={meta} points={points} opponent={opponent}
+            note={moves ? (
+              <div className="text-xs mb-2 space-y-0.5">
+                {moves.steps.length === 0 && <p className="text-gray-400">No pickup improves this week.</p>}
+                {moves.steps.map(s => (
+                  <p key={s.add}><span className="text-green-400">+ {s.add}</span> <span className="text-red-400">- {s.drop || 'open spot'}</span>
+                    <span className="text-gray-400"> ({s.gain > 0 ? '+' : ''}{s.gain.toFixed(2)})</span></p>
+                ))}
               </div>
-            ))}
+            ) : <p className="text-xs text-gray-400 mb-2">Searching free agents...</p>}
+          />
+          <div className="flex-1 min-w-[280px]">
+            <div className="bg-gray-700 rounded-lg border border-gray-600 p-4 mb-2 text-sm">
+              <h3 className="font-semibold text-gray-300 mb-2">What if</h3>
+              <input value={pickSearch} onChange={(e) => setPickSearch(e.target.value)} placeholder="Add a free agent..."
+                className="w-full px-2 py-1 bg-gray-600 text-white text-xs rounded border border-gray-500 mb-1" />
+              {matches.map(p => (
+                <div key={p} onClick={() => { setAdds(a => a.includes(p) ? a : [...a, p]); setPickSearch(''); }}
+                  className="px-2 py-0.5 text-xs text-white hover:bg-gray-600 cursor-pointer">{p}</div>
+              ))}
+              <select value="" onChange={(e) => e.target.value && setDrops(d => [...d, e.target.value])}
+                className="w-full px-2 py-1 bg-gray-600 text-white text-xs rounded border border-gray-500 mt-1">
+                <option value="">Drop...</option>
+                {data.roster.filter(p => !data.undroppable.includes(p) && !drops.includes(p)).map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <div className="text-xs mt-2 space-y-0.5">
+                {adds.map(p => <p key={p} className="text-green-400 cursor-pointer" onClick={() => setAdds(a => a.filter(x => x !== p))}>+ {p} ×</p>)}
+                {drops.map(p => <p key={p} className="text-red-400 cursor-pointer" onClick={() => setDrops(d => d.filter(x => x !== p))}>- {p} ×</p>)}
+              </div>
+              <button onClick={runWhatIf} disabled={!adds.length && !drops.length} className="btn-primary text-xs mt-2 disabled:opacity-50">Compare</button>
+            </div>
+            <WeekCard title="What-if roster" side={whatIf} meta={meta} points={points} opponent={opponent} />
           </div>
         </div>
       )}
-
     </div>
   );
 };

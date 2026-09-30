@@ -1,21 +1,15 @@
 """
-Efficient daily stats updater using Game table to get schedule and only process relevant players
+Daily stats updater: the Game table says who played on a date, so only those players are fetched.
+`fantasy_points` is stored with the default weights (fantasy_config.FPOINTS_SCORING); the Daily
+Stats tab recomputes it from the selected league's own weights (leagues.fantasy_points).
 """
 from datetime import datetime, date
-from nba_api.stats.static import players, teams
-from nba_api.stats.endpoints import playergamelog, commonteamroster
-from fantasy_database import DailyPlayerStats, Player, Game, DB
+from nba_api.stats.endpoints import playergamelog
+from fantasy_database import DailyPlayerStats, Player, Game
 from fantasy_config import FPOINTS_SCORING
+from leagues import fantasy_points as points_for
 import pandas as pd
 import time
-
-def calculate_fantasy_points(stats):
-    """Calculate fantasy points based on scoring system"""
-    fpoints = 0
-    for stat, value in stats.items():
-        if stat in FPOINTS_SCORING and value is not None:
-            fpoints += value * FPOINTS_SCORING[stat]
-    return round(fpoints, 2)
 
 def get_teams_for_date(target_date):
     """Get teams that played on the target date from Game table"""
@@ -102,7 +96,7 @@ def update_daily_stats_efficient(target_date):
                 game_id = game['Game_ID']
                 
                 # Calculate fantasy points
-                fantasy_points = calculate_fantasy_points({
+                fantasy_points = points_for({
                     'FGA': game['FGA'],
                     'FGM': game['FGM'],
                     'FTA': game['FTA'],
@@ -114,7 +108,7 @@ def update_daily_stats_efficient(target_date):
                     'STL': game['STL'],
                     'BLK': game['BLK'],
                     'TOV': game['TOV']
-                })
+                }, FPOINTS_SCORING)
                 
                 # Create or update daily stats
                 daily_stats, created = DailyPlayerStats.get_or_create(

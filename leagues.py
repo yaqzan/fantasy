@@ -9,7 +9,6 @@ import json
 import re
 from datetime import date, datetime, timedelta
 
-from fantasy_config import FPOINTS_SCORING
 from fantasy_database import DB, League, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag
 
 
@@ -70,10 +69,27 @@ POINT_STATS = {'PTS': 'Points', 'REB': 'Rebounds', 'AST': 'Assists', 'STL': 'Ste
                'PF': 'Personal fouls', 'DD2': 'Double-doubles', 'TD3': 'Triple-doubles',
                'TECH': 'Technical fouls', 'BLKA': 'Times blocked'}
 
+# Roster slots. A slot takes a player when one of his positions reaches it: platform positions
+# (PG/SG/SF/PF/C) or NBA's generic G/F/C, which count for every slot of their group (a 'G' fills PG).
+SLOT_TYPES = ['PG', 'SG', 'G', 'SF', 'PF', 'F', 'C', 'UTIL']
+POSITION_REACH = {'PG': {'PG', 'G'}, 'SG': {'SG', 'G'}, 'G': {'PG', 'SG', 'G'}, 'SF': {'SF', 'F'}, 'PF': {'PF', 'F'},
+                  'F': {'SF', 'PF', 'F'}, 'C': {'C'}}
+
+
+def slot_reach(positions):
+    """Every slot a player with these positions can fill (UTIL always)."""
+    return set().union({'UTIL'}, *(POSITION_REACH.get(p, ()) for p in positions))
+
+
+def fantasy_points(line, weights):
+    """Points for one stat line ({stat: value}, POINT_STATS keys) under a league's weights."""
+    return round(sum((line.get(stat) or 0) * weight for stat, weight in weights.items()), 2)
+
+
 DEFAULT_SETTINGS = {
     'season': '',                     # e.g. "2026-27", display only
-    'platform': 'fantrax',            # fantrax | yahoo, informational
-    'fantrax_league_id': '',          # falls back to FANTRAX_LEAGUE_ID in .env
+    'platform': 'fantrax',            # fantrax | yahoo: which importer reads it (pull_fantrax.py / pull_yahoo.py)
+    'platform_league_id': '',         # the platform's league id (Fantrax id, Yahoo league number)
     'my_team': '',                    # your team's abbreviation in this league's fantasy_teams
     'num_teams': 12,
     # Scoring: 'categories' = head-to-head over `categories`; 'points' = the weights in `points`
@@ -85,7 +101,8 @@ DEFAULT_SETTINGS = {
         'active': 10,                 # starters that score
         'daily_lineups': True,        # True: lineups set daily (best `active` of each day count);
                                       # False: one lineup of `active` players for the whole week
-        'min_guards': 0, 'min_forwards': 0, 'min_centers': 0,
+        'slots': [],                  # the `active` starting slots (SLOT_TYPES), e.g. PG SG G SF PF F C UTIL UTIL;
+                                      # empty = all UTIL (no positions)
     },
     'draft': {'type': 'auction', 'budget': 200, 'date': '',
               'price_exponent': 1.0},     # auction $ follow value over replacement ** this;
@@ -97,6 +114,7 @@ DEFAULT_SETTINGS = {
     # but the last, the `per_stage` teams with the worst record over it are eliminated and their
     # players become free agents. Empty `stage_weeks` = an ordinary league.
     'elimination': {'stage_weeks': [], 'per_stage': 2},
+    'playoffs': {'teams': 0, 'first_week': 0},  # teams that make it, first playoff week (1-based); 0 = none
     'schedule': [],                   # [[week start "YYYY-MM-DD", opponent abbreviation], ...]
     'notes': '',                      # free text: prizes, tie-breakers, anything else
 }
@@ -125,9 +143,25 @@ def _parse_date(value):
     return datetime.strptime(str(value).strip(), '%Y-%m-%d').date()
 
 
+def _upgrade(settings):
+    """Older settings documents: position minimums become G/F/C slots (the rest UTIL), and
+    fantrax_league_id becomes platform_league_id."""
+    s = copy.deepcopy(settings or {})
+    roster = s.get('roster') or {}
+    mins = [(pos, int(roster.pop(key, 0) or 0))
+            for pos, key in (('G', 'min_guards'), ('F', 'min_forwards'), ('C', 'min_centers'))]
+    if not roster.get('slots') and any(n for _, n in mins):
+        slots = [pos for pos, n in mins for _ in range(n)]
+        roster['slots'] = slots + ['UTIL'] * max(int(roster.get('active') or 0) - len(slots), 0)
+    legacy_id = s.pop('fantrax_league_id', '')
+    if legacy_id and not s.get('platform_league_id'):
+        s['platform_league_id'] = legacy_id
+    return s
+
+
 def validate_settings(settings):
     """Merge onto the defaults and check every value; raises ValueError with a readable message."""
-    s = _merge(DEFAULT_SETTINGS, settings)
+    s = _merge(DEFAULT_SETTINGS, _upgrade(settings))
     scoring = s['scoring']
     if scoring['type'] == 'points':
         try:
@@ -153,8 +187,9 @@ def validate_settings(settings):
         raise ValueError("scoring type must be 'categories' or 'points'")
     try:
         s['num_teams'] = int(s['num_teams'])
-        for key in ('size', 'active', 'min_guards', 'min_forwards', 'min_centers'):
+        for key in ('size', 'active'):
             s['roster'][key] = int(s['roster'][key] or 0)
+        s['playoffs'] = {k: int(s['playoffs'].get(k) or 0) for k in ('teams', 'first_week')}
         s['draft']['budget'] = int(s['draft']['budget'] or 0)
         s['waivers']['claims_per_week'] = int(s['waivers']['claims_per_week'] or 0)
         s['waivers']['faab_budget'] = int(s['waivers']['faab_budget'] or 0)
@@ -177,8 +212,15 @@ def validate_settings(settings):
         raise ValueError('a league needs at least 2 teams')
     if not 1 <= s['roster']['active'] <= s['roster']['size']:
         raise ValueError('active spots must be between 1 and the roster size')
-    if s['roster']['min_guards'] + s['roster']['min_forwards'] + s['roster']['min_centers'] > s['roster']['active']:
-        raise ValueError('position minimums add up to more than the active spots')
+    slots = [str(slot).strip().upper() for slot in s['roster']['slots'] or []]
+    unknown = [slot for slot in slots if slot not in SLOT_TYPES]
+    if unknown:
+        raise ValueError(f"unknown roster slots: {', '.join(unknown)}")
+    if slots and len(slots) != s['roster']['active']:
+        raise ValueError(f"{len(slots)} starting slots but {s['roster']['active']} active spots: they must match")
+    s['roster']['slots'] = [] if all(slot == 'UTIL' for slot in slots) else slots
+    if s['playoffs']['teams'] > s['num_teams']:
+        raise ValueError('more playoff teams than teams')
     schedule = []
     for entry in s['schedule'] or []:
         start, opponent = (list(entry) + [''])[:2]
@@ -220,21 +262,15 @@ class LeagueConfig:
     roster_size = property(lambda self: self.settings['roster']['size'])
     active_slots = property(lambda self: self.settings['roster']['active'])
     daily_lineups = property(lambda self: self.settings['roster']['daily_lineups'])
-    min_guards = property(lambda self: self.settings['roster']['min_guards'])
-    min_forwards = property(lambda self: self.settings['roster']['min_forwards'])
-    min_centers = property(lambda self: self.settings['roster']['min_centers'])
+    # The starting slots: all UTIL when the league has no positions.
+    slots = property(lambda self: list(self.settings['roster']['slots']) or ['UTIL'] * self.active_slots)
     budget = property(lambda self: self.settings['draft']['budget'] or 200)
     price_exponent = property(lambda self: self.settings['draft']['price_exponent'])
     claims_per_week = property(lambda self: max(self.settings['waivers']['claims_per_week'], 1))
     stage_weeks = property(lambda self: list(self.settings['elimination']['stage_weeks']))
     is_guillotine = property(lambda self: bool(self.settings['elimination']['stage_weeks']))
-    fantrax_league_id = property(lambda self: self.settings['fantrax_league_id'])
-
-    @property
-    def lineup_size(self):
-        """How many players the optimizer picks: the whole roster when lineups are set daily (the
-        daily best-`active` rule decides who scores), else the weekly starters."""
-        return self.roster_size if self.daily_lineups else self.active_slots
+    platform = property(lambda self: self.settings['platform'])
+    platform_league_id = property(lambda self: self.settings['platform_league_id'])
 
     @property
     def schedule(self):
@@ -245,13 +281,17 @@ class LeagueConfig:
         return {start: opponent for start, opponent in self.schedule}
 
     def weeks(self):
-        """[{week, start, end, opponent}]: a week ends the day before the next starts (last: 7 days)."""
+        """[{week, start, end, days, opponent, playoffs}]: a week ends the day before the next starts
+        (last: 7 days)."""
         schedule = self.schedule
+        first_playoff = self.settings['playoffs']['first_week'] or None
         out = []
         for i, (start, opponent) in enumerate(schedule):
             end = (_parse_date(schedule[i + 1][0]) - timedelta(days=1) if i + 1 < len(schedule)
                    else _parse_date(start) + timedelta(days=6))
-            out.append({'week': i + 1, 'start': start, 'end': end.isoformat(), 'opponent': opponent})
+            out.append({'week': i + 1, 'start': start, 'end': end.isoformat(),
+                        'days': (end - _parse_date(start)).days + 1, 'opponent': opponent,
+                        'playoffs': bool(first_playoff and i + 1 >= first_playoff)})
         return out
 
     def stage_of_week(self, week_index):
@@ -292,10 +332,29 @@ class LeagueConfig:
                 'teams': teams, 'eliminated': 0 if final else per_stage,
                 'trade_window': started and index == first}
 
+    def capabilities(self):
+        """What the league's rules switch on, by name. Tabs and columns key off these, never off a
+        platform or a league id."""
+        s = self.settings
+        slots = s['roster']['slots']
+        detailed = any(slot in ('PG', 'SG', 'SF', 'PF') for slot in slots)
+        return {
+            'scoring': s['scoring']['type'],               # categories | points
+            'punts': len(self.categories) > 1,             # a category can be left out of value
+            'positions': (['PG', 'SG', 'SF', 'PF', 'C'] if detailed else ['G', 'F', 'C']) if slots else [],
+            'auction': s['draft']['type'] == 'auction',
+            'guillotine': self.is_guillotine,
+            'faab': s['waivers']['faab_budget'] > 0,
+            'claims_per_week': self.claims_per_week,
+            'team_wins': 'WIN%' in self.categories,
+            'long_weeks': any(w['days'] > 7 for w in self.weeks()),
+            'playoffs': s['playoffs']['teams'] > 0,
+        }
+
     def to_dict(self):
         return {'id': self.id, 'name': self.name, 'is_active': self.is_active, 'settings': self.settings,
                 'categories': category_meta(self.categories), 'stage': self.stage_info(),
-                'weeks': self.weeks()}
+                'weeks': self.weeks(), 'capabilities': self.capabilities()}
 
 
 def slugify(name):

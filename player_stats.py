@@ -7,11 +7,13 @@ from statistics import NormalDist, mean, pstdev
 from peewee import fn
 from fantasy_database import Player, Game
 from fantasy_config import API_ATTRIBUTES
-from leagues import CATEGORY_CATALOG
+from leagues import CATEGORY_CATALOG, slot_reach
 
 
 TIME_PERIODS = ['', '_5', '_10']
 TIMEFRAMES = ['', '_5', '_10', '_projected', '_proj']  # '_proj': this season's projection (projections.py)
+# The frontend's stats choices -> key suffix. 'projected': half season, half last 10 games.
+STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected', 'proj': '_proj'}
 Z_CAP = 3.0       # a category's z-score is capped at +/-Z_CAP before categories are summed
 POOL_PASSES = 3   # re-rank passes that settle the draftable pool the z-scores are measured against
 _NORMAL = NormalDist()
@@ -44,6 +46,11 @@ def is_preseason(today=None):
     return first is not None and today < first
 
 
+def nba_positions(player):
+    """NBA's positions for a player: ('G', 'F') from "G-F", else his primary one."""
+    return tuple(p for p in (player.positions or player.pos or '').split('-') if p)
+
+
 def _ratios(stats, n):
     """Ratio and derived categories from a timeframe's per-game components."""
     fga, fta = stats[f'FGA{n}'], stats[f'FTA{n}']
@@ -70,7 +77,8 @@ def _add_projections(player_stats, preseason, team_win):
     for player in rostered:
         line = lines[player.id]
         team_name = TEAM_DICT.get(player.team, player.team)
-        stats = player_stats.setdefault(player.name, {'TEAM': team_name, 'Pos': player.pos, 'GP': 0})
+        stats = player_stats.setdefault(player.name, {'TEAM': team_name, 'Pos': player.pos,
+                                                      'Positions': nba_positions(player), 'GP': 0})
         current = (not preseason and first_game is not None and player.api_updated_at is not None
                    and player.api_updated_at.date() >= first_game)
         played = (player.gp or 0) if current else 0
@@ -104,6 +112,7 @@ def load_player_stats():
         player_stats[player.name] = {
             'TEAM': team_name,
             'Pos': player.pos,
+            'Positions': nba_positions(player),
             'GP': player.gp,
         }
 
@@ -178,6 +187,20 @@ def load_player_stats():
     _add_projections(player_stats, preseason, team_win)
     return player_stats
 
+
+def league_player_stats(league, punt_categories=()):
+    """load_player_stats as one league sees it: its platform's position eligibility where imported
+    (else NBA's), then its scoring (calculate_overall_scores). Every league-scoped view starts here."""
+    from fantasy_team_helper import league_positions
+    player_stats = load_player_stats()
+    for name, positions in league_positions(league).items():
+        if name in player_stats:
+            player_stats[name]['Positions'] = positions
+    for stats in player_stats.values():
+        stats['Reach'] = frozenset(slot_reach(stats['Positions']))
+    calculate_overall_scores(player_stats, league, punt_categories)
+    return player_stats
+
 def _log5(p_a, p_b):
     """Chance team A beats team B from their win percentages."""
     p_a, p_b = min(max(p_a, 0.05), 0.95), min(max(p_b, 0.05), 0.95)
@@ -199,41 +222,51 @@ def team_games(schedule):
     """{NBA team: games this week} from week_schedule()."""
     return {team: len(days) for team, days in schedule.items()}
 
-def positions_ok(league, player_stats, lineup):
-    """Whether a lineup meets the league's position minimums (every player has one position)."""
-    if not (league.min_guards or league.min_forwards or league.min_centers):
-        return True
-    counts = {'C': 0, 'F': 0, 'G': 0}
-    for p in lineup:
-        pos = player_stats[p].get('Pos')
-        if pos in counts:
-            counts[pos] += 1
-    return counts['G'] >= league.min_guards and counts['F'] >= league.min_forwards and counts['C'] >= league.min_centers
+def fill_slots(players, slots, player_stats):
+    """{player: slot}: the starting lineup from `players` (best first) for the league's `slots`.
+
+    A player gets in when the players already in can be reshuffled to make room for him (an
+    augmenting path). Sets of players that fit the slots form a transversal matroid, so taking
+    each next-best player who still fits is the best lineup for any ranking. A slot nobody on the
+    roster can fill stays empty. All-UTIL leagues: simply the first len(slots)."""
+    if all(slot == 'UTIL' for slot in slots):
+        return dict(zip(players, slots))
+    reach = {p: player_stats[p].get('Reach') or slot_reach(player_stats[p].get('Positions') or ()) for p in players}
+    holder = {}  # slot index -> player
+
+    def place(p, seen):
+        for i, slot in enumerate(slots):
+            if i not in seen and slot in reach[p]:
+                seen.add(i)
+                if i not in holder or place(holder[i], seen):
+                    holder[i] = p
+                    return True
+        return False
+
+    for p in players:
+        if len(holder) == len(slots):
+            break
+        place(p, set())
+    return {holder[i]: slots[i] for i in sorted(holder)}
+
+
+def _by_score(players, player_stats, last_n_games):
+    return sorted((p for p in players if p in player_stats),
+                  key=lambda p: player_stats[p].get(f'Z-SCORE{last_n_games}', 0), reverse=True)
 
 
 def best_starters(league, roster, player_stats, last_n_games=''):
-    """The `active` players with the highest Z-SCORE that meet the position minimums.
-
-    Each player has exactly one position, so this is exact: the best players of each required
-    position up to its minimum, then the best of the rest. A position short of players stays
-    short and its spots go to the best of the rest."""
-    ranked = sorted((p for p in roster if p in player_stats),
-                    key=lambda p: player_stats[p].get(f'Z-SCORE{last_n_games}', 0), reverse=True)
-    size = min(league.active_slots, len(ranked))
-    chosen = []
-    for pos, minimum in (('C', league.min_centers), ('G', league.min_guards), ('F', league.min_forwards)):
-        chosen += [p for p in ranked if player_stats[p].get('Pos') == pos][:minimum]
-    chosen = chosen[:size]
-    chosen += [p for p in ranked if p not in chosen][:size - len(chosen)]
-    return chosen
+    """{player: slot}: the best lineup by the timeframe's Z-SCORE that fits the league's slots."""
+    return fill_slots(_by_score(roster, player_stats, last_n_games), league.slots, player_stats)
 
 
 def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=()):
     """Games and expected wins each rostered player contributes over the week.
 
-    Daily lineups: each day only the best `active` players whose team plays that day count (best =
-    Z-SCORE for the timeframe), so a deep bench adds little. Weekly lineups: every game of every
-    player in `roster` counts. Players in `unavailable` (injured) contribute nothing.
+    Daily lineups: each day only the players whose team plays and who make that day's lineup count
+    (fill_slots by the timeframe's Z-SCORE: the best who fit the league's slots), so a deep bench
+    adds little. Weekly lineups: every game of every player in `roster` counts (pass the starters).
+    Players in `unavailable` (injured) contribute nothing.
     """
     games = {p: 0 for p in roster}
     wins = {p: 0.0 for p in roster}
@@ -244,13 +277,15 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
             games[p], wins[p] = len(days), sum(days.values())
         return games, wins
     by_day = {}
-    for p in sorted(players, key=lambda p: player_stats[p].get(f'Z-SCORE{last_n_games}', 0), reverse=True):
+    for p in _by_score(players, player_stats, last_n_games):
         for day, p_win in schedule.get(player_stats[p]['TEAM'], {}).items():
             by_day.setdefault(day, []).append((p, p_win))
+    slots = league.slots
     for entries in by_day.values():
-        for p, p_win in entries[:league.active_slots]:
+        playing = dict(entries)
+        for p in fill_slots(list(playing), slots, player_stats):
             games[p] += 1
-            wins[p] += p_win
+            wins[p] += playing[p]
     return games, wins
 
 def calculate_team_totals(roster, player_stats, player_games, player_wins, categories, last_n_games=''):
@@ -320,16 +355,23 @@ def average_week_totals(teams):
     return {c: (mean(t[c][0] for t in teams), mean(t[c][1] for t in teams)) for c in teams[0]}
 
 
-def category_win_chances(mine, theirs, league):
-    """{category: chance `mine` beats `theirs` this week}. Each weekly total is taken as normal
-    around its projection with its team_week_totals variance; an exact tie counts as half."""
-    chances = {}
+def category_margins(mine, theirs, league):
+    """{category: my lead over `theirs` this week in standard deviations of the difference}. Each
+    weekly total is taken as normal around its projection with its team_week_totals variance."""
+    margins = {}
     for category in league.categories:
         (a, var_a), (b, var_b) = mine[category], theirs[category]
         lead = (b - a) if category in league.inverse_categories else (a - b)
         sd = (var_a + var_b) ** 0.5
-        chances[category] = _NORMAL.cdf(lead / sd) if sd > 0 else (1.0 if lead > 0 else 0.0 if lead < 0 else 0.5)
-    return chances
+        margins[category] = lead / sd if sd > 0 else (float('inf') if lead > 0 else float('-inf') if lead < 0 else 0.0)
+    return margins
+
+
+def category_win_chances(mine, theirs, league):
+    """{category: chance `mine` beats `theirs` this week} from category_margins; an exact tie
+    counts as half."""
+    return {c: _NORMAL.cdf(z) if abs(z) != float('inf') else (1.0 if z > 0 else 0.0)
+            for c, z in category_margins(mine, theirs, league).items()}
 
 
 def games_floor(player_stats):

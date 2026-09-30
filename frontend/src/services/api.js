@@ -133,10 +133,8 @@ export const updatePlayer = async (playerName, isInjured, isUndroppable) => {
   return response.data;
 };
 
-export const getTeamPlayers = async (teamId) => {
-  const response = await api.get(`/team-players/${teamId}`);
-  return response.data;
-};
+// Every team's roster in the current league, with each starter's slot and the starters' average OVR.
+export const getTeamRosters = async () => (await api.get('/team-rosters')).data;
 
 export const calculateCustomZScores = async (puntCategories, statType = 'projected') => {
   const response = await api.post('/calculate-zscores', {
@@ -156,13 +154,14 @@ export const calculateCustomAuctionValues = async (priceExponent, puntCategories
   return response.data;
 };
 
-export const analyze = async (weekStart = null, timeframe = 'projected', pickup = false, pickupTimeframe = null) => {
-  const params = {
-    ...(weekStart && { week_start: weekStart }),
-    timeframe,
-    pickup: pickup.toString(),
-    ...(pickupTimeframe && { pickup_timeframe: pickupTimeframe })
-  };
+// The week's matchup (weekStart null: the current week). moves: also the best pickups for the week's
+// claims. adds/drops: a what-if roster (repeated query params, which Flask reads with getlist).
+export const analyze = async (weekStart = null, timeframe = 'projected', { moves = false, adds = [], drops = [] } = {}) => {
+  const params = new URLSearchParams({ timeframe });
+  if (weekStart) params.append('week_start', weekStart);
+  if (moves) params.append('moves', 'true');
+  adds.forEach(p => params.append('add', p));
+  drops.forEach(p => params.append('drop', p));
   const response = await api.get('/analyze', { params });
   return response.data;
 };
@@ -180,11 +179,6 @@ export const setPlayerAdjustment = async (playerId, production, games = null) =>
 export const getPickups = async (weekStart = null, timeframe = 'projected') => {
   const params = { ...(weekStart && { week_start: weekStart }), timeframe };
   const response = await api.get('/pickups', { params });
-  return response.data;
-};
-
-export const analyzeCustom = async (weekStart, pickup, drop = null) => {
-  const response = await api.post('/analyze/custom', { week_start: weekStart, pickup, drop });
   return response.data;
 };
 

@@ -9,16 +9,15 @@ import json
 # Add parent directory to path to import our existing modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats, LeaguePlayerFlag,
+from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats,
                               PlayerProjection, ProjectionAdjustment)
 from projections import season_label
-from player_stats import (load_player_stats, calculate_overall_scores, calculate_auction_values,
-                          calculate_team_totals, week_schedule, team_games, player_week_games, best_starters,
-                          games_floor, TEAM_DICT)
+from player_stats import (league_player_stats, calculate_auction_values, calculate_team_totals, week_schedule,
+                          team_games, player_week_games, best_starters, games_floor, TEAM_DICT, STAT_SUFFIXES)
 from fantasy_config import TEAMNAMES, FPOINTS_SCORING
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
-                                 league_team_ids, get_undroppable_players)
-from leagues import (POINT_STATS, get_league, list_leagues, create_league, update_league, activate_league, delete_league,
+                                 league_team_ids, get_undroppable_players, set_league_flags)
+from leagues import (POINT_STATS, fantasy_points, get_league, list_leagues, create_league, update_league, activate_league, delete_league,
                      generate_weeks, category_meta, CATEGORY_CATALOG, DEFAULT_SETTINGS, NotFound)
 from datetime import date, datetime
 
@@ -59,8 +58,7 @@ try:
 except Exception as e:
     print(f"Database connection failed: {e}")
 
-# 'proj': this season's projection (projections.py); 'projected': half season, half last 10 games.
-STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected', 'proj': '_proj'}
+DRAFT_DAY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'draft_day.json')
 
 
 def current_league():
@@ -84,36 +82,40 @@ def _week_json(start, end):
     return {'start': start.isoformat(), 'end': end.isoformat()} if start else None
 
 
+def _draft_plan_league():
+    """The league draft_day.json was built for, or None."""
+    if not os.path.isfile(DRAFT_DAY_FILE):
+        return None
+    with open(DRAFT_DAY_FILE, encoding='utf-8') as f:
+        return json.load(f).get('league')
+
+
 def league_config(league):
     """League rules the frontend renders from (categories, roster, draft). Before the league's
     first week the stats are last season's, and the full season is the basis to draft on; after,
     the projection (half season, half last 10 games)."""
     schedule = league.schedule
+    team_ids = league_team_ids(league)
     preseason = bool(schedule) and date.today().isoformat() < schedule[0][0]
     current_week = get_current_fantasy_week_dates(league)
     next_week = get_next_week_dates(league, current_week[0])
     has_projections = PlayerProjection.select().where(PlayerProjection.season == season_label()).exists()
     return {
-        'show_auction_price': league.settings['draft']['type'] == 'auction',
         'MY_TEAM_ABV': league.my_team,
         'league': league.to_dict(),
         'categories': category_meta(league.categories),
         'current_week': _week_json(*current_week[:2]), 'next_week': _week_json(*next_week),
+        'capabilities': {**league.capabilities(), 'draft_plan': _draft_plan_league() == league.id},
+        # Nobody rostered yet: the draft hasn't happened (draft mode's default for leagues without a date).
+        'rostered': FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id.in_(team_ids)).count()
+        if team_ids else 0,
         # Before the season: this season's projection when there is one, else last season.
         'default_stat_type': ('proj' if has_projections else 'season') if preseason else 'projected',
         'projection_season': season_label() if has_projections else None,
     }
 
 
-def scored_players(league, punt_categories=()):
-    player_stats = load_player_stats()
-    calculate_overall_scores(player_stats, league, punt_categories)
-    return player_stats
-
-
 # ---------------------------------------------------------------- leagues
-
-DRAFT_DAY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'draft_day.json')
 
 
 @fantasy_api.route('/draft-day', methods=['GET'])
@@ -201,7 +203,7 @@ def _team_abbreviations():
 def get_fantasy_players():
     """Get all players with fantasy stats, scored for the current league"""
     league = current_league()
-    player_stats = scored_players(league)
+    player_stats = league_player_stats(league)
     # A $ value per timeframe, so the price always matches the rank it is shown next to.
     for suffix in STAT_SUFFIXES.values():
         calculate_auction_values(player_stats, league, value_key=f'VALUE{suffix}', out_key=f'AUCTION_VALUE{suffix}')
@@ -253,6 +255,7 @@ def get_fantasy_players():
             'team': team_name,
             'team_abv': abbreviations.get(team_name) or abbreviations.get(full_team_name) or team_name[:3].upper(),
             'position': player.pos if player and player.pos else "Unknown",
+            'positions': list(stats.get('Positions') or ()),
             'games_played': player.gp if player and player.gp else 0,
             'small_sample': 0 < (stats.get('GP') or 0) < floor,
             'projected_only': not stats.get('GP') and 'GP_proj' in stats,
@@ -301,7 +304,7 @@ def calculate_custom_zscores():
     data = request.get_json() or {}
     league = current_league()
     suffix = STAT_SUFFIXES.get(data.get('stat_type', 'projected'), '_projected')
-    player_stats = scored_players(league, data.get('punt_categories', []))
+    player_stats = league_player_stats(league, data.get('punt_categories', []))
     ranks = _custom_ranks(player_stats, suffix)
     return jsonify({'custom_scores': {name: {'custom_z_score': round(stats.get(f'Z-SCORE{suffix}', 0), 1),
                                              'custom_z_rank': ranks[name]}
@@ -321,7 +324,7 @@ def calculate_custom_auction_values():
     if not 0.2 <= price_exponent <= 5:
         return jsonify({'error': 'price_exponent must be between 0.2 and 5'}), 400
     suffix = STAT_SUFFIXES.get(data.get('stat_type', 'projected'), '_projected')
-    player_stats = scored_players(league, punt)
+    player_stats = league_player_stats(league, punt)
     # Punting: auction values follow the value over the categories still played.
     calculate_auction_values(player_stats, league, price_exponent,
                              value_key=f'Z-VALUE{suffix}' if punt else f'VALUE{suffix}')
@@ -450,38 +453,47 @@ def update_player():
     player.injured = 1 if data.get('is_injured', False) else 0
     player.save()
     if 'is_undroppable' in data:
-        league = current_league()
-        LeaguePlayerFlag.replace(league=league.id, player=player.id, undroppable=bool(data['is_undroppable'])).execute()
+        set_league_flags(current_league(), player.id, undroppable=bool(data['is_undroppable']))
     return jsonify({'success': True}), 200
 
 
-@fantasy_api.route('/team-players/<int:team_id>', methods=['GET'])
-def get_team_players(team_id):
-    """Players on a team in the current league"""
+@fantasy_api.route('/team-rosters', methods=['GET'])
+def get_team_rosters():
+    """Every team's roster in the current league, best first, with the slot each healthy starter
+    fills (best_starters: the league's slots, season OVR) and the starters' average OVR."""
     league = current_league()
-    team = league_team(league, team_id)
-    player_stats = scored_players(league)
+    player_stats = league_player_stats(league)
     injured = {p.name for p in Player.select(Player.name).where(Player.injured == 1)}
-    players = [{'player_name': ftp.player_name,
-                'z_score': round(player_stats.get(ftp.player_name, {}).get('Z-SCORE', 0)),
-                'is_injured': ftp.player_name in injured,
-                'drafted_at': None}
-               for ftp in FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id == team.id)]
-    return jsonify({'players': players, 'active_slots': league.active_slots})
+    rosters = {}
+    team_ids = league_team_ids(league)
+    for ftp in (FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id.in_(team_ids)) if team_ids else []):
+        rosters.setdefault(ftp.fantasy_team_id_id, []).append(ftp.player_name)
+    out = {}
+    for team_id, names in rosters.items():
+        starters = best_starters(league, [p for p in names if p not in injured], player_stats)
+        score = lambda p: player_stats.get(p, {}).get('Z-SCORE', 0)
+        out[team_id] = {
+            'players': [{'player_name': p, 'z_score': round(score(p)), 'is_injured': p in injured,
+                         'positions': list(player_stats.get(p, {}).get('Positions') or ()), 'slot': starters.get(p)}
+                        for p in sorted(names, key=score, reverse=True)],
+            'score': round(sum(score(p) for p in starters) / len(starters)) if starters else 0,
+        }
+    return jsonify({'teams': out, 'roster_size': league.roster_size, 'slots': league.slots})
 
 
 @fantasy_api.route('/team-standings', methods=['GET'])
 def get_team_standings():
     """A power ranking from each team's category totals, ranked per category. Not the league's
     real standings. view=per_game (default): roster strength, one game each of the best `active`
-    players (position minimums apply), schedule-free. view=week: this fantasy week's projection,
+    players who fit the league's slots (best_starters), schedule-free. Points leagues have one
+    category, so the rank sum is the rank by projected points. view=week: this fantasy week's projection,
     only games NBA teams actually play, daily-lineup leagues counting the best `active` players of
     each day (bench players fill empty days) and weekly-lineup leagues their starters' games."""
     league = current_league()
     suffix = STAT_SUFFIXES.get(request.args.get('stat_type', 'projected'), '_projected')
     healthy_only = request.args.get('healthy_only', 'true').lower() == 'true'
     view = 'week' if request.args.get('view') == 'week' else 'per_game'
-    player_stats = scored_players(league)
+    player_stats = league_player_stats(league)
     injured = {p.name for p in Player.select(Player.name).where(Player.injured == 1)} if healthy_only else set()
 
     # Guillotine: eliminated teams are out of the ranking (their players are free agents).
@@ -527,6 +539,7 @@ def get_team_standings():
     return jsonify({'teams': teams_data, 'categories': [m['key'] for m in meta],
                     'category_names': {m['key']: m['label'] for m in meta}, 'category_meta': meta,
                     'active_slots': league.active_slots, 'view': view, 'stage': league.stage_info(),
+                    'playoffs': league.settings['playoffs'],
                     'week_start': week_start.isoformat() if week_start else None,
                     'week_end': week_end.isoformat() if week_end else None})
 
@@ -544,18 +557,18 @@ def _requested_week(league, week_start_param):
 
 @fantasy_api.route('/analyze')
 def analyze():
-    """Lineup optimizer analysis for one week"""
-    from lineup_optimizer import get_analysis_data
+    """Lineup Optimizer: my week against the opponent (lineup_optimizer.get_matchup). add/drop
+    (repeatable): a what-if roster. moves=true: the best pickups for the week's claims."""
+    from lineup_optimizer import get_matchup
     league = current_league()
     week_start, week_end, opponent = _requested_week(league, request.args.get('week_start'))
-    analysis_data = get_analysis_data(
-        league, request.args.get('timeframe', 'projected'), week_start, week_end, opponent,
-        request.args.get('pickup', 'false').lower() == 'true', request.args.get('pickup_timeframe'))
-    if 'error' in analysis_data:
-        analysis_data['fantasy_schedule'] = league.schedule
-        return jsonify(analysis_data), 422
-    analysis_data['categories'] = category_meta(league.categories)
-    return jsonify(analysis_data)
+    result = get_matchup(league, request.args.get('timeframe', 'projected'), week_start, week_end, opponent,
+                         adds=request.args.getlist('add'), drops=request.args.getlist('drop'),
+                         moves=request.args.get('moves', 'false').lower() == 'true')
+    if 'error' in result:
+        return jsonify(result), 422
+    result['categories'] = category_meta(league.categories)
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------- projections (NBA-wide)
@@ -621,7 +634,7 @@ def get_player_projections():
     by_player = {}
     for row in PlayerProjection.select().where(PlayerProjection.season == season).dicts():
         by_player.setdefault(row['player_id'], {})[row['source']] = row
-    player_stats = scored_players(league)
+    player_stats = league_player_stats(league)
     calculate_auction_values(player_stats, league, value_key='VALUE_proj', out_key='AUCTION_VALUE_proj')
     ids = {p.name: p for p in Player.select(Player.id, Player.name, Player.team, Player.pos)
            .where(Player.id.in_(list(lines)))}
@@ -644,6 +657,7 @@ def get_player_projections():
         rows.append({'id': player.id, 'name': name, 'team': player.team, 'position': player.pos,
                      'type': line['type'], 'expert_weight': line['expert_weight'],
                      'rank': stats['RANK_proj'], 'auction_value': stats.get('AUCTION_VALUE_proj', 1),
+                     'fpts': stats.get('FPTS_proj') if league.is_points else None,
                      'line': {k: round(line[k], 2) for k in shown},
                      'sources': {s: {k: round(r[k], 2) if r.get(k) is not None else None for k in shown}
                                  for s, r in by_player.get(player.id, {}).items()},
@@ -696,20 +710,6 @@ def pickups():
         team = candidate['team']
         candidate['team_abv'] = abbreviations.get(team) or abbreviations.get(TEAM_DICT.get(team, team)) or team[:3].upper()
     result['categories'] = category_meta(league.categories)
-    result['weeks'] = [start for start, _ in league.schedule]
-    return jsonify(result)
-
-
-@fantasy_api.route('/analyze/custom', methods=['POST'])
-def analyze_custom():
-    """What-if: add one player (optionally dropping one) and compare in every timeframe"""
-    from lineup_optimizer import get_custom_analysis
-    data = request.get_json() or {}
-    league = current_league()
-    week_start, week_end, opponent = _requested_week(league, data.get('week_start'))
-    result = get_custom_analysis(league, week_start, week_end, opponent, data.get('pickup'), data.get('drop'))
-    if 'error' in result:
-        return jsonify(result), 422
     return jsonify(result)
 
 
@@ -717,16 +717,16 @@ def analyze_custom():
 
 @fantasy_api.route('/daily-stats', methods=['GET'])
 def get_daily_stats():
-    """Get daily player stats for a specific date"""
+    """Every stat line of a date. Points leagues: fantasy_points from the league's own weights,
+    best first; category leagues have no points (None), sorted by points scored."""
+    league = current_league()
     date_str = request.args.get('date')
     try:
         target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
     except ValueError:
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
 
-    stats = DailyPlayerStats.select().where(
-        DailyPlayerStats.game_date == target_date
-    ).order_by(DailyPlayerStats.fantasy_points.desc())
+    stats = DailyPlayerStats.select().where(DailyPlayerStats.game_date == target_date)
 
     daily_stats = []
     for stat in stats:
@@ -758,9 +758,11 @@ def get_daily_stats():
             'pf': stat.pf,
             'pts': stat.pts,
             'plus_minus': stat.plus_minus,
-            'fantasy_points': stat.fantasy_points,
+            'fantasy_points': fantasy_points({k.upper(): getattr(stat, k.lower(), None) for k in POINT_STATS},
+                                             league.point_weights) if league.is_points else None,
             'created_at': stat.created_at.isoformat() if stat.created_at else None
         })
+    daily_stats.sort(key=lambda s: s['fantasy_points'] if league.is_points else (s['pts'] or 0), reverse=True)
 
     return jsonify({
         'date': target_date.strftime('%Y-%m-%d'),
