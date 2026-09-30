@@ -9,7 +9,9 @@ import json
 # Add parent directory to path to import our existing modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fantasy_database import DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats, LeaguePlayerFlag
+from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats, LeaguePlayerFlag,
+                              PlayerProjection)
+from projections import season_label
 from player_stats import (load_player_stats, calculate_overall_scores, calculate_auction_values, calculate_fantasy_points,
                           calculate_team_totals, week_schedule, team_games, player_week_games, best_starters,
                           games_floor, TEAM_DICT)
@@ -57,7 +59,8 @@ try:
 except Exception as e:
     print(f"Database connection failed: {e}")
 
-STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected'}
+# 'proj': this season's projection (projections.py); 'projected': half season, half last 10 games.
+STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected', 'proj': '_proj'}
 
 
 def current_league():
@@ -83,12 +86,15 @@ def league_config(league):
     the projection (half season, half last 10 games)."""
     schedule = league.schedule
     preseason = bool(schedule) and date.today().isoformat() < schedule[0][0]
+    has_projections = PlayerProjection.select().where(PlayerProjection.season == season_label()).exists()
     return {
         'show_auction_price': league.settings['draft']['type'] == 'auction',
         'MY_TEAM_ABV': league.my_team,
         'league': league.to_dict(),
         'categories': category_meta(league.categories),
-        'default_stat_type': 'season' if preseason else 'projected',
+        # Before the season: this season's projection when there is one, else last season.
+        'default_stat_type': ('proj' if has_projections else 'season') if preseason else 'projected',
+        'projection_season': season_label() if has_projections else None,
     }
 
 
@@ -196,7 +202,8 @@ def get_fantasy_players():
     current_week_games = team_games(week_schedule(current_week_start, current_week_end))
     next_week_games = team_games(week_schedule(next_week_start, next_week_end)) if next_week_start else {}
 
-    top = sorted(player_stats.items(), key=lambda x: x[1].get('Z-RANK', 999))[:400]
+    # The 400 best on last season or on the projection (rookies only have the latter).
+    top = sorted(player_stats.items(), key=lambda x: min(x[1].get('Z-RANK', 999), x[1].get('Z-RANK_proj', 999)))[:400]
     players_by_name = {p.name: p for p in Player.select().where(Player.name.in_([name for name, _ in top]))}
 
     players_data = []
@@ -207,15 +214,15 @@ def get_fantasy_players():
         category_stats = {}
         for category in league.categories:
             values, scores = {}, {}
-            for period, suffix in (('season', ''), ('5', '_5'), ('10', '_10'), ('projected', '_projected')):
+            for period, suffix in (('season', ''), ('5', '_5'), ('10', '_10'), ('projected', '_projected'), ('proj', '_proj')):
                 value = stats.get(category + suffix, 0) or 0
                 values[period] = round(value * 100, 1) if CATEGORY_CATALOG[category].get('percent') else round(value, 2 if category in ('TECH', 'WIN%') else 1)
                 scores[period] = int(stats.get(f'SCORE-{category}{suffix}', 0))
             category_stats[category] = {
                 'value': values['projected'], 'value_season': values['season'], 'value_5': values['5'],
-                'value_10': values['10'], 'value_projected': values['projected'],
+                'value_10': values['10'], 'value_projected': values['projected'], 'value_proj': values['proj'],
                 'score': scores['projected'], 'score_season': scores['season'], 'score_5': scores['5'],
-                'score_10': scores['10'], 'score_projected': scores['projected'],
+                'score_10': scores['10'], 'score_projected': scores['projected'], 'score_proj': scores['proj'],
                 'is_inverse': category in league.inverse_categories,
             }
 
@@ -227,7 +234,9 @@ def get_fantasy_players():
             'team_abv': abbreviations.get(team_name) or abbreviations.get(full_team_name) or team_name[:3].upper(),
             'position': player.pos if player and player.pos else "Unknown",
             'games_played': player.gp if player and player.gp else 0,
-            'small_sample': (stats.get('GP') or 0) < floor,
+            'small_sample': 0 < (stats.get('GP') or 0) < floor,
+            'projected_only': not stats.get('GP') and 'GP_proj' in stats,
+            'projected_games': round(stats.get('GP_proj', 0)),
             'current_week_games': current_week_games.get(full_team_name, 0),
             'next_week_games': next_week_games.get(full_team_name, 0),
             'current_week_start': current_week_start.strftime('%Y-%m-%d') if current_week_start else None,
@@ -238,16 +247,19 @@ def get_fantasy_players():
             'overall_rank_5': stats.get('Z-RANK_5', 0),
             'overall_rank_10': stats.get('Z-RANK_10', 0),
             'overall_rank_projected': stats.get('Z-RANK_projected', 0),
+            'overall_rank_proj': stats.get('Z-RANK_proj', 0),
             'z_score': round(stats.get('Z-SCORE_projected', 0), 1),  # Default to projected
             'z_score_season': round(stats.get('Z-SCORE', 0), 1),
             'z_score_5': round(stats.get('Z-SCORE_5', 0), 1),
             'z_score_10': round(stats.get('Z-SCORE_10', 0), 1),
             'z_score_projected': round(stats.get('Z-SCORE_projected', 0), 1),
+            'z_score_proj': round(stats.get('Z-SCORE_proj', 0), 1),
             'auction_value': stats.get('AUCTION_VALUE_projected', 0),  # Default to projected
             'auction_value_season': stats.get('AUCTION_VALUE', 0),
             'auction_value_5': stats.get('AUCTION_VALUE_5', 0),
             'auction_value_10': stats.get('AUCTION_VALUE_10', 0),
             'auction_value_projected': stats.get('AUCTION_VALUE_projected', 0),
+            'auction_value_proj': stats.get('AUCTION_VALUE_proj', 0),
             'fpoints': stats.get('FPOINTS_projected', 0),
             'fpoints_season': stats.get('FPOINTS', 0),
             'fpoints_5': stats.get('FPOINTS_5', 0),

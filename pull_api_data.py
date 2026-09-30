@@ -100,30 +100,32 @@ def pull_game_schedule(season=SEASON):
             Game.insert_many([{'team_home': h, 'team_away': a, 'date': d} for h, a, d in new[i:i + 500]]).execute()
     print(f"{season} schedule: {len(wanted)} games ({len(new)} added, {len(stale)} removed), {first} to {last}")
 
-def pull_standings(season=SEASON, min_games=10):
-    """Team win % for game-winner predictions. Until teams have played min_games, last season's
-    numbers stay: a 2-1 start says less than a full season."""
+def pull_standings(season=SEASON):
+    """Each team's record in `season`, from the first game (record_season says which season it
+    is). projections.team_strength blends it with the preseason projection, so a 2-1 start
+    barely moves a team."""
     resp = nba_api_call(leaguestandingsv3.LeagueStandingsV3, season=season)
     if resp is None:
         return
     df = resp.get_data_frames()[0]
     names = _team_names()
-    if len(df) == 0 or (df['WINS'] + df['LOSSES']).min() < min_games:
-        print(f"Standings: fewer than {min_games} games played in {season}; keeping current win %")
+    if len(df) == 0:
+        print(f"Standings: nothing published for {season} yet")
         return
     for row in df.itertuples():
         team = Team.get_or_none(Team.name == names.get(row.TeamID))
         if team:
             team.wins, team.losses = int(row.WINS), int(row.LOSSES)
-            team.win_percentage = round(team.wins / (team.wins + team.losses), 3)
+            team.win_percentage = round(team.wins / (team.wins + team.losses), 3) if team.wins + team.losses else None
+            team.record_season = season
             team.save()
     print(f"Standings updated for {len(df)} teams")
 
-def update_team_rosters():
+def update_team_rosters(season=SEASON):
     """Update team rosters from NBA API. Returns set of rostered player names.
-    Does not clear teams if too few roster calls succeed (API outage)."""
+    Does not clear teams if too few roster calls succeed (API outage). `season` defaults to the
+    current one (flips Oct 1); pass the next season to pick up summer moves and rookies early."""
     nba_teams = teams.get_teams()
-    season = SEASON
     roster_rows = []
     for team in nba_teams:
         roster = nba_api_call(commonteamroster.CommonTeamRoster, team_id=team['id'], season=season)
@@ -152,8 +154,9 @@ def update_team_rosters():
             if team['full_name']:
                 player.team = team['full_name']
             player.name = unidecode(row['PLAYER'])
-            if row.get('POSITION'):
-                player.pos = row['POSITION'][0]
+            position = row.get('POSITION')
+            if isinstance(position, str) and position:  # blank (NaN) for some new signings
+                player.pos = position[0]
             if created:
                 print(Fore.GREEN + f"Created Player: {player.name}")
             player.save()
@@ -302,8 +305,13 @@ if __name__ == '__main__':
     parser.add_argument('--season', default=SEASON, help=f'e.g. 2025-26 (default {SEASON})')
     parser.add_argument('--force', action='store_true', help='ignore the off-season gate and once-a-day skip')
     parser.add_argument('--skip-techs', action='store_true', help='skip the play-by-play technical foul scan')
+    parser.add_argument('--rosters', action='store_true',
+                        help="only set every player's team from --season's rosters (e.g. the next season's, "
+                             'before Oct 1); stats untouched')
     args = parser.parse_args()
-    if args.player:
+    if args.rosters:
+        print(f'{len(update_team_rosters(args.season))} rostered players ({args.season} rosters)')
+    elif args.player:
         update_single_player_stats(' '.join(args.player), args.season)
     else:
         pull_all_data(args.season, args.force, args.skip_techs)

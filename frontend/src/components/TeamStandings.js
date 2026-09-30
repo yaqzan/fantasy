@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getTeamStandings } from '../services/api';
 
 const TeamStandings = ({ config }) => {
-  const [statType, setStatType] = useState('projected');
+  const [statType, setStatType] = useState(config?.default_stat_type || 'projected');
   const [healthyOnly, setHealthyOnly] = useState(true);
   const [view, setView] = useState('per_game');
   const [standingsData, setStandingsData] = useState(null);
@@ -195,6 +195,7 @@ const TeamStandings = ({ config }) => {
               onChange={(e) => setStatType(e.target.value)}
               className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent"
             >
+              {config?.projection_season && <option value="proj">{config.projection_season} projection</option>}
               <option value="season">Season Average</option>
               <option value="5">Last 5 Games</option>
               <option value="10">Last 10 Games</option>

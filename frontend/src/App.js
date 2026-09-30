@@ -306,6 +306,7 @@ function App() {
                     onChange={(e) => { statTypePicked.current = true; setStatType(e.target.value); }}
                     className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent"
                   >
+                    {config?.projection_season && <option value="proj">{config.projection_season} projection</option>}
                     <option value="season">Season Average</option>
                     <option value="5">Last 5 Games</option>
                     <option value="10">Last 10 Games</option>

@@ -5,13 +5,13 @@ Builds player_stats dictionary from fantasy_database data.
 from datetime import date
 from statistics import NormalDist, mean, pstdev
 from peewee import fn
-from fantasy_database import Player, Team, Game
+from fantasy_database import Player, Game
 from fantasy_config import API_ATTRIBUTES, FPOINTS_SCORING
 from leagues import CATEGORY_CATALOG
 
 
 TIME_PERIODS = ['', '_5', '_10']
-TIMEFRAMES = ['', '_5', '_10', '_projected']
+TIMEFRAMES = ['', '_5', '_10', '_projected', '_proj']  # '_proj': this season's projection (projections.py)
 Z_CAP = 3.0       # a category's z-score is capped at +/-Z_CAP before categories are summed
 POOL_PASSES = 3   # re-rank passes that settle the draftable pool the z-scores are measured against
 _NORMAL = NormalDist()
@@ -22,13 +22,68 @@ TEAM_DICT = {
     'LA Lakers': 'Los Angeles Lakers',
 }
 
+PROJECTION_FADE_GAMES = 12  # a player's projection counts as this many games of his real numbers
+PROJECTION_MIN_GAMES = 20   # projected games to be in the pool the projection timeframe is scaled on
+PROJECTED_STATS = {'FGA': 'fga', 'FGM': 'fgm', 'FTA': 'fta', 'FTM': 'ftm', 'FG3M': 'fg3m', 'PTS': 'pts', 'AST': 'ast',
+                   'REB': 'reb', 'STL': 'stl', 'BLK': 'blk', 'TOV': 'tov', 'BLKA': 'blka', 'DD2': 'dd2', 'TD3': 'td3',
+                   'PF': 'pf', 'TECH': 'tech'}
+
+
+def season_first_game(today=None):
+    """Date of the first regular-season game of the season being played or next up, or None."""
+    today = today or date.today()
+    season_start = date(today.year if today.month >= 7 else today.year - 1, 7, 1)
+    return Game.select(fn.MIN(Game.date)).where(Game.date >= season_start).scalar()
+
+
 def is_preseason(today=None):
     """True from July 1 until the NBA season's first regular-season game (stored schedule): the
     players table still holds last season's stats."""
     today = today or date.today()
-    season_start = date(today.year if today.month >= 7 else today.year - 1, 7, 1)
-    first = Game.select(fn.MIN(Game.date)).where(Game.date >= season_start).scalar()
+    first = season_first_game(today)
     return first is not None and today < first
+
+
+def _ratios(stats, n):
+    """Ratio and derived categories from a timeframe's per-game components."""
+    fga, fta = stats[f'FGA{n}'], stats[f'FTA{n}']
+    stats[f'AST-TOV{n}'] = stats[f'AST{n}'] - stats[f'TOV{n}']
+    stats[f'PPS{n}'] = stats[f'PTS{n}'] / fga if fga else 0
+    stats[f'NFT{n}'] = 2 * stats[f'FTM{n}'] - fta
+    stats[f'FG%{n}'] = stats[f'FGM{n}'] / fga if fga else 0
+    stats[f'FT%{n}'] = stats[f'FTM{n}'] / fta if fta else 0
+    stats[f'TS%{n}'] = stats[f'PTS{n}'] / (2 * (fga + 0.44 * fta)) if (fga or fta) else 0
+    stats[f'EFG%{n}'] = (stats[f'FGM{n}'] + 0.5 * stats[f'FG3M{n}']) / fga if fga else 0
+
+
+def _add_projections(player_stats, preseason, team_win):
+    """The '_proj' timeframe: this season's blended projection (projections.player_lines) for
+    every rostered player who has one, rookies included. Once his games this season are in the
+    players table, each stat becomes (projection x K + actual total) / (K + games played),
+    K = PROJECTION_FADE_GAMES, so early-season samples don't swing him around."""
+    from projections import player_lines, season_label
+    lines = player_lines(season_label())
+    if not lines:
+        return
+    first_game = season_first_game()
+    rostered = Player.select().where(Player.id.in_(list(lines)), Player.team.is_null(False), Player.pos.is_null(False))
+    for player in rostered:
+        line = lines[player.id]
+        team_name = TEAM_DICT.get(player.team, player.team)
+        stats = player_stats.setdefault(player.name, {'TEAM': team_name, 'Pos': player.pos, 'GP': 0})
+        current = (not preseason and first_game is not None and player.api_updated_at is not None
+                   and player.api_updated_at.date() >= first_game)
+        played = (player.gp or 0) if current else 0
+        for key, attr in PROJECTED_STATS.items():
+            projected = line[attr] or 0.0
+            actual = getattr(player, attr, None) or 0
+            stats[f'{key}_proj'] = ((projected * PROJECTION_FADE_GAMES + actual) / (PROJECTION_FADE_GAMES + played)
+                                    if played else projected)
+        stats['GP_proj'] = line['gp'] or 0.0
+        stats['MIN_proj'] = line['min'] or 0.0
+        stats['WIN%_proj'] = stats['W_proj'] = team_win.get(team_name, 0.5)
+        stats['PLUS_MINUS_proj'] = 0.0
+        _ratios(stats, '_proj')
 
 
 # populates a full dictionary of player stats from the db
@@ -39,8 +94,9 @@ def load_player_stats():
     Returns:
         dict: Player statistics keyed by player name
     """
+    from projections import team_strength
     player_stats = {}
-    team_win_percentages = {team.name: team.win_percentage for team in Team.select()}
+    team_win = team_strength()
     preseason = is_preseason()
 
     for player in Player.select().where(Player.team.is_null(False)).where(Player.pos.is_null(False)).where(Player.gp > 0):
@@ -70,7 +126,7 @@ def load_player_stats():
             # the Oct 1 roster update maybe another team) and before player wins were ingested:
             # his current team's win %.
             player_stats[player.name][f'WIN%{n}'] = (
-                (team_win_percentages.get(team_name) or 0) if preseason or player.w is None
+                team_win.get(team_name, 0.5) if preseason or player.w is None
                 else player_stats[player.name][f'W{n}'])
 
         for stat in API_ATTRIBUTES + ['PLUS_MINUS']:
@@ -119,6 +175,7 @@ def load_player_stats():
             player_stats[player.name].get(f'GP{n}', 0) * STAT_AVG_WEIGHTS[n] for n in STAT_AVG_WEIGHTS
         )
 
+    _add_projections(player_stats, preseason, team_win)
     return player_stats
 
 def _log5(p_a, p_b):
@@ -127,8 +184,10 @@ def _log5(p_a, p_b):
     return p_a * (1 - p_b) / (p_a * (1 - p_b) + p_b * (1 - p_a))
 
 def week_schedule(week_start, week_end):
-    """{NBA team: {game date: chance of winning}} for every game in the week."""
-    win_pct = {team.name: team.win_percentage if team.win_percentage is not None else 0.5 for team in Team.select()}
+    """{NBA team: {game date: chance of winning}} for every game in the week, from each team's
+    strength (projections.team_strength: projection faded into the real record)."""
+    from projections import team_strength
+    win_pct = team_strength()
     schedule = {}
     for game in Game.select().where(Game.date >= week_start, Game.date <= week_end):
         p_home = _log5(win_pct.get(game.team_home, 0.5), win_pct.get(game.team_away, 0.5))
@@ -305,7 +364,7 @@ def _category_values(player_stats, category, n, pool):
     in_pool = [p for p in pool if p in raw]
     pool_attempts = sum(attempts[p] for p in in_pool)
     pool_rate = sum(raw[p] * attempts[p] for p in in_pool) / pool_attempts if pool_attempts else 0.0
-    prior = spec.get('prior', 0)
+    prior = 0 if n == '_proj' else spec.get('prior', 0)  # projections come already regressed
     values = {}
     for p, rate in raw.items():
         total = attempts[p] * (player_stats[p].get(f'GP{n}') or 0)
@@ -380,10 +439,14 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
     categories = league.categories
     inverse = set(league.inverse_categories)
     scored = [c for c in categories if c not in punt_categories]
-    eligible = _qualified_pool(player_stats)
+    qualified = _qualified_pool(player_stats)
+    projected = {p for p, s in player_stats.items() if s.get('GP_proj', 0) >= PROJECTION_MIN_GAMES}
     pool_size = max(league.num_teams * league.roster_size, 1)
 
     for n in TIMEFRAMES:
+        if n == '_proj' and not projected:
+            continue  # no projections for this season yet
+        eligible = projected if n == '_proj' else qualified
         z_all = _z_scores(player_stats, categories, inverse, n, eligible, pool_size)
         z_scored = (z_all if len(scored) == len(categories)
                     else _z_scores(player_stats, scored, inverse, n, eligible, pool_size))

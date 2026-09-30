@@ -17,6 +17,7 @@ class Team(BaseModel):
     wins = IntegerField(null=True)
     losses = IntegerField(null=True)
     abv = CharField(null=True)
+    record_season = CharField(max_length=7, null=True)  # season wins/losses are from, e.g. '2026-27'
     
     class Meta:
         table_name = 'teams'
@@ -209,5 +210,102 @@ class DailyPlayerStats(BaseModel):
         primary_key = CompositeKey('player_id', 'game_date', 'game_id')
 
 
+class PlayerSeason(BaseModel):
+    """A player's regular-season totals for one past season (nba_api leaguedashplayerstats), the
+    history projections are built from (pull_history.py)."""
+    season = CharField(max_length=7)          # '2025-26'
+    player_id = IntegerField()
+    name = CharField()
+    team = CharField(max_length=8, null=True)  # abbreviation of his last team that season
+    age = FloatField(null=True)
+    gp = IntegerField()
+    min = FloatField()
+    pts = IntegerField()
+    reb = IntegerField()
+    ast = IntegerField()
+    stl = IntegerField()
+    blk = IntegerField()
+    fg3m = IntegerField()
+    tov = IntegerField()
+    fgm = IntegerField()
+    fga = IntegerField()
+    ftm = IntegerField()
+    fta = IntegerField()
+    blka = IntegerField()
+    pf = IntegerField()
+    dd2 = IntegerField()
+    td3 = IntegerField()
+    w = IntegerField()
+
+    class Meta:
+        table_name = 'player_seasons'
+        primary_key = CompositeKey('season', 'player_id')
+
+
+class PlayerProjection(BaseModel):
+    """One source's projection of a player's season (per-game line and games). NBA-wide."""
+    season = CharField(max_length=7)          # the projected season, '2026-27'
+    source = CharField(max_length=32)         # 'espn', 'model', a research source...
+    player_id = IntegerField()
+    name = CharField()
+    gp = FloatField(null=True)
+    min = FloatField(null=True)               # per game, like every stat below
+    pts = FloatField(null=True)
+    reb = FloatField(null=True)
+    ast = FloatField(null=True)
+    stl = FloatField(null=True)
+    blk = FloatField(null=True)
+    fg3m = FloatField(null=True)
+    tov = FloatField(null=True)
+    fgm = FloatField(null=True)
+    fga = FloatField(null=True)
+    ftm = FloatField(null=True)
+    fta = FloatField(null=True)
+    blka = FloatField(null=True)
+    pf = FloatField(null=True)
+    tech = FloatField(null=True)
+    dd2 = FloatField(null=True)
+    td3 = FloatField(null=True)
+    # Filled by the 'model' source, used to weigh sources by player type (projections.py):
+    age = FloatField(null=True)               # age during the projected season
+    exp = IntegerField(null=True)             # NBA seasons before it
+    prev_team = CharField(max_length=8, null=True)  # abbreviation of last season's team
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'player_projections'
+        primary_key = CompositeKey('season', 'source', 'player_id')
+
+
+class ProjectionAdjustment(BaseModel):
+    """The owner's own read on a player's projection: production and games scaled, applied after
+    the sources are combined."""
+    season = CharField(max_length=7)
+    player_id = IntegerField()
+    production = FloatField(default=1.0)      # scales every counting stat and minutes
+    games = FloatField(null=True)             # replaces projected games when set
+    note = CharField(null=True)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'projection_adjustments'
+        primary_key = CompositeKey('season', 'player_id')
+
+
+class TeamProjection(BaseModel):
+    """One source's projected regular-season wins for a team. source 'owner' holds the owner's
+    adjustment in wins (added to the index), not a projection."""
+    season = CharField(max_length=7)
+    source = CharField(max_length=32)
+    team = CharField()                        # full name, as in `teams`
+    wins = FloatField()
+    url = CharField(max_length=512, null=True)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'team_projections'
+        primary_key = CompositeKey('season', 'source', 'team')
+
+
 ALL_MODELS = [Team, Player, Game, League, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag, TechnicalFoul,
-              ScannedGame, DailyPlayerStats]
+              ScannedGame, DailyPlayerStats, PlayerSeason, PlayerProjection, ProjectionAdjustment, TeamProjection]

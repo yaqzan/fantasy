@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import DraftModal from './DraftModal';
 import { calculateCustomZScores, calculateCustomAuctionValues } from '../services/api';
 
+// API field suffix for each stats choice ('proj' = this season's projection).
+const PERIOD_SUFFIX = { season: '_season', '5': '_5', '10': '_10', projected: '_projected', proj: '_proj' };
+
 const formatWeekDate = (dateStr) => {
   if (!dateStr) return '';
   // Parse date string directly to avoid timezone issues
@@ -69,13 +72,12 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     return () => { cancelled = true; };
   }, [priceExponent, puntCategories, statType]);
 
+  // The field for the selected stats: periodKey('z_score') -> 'z_score_season' etc.
+  const periodKey = (base) => `${base}${PERIOD_SUFFIX[statType] || '_projected'}`;
+
   // Auction value on the same stats as the rank (custom slider/punt values when set)
   const getAuctionValue = (player) => {
-    const key = statType === 'season' ? 'auction_value_season' :
-               statType === '5' ? 'auction_value_5' :
-               statType === '10' ? 'auction_value_10' :
-               'auction_value_projected';
-    return customAuctionValues[player.name]?.auction_value || (player[key] ?? player.auction_value);
+    return customAuctionValues[player.name]?.auction_value || (player[periodKey('auction_value')] ?? player.auction_value);
   };
 
   // Handle category inclusion changes (unchecked = punt)
@@ -356,19 +358,13 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
 
   // Helper function to get the correct z_score based on statType
   const getZScore = (player) => {
-    const zScoreKey = statType === 'season' ? 'z_score_season' : 
-                     statType === '5' ? 'z_score_5' : 
-                     statType === '10' ? 'z_score_10' : 
-                     'z_score_projected';
+    const zScoreKey = periodKey('z_score');
     return player[zScoreKey] !== undefined ? player[zScoreKey] : player.z_score;
   };
 
   // Helper function to get the correct overall_rank based on statType
   const getOverallRank = (player) => {
-    const rankKey = statType === 'season' ? 'overall_rank_season' : 
-                   statType === '5' ? 'overall_rank_5' : 
-                   statType === '10' ? 'overall_rank_10' : 
-                   'overall_rank_projected';
+    const rankKey = periodKey('overall_rank');
     return player[rankKey] !== undefined ? player[rankKey] : player.overall_rank;
   };
 
@@ -398,14 +394,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
       const stat = parts[2]; // 'value' or 'score'
       
       // Determine the key based on stat type
-      const valueKey = statType === 'season' ? 'value_season' : 
-                      statType === '5' ? 'value_5' : 
-                      statType === '10' ? 'value_10' : 
-                      statType === 'projected' ? 'value_projected' : 'value';
-      const scoreKey = statType === 'season' ? 'score_season' : 
-                      statType === '5' ? 'score_5' : 
-                      statType === '10' ? 'score_10' : 
-                      statType === 'projected' ? 'score_projected' : 'score';
+      const valueKey = periodKey('value');
+      const scoreKey = periodKey('score');
       
       const key = stat === 'value' ? valueKey : (stat === 'score' ? scoreKey : parts[2]);
       
@@ -639,14 +629,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   );
                   
                   // Get value and score based on selected stat type
-                  const valueKey = statType === 'season' ? 'value_season' : 
-                                  statType === '5' ? 'value_5' : 
-                                  statType === '10' ? 'value_10' : 
-                                  'value_projected';
-                  const scoreKey = statType === 'season' ? 'score_season' : 
-                                  statType === '5' ? 'score_5' : 
-                                  statType === '10' ? 'score_10' : 
-                                  'score_projected';
+                  const valueKey = periodKey('value');
+                  const scoreKey = periodKey('score');
                   
                   const displayValue = stat[valueKey] !== undefined ? stat[valueKey] : stat.value;
                   const displayScore = stat[scoreKey] !== undefined ? stat[scoreKey] : stat.score;
@@ -672,7 +656,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   );
                 })}
                 <td className="table-cell text-gray-300">
-                  {player.small_sample ? (
+                  {player.projected_only ? (
+                    <span className="text-sky-400" title="No NBA games last season (rookie, or out all year): valued on his projection only">
+                      new
+                    </span>
+                  ) : player.small_sample ? (
                     <span className="text-amber-400" title={`Small sample: only ${player.games_played} games, so his numbers may not hold`}>
                       {player.games_played}⚠
                     </span>

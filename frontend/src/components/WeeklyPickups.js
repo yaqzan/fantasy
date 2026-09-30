@@ -31,7 +31,7 @@ const chanceColor = (chance) => {
 // schedule (who plays how often, and against whom for Wins), with the best drop for each.
 const WeeklyPickups = ({ config }) => {
   const [weekStart, setWeekStart] = useState(null);
-  const [timeframe, setTimeframe] = useState('projected');
+  const [timeframe, setTimeframe] = useState(config?.default_stat_type || 'projected');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -72,6 +72,7 @@ const WeeklyPickups = ({ config }) => {
             <span className="text-sm text-gray-300">Stats:</span>
             <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className={selectClass}>
               <option value="projected">Projected</option>
+              {config?.projection_season && <option value="proj">{config.projection_season} projection</option>}
               <option value="season">Season Average</option>
               <option value="10">Last 10 Games</option>
               <option value="5">Last 5 Games</option>

@@ -26,7 +26,8 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
     (`pbp_scanned_games`). Counts `Foul` actions whose subType contains "Technical" by players
     (coach/team techs and defensive 3 seconds drop out). Unscanned games count 0.
   - `WIN%` ("Wins"): per player, wins per game played (game log `WL`). Before the season's
-    first game (`is_preseason`) and before player wins exist: his current team's win %, since
+    first game (`is_preseason`) and before player wins exist: his current team's strength
+    (`projections.team_strength`, see projections.md), since
     his wins came with last season's team (Anthony Davis: Dallas-era .500, Washington .207).
     In a week projection a player's wins are the summed log5 chances of his team winning each
     game he is active for (`week_schedule`, team win % from standings).

@@ -10,6 +10,9 @@ a switcher in the header moves between them. Mine runs at [fantasy.yaqzan.dev](h
 ### Backend (Flask)
 - RESTful API for player statistics, fantasy team management, and league data
 - Several leagues side by side, each with its own rules, teams and rosters
+- Season projections: several experts' projections averaged and blended with our own model
+  (weights measured on past seasons), rookies included; team win projections weighted by each
+  source's past accuracy
 - Scores and auction values per league: category z-scores against the players who get drafted,
   auction dollars by value over replacement (its categories, team count, roster size and budget)
 - Daily-lineup leagues (best N active players each day count) and weekly-lineup leagues
@@ -55,6 +58,9 @@ MySQL:
   --force` backfills a past season (useful before a draft).
 - `pull_technical_fouls.py`: technical fouls, scanned from each game's play-by-play once (about
   3 seconds a game; a full season is about an hour). `pull_api_data.py` runs it for new games.
+- `pull_history.py`: past seasons' player totals (one call a season), the model's history.
+- `pull_projections.py`: this season's projections: our model and ESPN's. Other sources load
+  with `import_projections.py players <csv> --source <name>` (team wins: `teams <csv>`).
 - `update_daily_stats.py` / `update_daily_stats_efficient.py`: daily fantasy-point updates,
   scoped to teams that played on a given date
 - `create_daily_stats_table.py`: one-time table setup

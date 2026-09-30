@@ -17,7 +17,7 @@ from fantasy_team_helper import (get_my_team_players, get_all_my_team_players, g
                                  get_available_players, get_current_fantasy_week_dates, get_undroppable_players,
                                  get_injured_players)
 
-TIMEFRAME_SUFFIX = {'': '', 'season': '', '5': '_5', '10': '_10', 'projected': '_projected'}
+TIMEFRAME_SUFFIX = {'': '', 'season': '', '5': '_5', '10': '_10', 'projected': '_projected', 'proj': '_proj'}
 
 
 def timeframe_suffix(timeframe):
