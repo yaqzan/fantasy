@@ -40,3 +40,6 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   stored as source `owner`), `GET /api/projections/players` (blended line, every source's line,
   this league's projection rank and $), `PUT /api/projections/players/<id>` (`production` factor
   on counting stats and minutes, `games` override; 1.0 and no games deletes the row).
+- **Check a new source before blending it**: median per-game ratio to ESPN per stat and games.
+  CBS 2026-27 came out at .84 points / 1.12 games (totals over too many games) and is in
+  `NOT_BLENDED`; the others sit within ~7% (ESPN is the most optimistic, as in the backtests).

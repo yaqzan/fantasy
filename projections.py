@@ -26,6 +26,9 @@ from fantasy_database import Player, PlayerProjection, PlayerSeason, ProjectionA
 # above all) helps most with veterans and players who changed teams.
 EXPERT_WEIGHT = {'rookie': 0.9, 'year 2-3': 0.9, 'other': 0.7, 'age 32+': 0.6, 'changed team': 0.5}
 MODEL_SOURCES = {'model'}
+# Shown for comparison but not averaged in. CBS (2026-27): per-game lines ~16% below every other
+# source (median points ratio to ESPN .84, games 1.12x: season totals spread over too many games).
+NOT_BLENDED = {'cbs'}
 LINE = ['gp', 'min', 'pts', 'reb', 'ast', 'stl', 'blk', 'fg3m', 'tov', 'fgm', 'fga', 'ftm', 'fta',
         'blka', 'pf', 'tech', 'dd2', 'td3']
 ESPN_BLENDED = ['gp', 'min', 'pts', 'reb', 'ast', 'stl', 'blk', 'fg3m', 'tov', 'fgm', 'fga', 'ftm', 'fta']
@@ -257,7 +260,7 @@ def player_lines(season, team_abv=None):
         abv = {t.name: t.abv for t in Team.select()}
         team_abv = {p.id: abv.get(p.team) for p in Player.select(Player.id, Player.team).where(Player.team.is_null(False))}
     model = by_source.get('model', {})
-    experts = {s: rows for s, rows in by_source.items() if s not in MODEL_SOURCES}
+    experts = {s: rows for s, rows in by_source.items() if s not in MODEL_SOURCES | NOT_BLENDED}
     rates, league_tech = tech_rates()
     adjustments = {a.player_id: a for a in ProjectionAdjustment.select().where(ProjectionAdjustment.season == season)}
     lines = {}
