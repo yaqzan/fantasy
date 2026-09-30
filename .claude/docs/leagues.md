@@ -17,9 +17,10 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
 - **Categories.** `CATEGORY_CATALOG` in `leagues.py`: key, label, `inverse` (lower wins), `kind`;
   ratios also carry `attempts` (per-game attempts formula) and `prior` (shrinkage strength in
   attempts, method of moments on 2025-26; FG% measured ~55, stored 60). Adding a category = a per-player per-period stat in
-  `player_stats.load_player_stats` (keys `CAT`, `CAT_5`, `CAT_10`, `CAT_projected`) + a catalog
-  entry; `calculate_team_totals` sums counting stats generically and special-cases ratios and
-  `WIN%`.
+  `player_stats.load_player_stats` (keys `CAT`, `CAT_5`, `CAT_10`, `CAT_projected`, and `CAT_proj`
+  via `PROJECTED_STATS`/`_ratios` in `_add_projections`) + a catalog entry with its weekly noise
+  (`noise`, or `attempt_sd` for a ratio); `calculate_team_totals` sums counting stats generically
+  and special-cases ratios and `WIN%`.
   - `BLKA` (times blocked): `leaguedashplayerstats` (the game logs lack it); its last-N filter is
     the team's last N games, an approximation.
   - `TECH`: play-by-play scan, `pull_technical_fouls.py`, one fetch per game ever
@@ -30,7 +31,8 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
     (`projections.team_strength`, see projections.md), since
     his wins came with last season's team (Anthony Davis: Dallas-era .500, Washington .207).
     In a week projection a player's wins are the summed log5 chances of his team winning each
-    game he is active for (`week_schedule`, team win % from standings).
+    game he is active for (`week_schedule`, from `team_strength`: projected wins faded into the
+    real record).
 - **Daily vs weekly lineups** (`roster.daily_lineups`). Weekly: the optimizer picks `active`
   starters from the healthy roster, position minimums apply, every game counts. Daily: each day
   only the best `active` players (by the timeframe's Z-SCORE) whose team plays count
@@ -64,7 +66,8 @@ to a league. NBA data (players, games, standings, injuries, daily stats) is shar
   first undrafted player's value) ^ `draft.price_exponent`, rounded to whole dollars that add up
   to the budget. `/api/fantasy` prices every timeframe (`auction_value_<period>`) so the table's
   $ always sits on the same stats as its rank; before a league's first week the UI defaults to
-  the full season (`config.default_stat_type`), after it to the projection. Players under
+  this season's projection (`proj`; last full season if none exist), after it to `projected`
+  (half season, half last 10 games) (`config.default_stat_type`). Players under
   `games_floor` are flagged `small_sample`. Fit the exponent to the league's past auction prices by rank (least squares
   over the drafted players); the owner's league stores its fit (a gitignored
   `draft_history_price_curve.json` holds the price curve it came from).

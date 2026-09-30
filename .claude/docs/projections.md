@@ -47,6 +47,14 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   stored as source `owner`), `GET /api/projections/players` (blended line, every source's line,
   this league's projection rank and $), `PUT /api/projections/players/<id>` (`production` factor
   on counting stats and minutes, `games` override; 1.0 and no games deletes the row).
+- **Yearly refresh** (before a draft; the season label flips July 1): `pull_api_data.py --rosters
+  --season <new>` (summer moves, rookies), `pull_history.py` (adds the season just finished),
+  `pull_projections.py`, `pull_fantrax.py projections --league <a new-season Fantrax league>` and
+  `techs --seasons <last three>`, then any research CSVs through `import_projections.py`
+  (players per source; `teams` for win projections). Recheck `EXPERT_WEIGHT` and
+  `TEAM_SOURCE_WEIGHT` once a season's preseason numbers can be scored against what happened.
+  The backtest scripts (ESPN vs model vs last season, per-type weights, expert averages, team-win
+  accuracy) live outside the repo, in this machine's `.horizon/projections-2026-27/driver`.
 - **Check a new source before blending it**: median per-game ratio to ESPN per stat and games.
   CBS 2026-27 came out at .84 points / 1.12 games (totals over too many games) and is in
   `NOT_BLENDED`; the others sit within ~7% (ESPN is the most optimistic, as in the backtests).
