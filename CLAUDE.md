@@ -40,4 +40,5 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 Detail: leagues, categories, daily vs weekly lineups -> `.claude/docs/leagues.md`.
 Projections (players, rookies, team wins, sources, backtests) -> `.claude/docs/projections.md`.
 Hosting, tunnel, watchdog, cutover history -> `.claude/docs/ops.md`.
+Draft strategy: what the room pays for, price-tier returns, category pairs, anchor builds -> `.claude/docs/draft-strategy.md`.
 Kanban -> vault `Engineering Wiki/Projects/Fantasy/`.
