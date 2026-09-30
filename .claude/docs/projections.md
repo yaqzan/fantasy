@@ -12,7 +12,12 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   but no stat line is not a projection, a missing stat otherwise means 0) and `model`
   (`projection_model.py`). `import_projections.py players <csv> --source X` for others
   (FantasyPros, CBS, FanScout, RotoWire, a rookie survey with `--by-player`); `teams <csv>` for
-  win projections. Names match via `norm_name` + `NAME_ALIASES`.
+  win projections. Names match via `norm_name` + `NAME_ALIASES`. `pull_fantrax.py projections
+  --league <this season's Fantrax league>`: Fantrax's own projections (source `fantrax`, scale
+  like the other experts); it needs the owner's saved login (`fantraxloggedin.cookie`, made from
+  their Firefox session with browser_cookie3; the permission rule for it is in the gitignored
+  `.claude/settings.local.json`). Fantrax projects no technicals or double-doubles (all 0) and has
+  no times-blocked stat.
 - **Our model** (`projection_model.py`): last 3 seasons 5/4/3 by minutes + 800 minutes of league
   average, a one-year age factor (delta method, seasons before the target only); players
   entering year 2-3 use last season only + experience curves; rookies = past picks' first
@@ -24,8 +29,10 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   vs our model: fit on 2024-25/2025-26 with ESPN + FantasyPros, the experts with a past.
   Experts overrate team changers and veterans; averaging experts beat ESPN alone. Stats no
   expert projects: times blocked (our BLKA per shot x blended FGA), fouls (per minute), double/
-  triple-doubles (scaled with points), technicals (last season's scan per minute + 1500 minutes
-  of league rate). Owner adjustments apply last.
+  triple-doubles (scaled with points), technicals (per minute over the last 3 seasons, 5/4/3,
+  + 300 minutes of league rate; counts from Fantrax, `pull_fantrax.py techs`, since Fantrax scores
+  the category; two seasons predicted the next better than one, a heavier prior did worse).
+  Owner adjustments apply last.
 - **Stats basis `_proj`** (`player_stats._add_projections`): every rostered player with a line,
   rookies included; `GP_proj` >= 20 makes the scaling pool; ratios are not shrunk again. Once
   his games this season are loaded (`api_updated_at` after opening night), each stat fades:

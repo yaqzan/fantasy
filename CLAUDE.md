@@ -19,6 +19,7 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 - `python pull_api_data.py --rosters --season 2026-27` - teams from next season's rosters, stats untouched
 - `python pull_history.py` then `python pull_projections.py` - history, then our model + ESPN projections
 - `python import_projections.py players|teams <csv> [--source X]` - load another projection source
+- `python pull_fantrax.py projections|techs --league <fantrax id>` - Fantrax projections / past techs (saved login)
 - `python lineup_optimizer.py [--league <id>] [--pickup]` - this week's matchup in the terminal
 - `ops\windows\install-tasks.ps1 -Controller C:\Development\server.ps1` - watchdog task; ELEVATED shell
 

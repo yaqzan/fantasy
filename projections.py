@@ -34,7 +34,10 @@ LINE = ['gp', 'min', 'pts', 'reb', 'ast', 'stl', 'blk', 'fg3m', 'tov', 'fgm', 'f
 ESPN_BLENDED = ['gp', 'min', 'pts', 'reb', 'ast', 'stl', 'blk', 'fg3m', 'tov', 'fgm', 'fga', 'ftm', 'fta']
 SCALED = ['min', 'pts', 'reb', 'ast', 'stl', 'blk', 'fg3m', 'tov', 'fgm', 'fga', 'ftm', 'fta', 'blka', 'pf', 'tech',
           'dd2', 'td3']
-TECH_PRIOR_MIN = 1500  # minutes of league-average technicals a player's own rate is blended with
+# Technicals are sticky: two seasons weighted beat last season alone (MAE 1.58 vs 1.72 techs per
+# 2000 minutes, 2025-26), and pulling toward league average only hurt, so the prior is light.
+TECH_WEIGHTS = (5, 4, 3)  # last three seasons
+TECH_PRIOR_MIN = 300      # minutes of league-average technicals a player's own rate is blended with
 
 ESPN_URL = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba/seasons/{year}/players?scoringPeriodId=0&view=kona_player_info'
 # ESPN stat ids -> ours (checked against our 2025-26 totals, 2026-09-30).
@@ -153,17 +156,31 @@ def model_rows(season):
 
 
 def tech_rates():
-    """({player id: technicals per minute, blended with league average}, league rate) from the
-    play-by-play scan of the last season scanned."""
-    from peewee import fn
-    last = PlayerSeason.select(fn.MAX(PlayerSeason.season)).scalar()
-    minutes = {p.player_id: p.min for p in PlayerSeason.select().where(PlayerSeason.season == last)}
-    techs = {}
+    """({player id: technicals per minute}, league rate): the last three seasons weighted
+    TECH_WEIGHTS by minutes, plus TECH_PRIOR_MIN minutes of league average. Counts are Fantrax's
+    (the league platform scores them; `pull_fantrax.py techs`), else our play-by-play scan for
+    the last season."""
+    seasons = [s for (s,) in PlayerSeason.select(PlayerSeason.season).distinct()
+               .order_by(PlayerSeason.season.desc()).tuples()][:3]
+    scan = {}
     for t in TechnicalFoul.select():
-        techs[t.player_id] = techs.get(t.player_id, 0) + t.count
-    total_min = sum(minutes.values()) or 1.0
-    league = sum(techs.get(p, 0) for p in minutes) / total_min
-    rates = {p: (techs.get(p, 0) + TECH_PRIOR_MIN * league) / (m + TECH_PRIOR_MIN) for p, m in minutes.items()}
+        scan[t.player_id] = scan.get(t.player_id, 0) + t.count
+    num, den = {}, {}
+    league_techs = league_min = 0.0
+    for weight, season in zip(TECH_WEIGHTS, seasons):
+        rows = list(PlayerSeason.select().where(PlayerSeason.season == season))
+        has_fantrax = any(p.tech is not None for p in rows)
+        for p in rows:
+            techs = p.tech if has_fantrax else (scan.get(p.player_id, 0) if season == seasons[0] else None)
+            if techs is None:
+                continue
+            num[p.player_id] = num.get(p.player_id, 0) + weight * techs
+            den[p.player_id] = den.get(p.player_id, 0) + weight * p.min
+            if season == seasons[0]:
+                league_techs += techs
+                league_min += p.min
+    league = league_techs / league_min if league_min else 0.0
+    rates = {p: (num[p] + TECH_PRIOR_MIN * league) / (den[p] + TECH_PRIOR_MIN) for p in num}
     return rates, league
 
 

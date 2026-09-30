@@ -34,6 +34,8 @@ def upgrade_schema(DB):
     for col in ('tech', 'tech_5', 'tech_10', 'w', 'w_5', 'w_10'):
         if col not in player_cols:
             ops.append(migrator.add_column('players', col, IntegerField(null=True)))
+    if 'player_seasons' in DB.get_tables() and 'tech' not in {c.name for c in DB.get_columns('player_seasons')}:
+        ops.append(migrator.add_column('player_seasons', 'tech', IntegerField(null=True)))
     if 'record_season' not in {c.name for c in DB.get_columns('teams')}:
         ops.append(migrator.add_column('teams', 'record_season', CharField(max_length=7, null=True)))
     team_cols = {c.name for c in DB.get_columns('fantasy_teams')}

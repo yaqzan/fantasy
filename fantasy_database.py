@@ -236,6 +236,7 @@ class PlayerSeason(BaseModel):
     dd2 = IntegerField()
     td3 = IntegerField()
     w = IntegerField()
+    tech = IntegerField(null=True)             # technical fouls (Fantrax, pull_fantrax.py techs)
 
     class Meta:
         table_name = 'player_seasons'
