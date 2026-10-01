@@ -484,6 +484,10 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                       title="Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even. Green: the room should stop well short of it; grey: about even; orange: the room will likely pay past it.">
                     <div className="flex items-center font-bold tracking-wide">Max bid <SortIcon columnKey="max_bid" /></div>
                   </th>
+                  <th className="table-header w-56"
+                      title="Aim: the price worth holding out for early (90% of a star's max, 85% of others at $15+). Rocket: his max if he breaks out (second- and third-year players). Chart: third-year max with the average third-year correction. Then where his value is, what he gives up, and the rule that applies.">
+                    Notes
+                  </th>
                 </>
               )}
               {CATEGORIES.map(category => {
@@ -551,7 +555,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 <td className="table-cell">
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="font-medium text-white">{player.name}</span>
+                      <span className={`font-medium text-white ${draftMode ? 'max-w-[11.5rem] truncate' : ''}`} title={draftMode ? player.name : undefined}>{player.name}</span>
                       {player.is_injured && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white whitespace-nowrap">
                           INJ{player.injured_return ? ` - ${player.injured_return}` : ''}{player.injured_games ? ` (${player.injured_games} missed)` : ''}
@@ -583,23 +587,28 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 {draftPlan && (() => {
                   const likely = likelyPrice(player);
                   const max = maxBid(player);
+                  const isStar = draftPlan.rule.stars[player.name] != null;
+                  const rule = draftPlan.aim;
+                  // The price worth holding out for early: a share of the max (stars, and others from the floor up)
+                  const aim = !rule ? null : isStar ? Math.round(max * rule.star) : max >= rule.floor ? Math.round(max * rule.other) : null;
+                  const whatIf = !isStar ? player.what_if : null;
+                  const chip = 'inline-block rounded-full px-1.5 py-0.5 text-[11px] leading-none font-medium whitespace-nowrap';
                   return (
                     <>
                       <td className="table-cell text-gray-400">{likely != null ? `$${likely}` : '-'}</td>
                       <td className="table-cell bg-nba-orange/[0.07] border-x border-nba-orange/25" style={{ color: bidColor(max, likely) }}>
                         <div className="flex items-center gap-2">
                         <span className="text-xl font-extrabold tabular-nums leading-none" title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>${max}</span>
-                        {player.what_if && draftPlan.rule.stars[player.name] == null && (
-                          // What-if max bids beside the max, stacked. Third-year: with the average third-year miss
-                          // added back, then after a breakout. Second-year: the breakout only (they are projected about right).
-                          <div className="flex flex-col text-sm font-semibold leading-none gap-0.5 whitespace-nowrap cursor-help"
-                               title={player.what_if.corrected != null
-                                 ? 'Third-year player: max bid if he breaks out (top), and with the average third-year correction (bottom)'
-                                 : 'Second-year player: max bid if he breaks out (32% of second-year players do)'}>
-                            <span className="text-green-400">🚀${shareMax(player.what_if.breakout)}</span>
-                            {player.what_if.corrected != null && <span className="text-sky-300">📈${shareMax(player.what_if.corrected)}</span>}
-                          </div>
-                        )}
+                        </div>
+                      </td>
+                      <td className="table-cell max-w-[15rem]">
+                        <div className="flex flex-wrap items-center gap-1 whitespace-normal">
+                          {aim != null && <span className={`${chip} bg-nba-orange/20 text-orange-200`} title="Worth holding out for early in the draft; go to the max later if money is left">aim ≤${aim}</span>}
+                          {whatIf && <span className={`${chip} bg-green-500/15 text-green-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀${shareMax(whatIf.breakout)}</span>}
+                          {whatIf && whatIf.corrected != null && <span className={`${chip} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">📈${shareMax(whatIf.corrected)}</span>}
+                          {(draftPlan.notes?.[player.name] || []).map((n, k) => (
+                            <span key={k} className={`${chip} ${n.k === 'good' ? 'bg-emerald-500/10 text-emerald-300' : n.k === 'bad' ? 'bg-red-500/10 text-red-300' : 'bg-gray-600/40 text-gray-200'}`}>{n.t}</span>
+                          ))}
                         </div>
                       </td>
                     </>

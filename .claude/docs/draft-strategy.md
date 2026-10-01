@@ -248,9 +248,12 @@ it) by the file's `rule`: stars at their replicated break-even, else Value x 0.8
 The Max bid colour is a gradient on max minus likely price (`frontend/src/bidColor.js`): green when
 the room should stop well short, neutral when even, orange when it will pay well past; the gap is
 scaled by 30% of the larger price (floor $5) so a few dollars on a star stays neutral.
-A third-year player (not a star) carries two small stacked numbers beside his max (🚀17 over 📈9): the max with
-the average third-year miss added back (+0.53 z) and after a breakout (+2 z), from
-`/api/fantasy`'s `what_if`; second-year players show the breakout number only (their projections
-are unbiased; 32% break out), (`player_stats.auction_value_at` on the projection curve). What-if only:
-no value changes (projections.md, "Breakouts by NBA year").
+A **Notes** column (draft mode, when the plan belongs to the league) holds chips per player:
+`aim <=$N` (the price worth holding out for early: 90% of a star's max, 85% of others from $15,
+`draft_day.json` `aim`, from the simulated auctions), the what-if max bids for second- and third-year
+players (rocket = after a +2 z breakout; chart = third-years with their average +0.53 z projection
+miss added back; `/api/fantasy` `what_if`, `player_stats.auction_value_at`; what-if only, no value
+changes), then `draft_day.json` `notes` from `draft_day.py`: categories at +1.5 z or better, at -1.5
+or worse, the rule that applies (star, the tier the room overpays), bench target, projected games
+under 60. The name column is capped at the width of the longest star name in draft mode.
 Fantasy points stay hidden only in draft mode; dropping them for category leagues is a later job.
