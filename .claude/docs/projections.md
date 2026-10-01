@@ -70,8 +70,11 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   (+0.84 z, 32% break out), then year 3 (+0.52, 28%), flat from year 4 (+0.13, 22%), falling from
   year 6. But **projections miss year 3 the most**: the blend under-projects players entering year 3
   by 0.53 z (ESPN -0.54, ours -0.42; n=132), year 2 by 0.08, and over-projects year 6+ by 0.76.
-  About $3 at $6 a z in the middle of the board. Not applied in code; an owner adjustment
-  (`production`) is the place for a view on one player.
+  About $3 at $6 a z in the middle of the board. **Not applied in code: it fails out of sample.**
+  Year-3 bias by season -0.01, -0.34, -1.11, -0.69 (se .25 overall); adding the other seasons'
+  bias makes year-3 error worse (MAE 2.23 -> 2.26); among draftable year-3 players (projected
+  value above the ~110th player) the bias is -0.21 (n=33). An owner adjustment (`production`) is
+  the place for a view on one player.
 - **Stats basis `_proj`** (`player_stats._add_projections`): every rostered player with a line,
   rookies included; `GP_proj` >= 20 makes the scaling pool, and only pool players get an auction $ (any timeframe:
   `ELIGIBLE{n}`; the rest show $1. A model-only line on 67 career minutes had priced at $18); ratios are not shrunk again. Once
