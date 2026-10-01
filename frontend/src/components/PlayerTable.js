@@ -591,12 +591,12 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                         {player.what_if && draftPlan.rule.stars[player.name] == null && (
                           // What-if max bids beside the max, stacked. Third-year: with the average third-year miss
                           // added back, then after a breakout. Second-year: the breakout only (they are projected about right).
-                          <div className="flex flex-col text-xs leading-none gap-0.5 whitespace-nowrap cursor-help"
+                          <div className="flex flex-col text-sm leading-none gap-0.5 whitespace-nowrap cursor-help"
                                title={player.what_if.corrected != null
                                  ? 'Third-year player: max bid if he breaks out (top), and with the average third-year correction (bottom)'
                                  : 'Second-year player: max bid if he breaks out (32% of second-year players do)'}>
-                            <span className="text-green-400">🚀{shareMax(player.what_if.breakout)}</span>
-                            {player.what_if.corrected != null && <span className="text-sky-300">📈{shareMax(player.what_if.corrected)}</span>}
+                            <span className="text-green-400">🚀${shareMax(player.what_if.breakout)}</span>
+                            {player.what_if.corrected != null && <span className="text-sky-300">📈${shareMax(player.what_if.corrected)}</span>}
                           </div>
                         )}
                         </div>
