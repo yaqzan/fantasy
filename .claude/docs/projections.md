@@ -33,6 +33,31 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   + 300 minutes of league rate; counts from Fantrax, `pull_fantrax.py techs`, since Fantrax scores
   the category; two seasons predicted the next better than one, a heavier prior did worse).
   Owner adjustments apply last.
+- **Would other weights be more accurate? Tested 2026-09-30: no, keep the blend as is.**
+  (`source_weights.py` -> `out/source_weights.md` in the `.horizon` driver; out of sample, ESPN
+  2021-22 and 2023-24..2025-26, FantasyPros 2024-25/2025-26.)
+  - Experts miss the same players: error correlation ESPN-FantasyPros .93 (value), .96 (games);
+    each with our model .83-.91. Reweighting can't fix what all of them miss.
+  - ESPN vs FantasyPros: best FantasyPros share .7-.8 in both seasons, but it saves .013 of 1.37
+    value MAE over equal weights (90% range .001-.032). FantasyPros is clearly better only on team
+    changers (1.43 vs 1.73).
+  - Experts vs our model: any expert share from .5 to .7 scores within 0.5% (WSOP-8 and 9-cat,
+    4 seasons, leave one season out); one weight for everyone, per-type weights and the live
+    table tie. ESPN alone is 3% worse, our model alone 5%. The per-type direction holds (team
+    changers and 32+ want more model, rookies more expert).
+  - By component the best expert share is ~.4 for games, ~.65 for minutes, ~.3 for per-minute
+    production (curves flat); splitting the weight that way gains 1-2% on season value, not
+    consistent by season. Not adopted.
+  - **Projected games run high: experts by ~10, our model by ~3** (top 150: ESPN 70, ours 62,
+    played 59; players who missed the season count as 0). Actual games = blend x 0.88, the same in
+    every rank tier, so ranks and $ don't move; anything that uses games as an absolute (weekly
+    model, "under 60 games" rules) should read projected games x 0.88. Per-game value needs no
+    shrink: actual = -0.7 + 1.02 x projected (top 150), the top 5 projected delivered in full.
+  - Fantrax, FanScout and RotoWire can't be scored: Fantrax and Sleeper (RotoWire) overwrite a
+    past season's stored projections with actuals, and ESPN's stored 2022-23 set is a mid-season
+    one (~40 games a player; never backtest on it). Hashtag Basketball's Wayback pages hold the
+    top 30 only. Untested sources stay at equal weight; dropping any one moves the 140 drafted
+    players $0.7-1.3 on average (`pricing_check.py`, auction `.horizon`).
 - **Stats basis `_proj`** (`player_stats._add_projections`): every rostered player with a line,
   rookies included; `GP_proj` >= 20 makes the scaling pool; ratios are not shrunk again. Once
   his games this season are loaded (`api_updated_at` after opening night), each stat fades:

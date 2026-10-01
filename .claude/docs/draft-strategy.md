@@ -87,8 +87,8 @@ inside one price structure is .5-.8 categories a week).
 **Default: bid on price, not structure.**
 - **At most one star, and only at or under his break-even.** Of the five players the room will
   likely price highest, only two are worth about its price for their rank (#1 $102, #2-4 $90-92,
-  #5 $75) in the weekly model; the other three fall $10-40 short. Per-star numbers: `out/player_notes.md`. Past the break-even each $10 costs
-  ~0.08 categories a week. **Never two $60+ players** (worst structure in 2025, no better in 2024).
+  #5 $75) in the weekly model; the other three fall $15-40 short. Per-star numbers: `out/player_notes.md`. Past the break-even each $10 costs
+  ~0.07 categories a week. **A break-even is good to about +/-$10** (see "How sure is a break-even"). **Never two $60+ players** (worst structure in 2025, no better in 2024).
 - **Max bid = a share of the app's $: 85% at $40-74, 80% at $15-39, 100% under $15** (lower when he
   projects under ~60 games; the app's $ is per game). Backtest on both auctions (`below_value.py`,
   value from the season before, delivery with games counted): $40-74 picks bought above app value
@@ -100,6 +100,29 @@ inside one price structure is .5-.8 categories a week).
   across all 10 spots added only 0-0.2 on top.
 - Unchanged: $8-25 players with 65+ projected games and value in the categories the room doesn't
   price (A-TO, 3PM, TS%, TB, TF, W).
+
+### How sure is a break-even (2026-09-30, `breakeven_ci.py`, `pricing_check.py`)
+The first break-evens came from one run each (one opponent field, one random bench, one injury
+draw). Rerun over 5-8 seeds per roster shape (`out/breakeven_ci_*.txt`):
+- **One run is off by $10-20**: a star's break-even ranges $35-45 across seeds; the pooled fit has
+  a standard error of about $5 per shape. One ten-man run had put a top-3 star $18 under his
+  replicated number. `draft_day.py` now reads the replicated values.
+- Six-man core and ten-man roster agree within $4 for two of the top three and $11 for the third;
+  the Draft Day max is their average. Slope -0.07 categories a week per $10 in every run.
+- **Projected games are the biggest lever: ~$4 of break-even per game** for a star (5 fewer games
+  took $19 off). Cutting everyone's games to 88% (what projected games delivered, projections.md)
+  raises star break-evens $4-10: missed weeks hurt a no-star roster as much.
+- Against the best roster that may hold another star at the room's price, break-evens are $10-15
+  lower: at most one of the top three is a buy, whichever goes cheapest.
+- The break-even is not the app's $. App $ = per-game value over replacement (z capped at +/-3,
+  140 pool, exponent 1.1); the break-even is where a roster built around him ties the best roster
+  without a star in the weekly model, at the room's likely prices for everyone else.
+- App $ of the top players by assumption (top-3 range): leave one source out +/-$4; one source
+  alone -$12 to +$19; exponent 1.0 / 1.2 -$11 / +$12; games-weighted +/-$10. The cap matters for
+  one-category outliers only: a player 5+ SD out in one category moves about $15 when the cap is lifted
+  (up for blocks, down for technicals). The weekly model uses raw stats, so its break-evens
+  already count that a category can only be won once a week; they still come out under the app $ for such a player.
+- Past auctions (`below_value.py`): the app's $75+ players delivered 93% of their app $ (n=6).
 
 Why the two analyses disagreed (the ticket's six causes, in its order):
 1. **Cost basis: the cause.** `strategy.py` charged the market model's predicted prices: the top 4
@@ -139,8 +162,8 @@ in WSOP categories with the weekly model; against the real room, whose average i
 - Dollar gaps under ~$15, single-player "steals", and build differences under ~0.15 categories a
   week (the searches' own noise) are within model error.
 - Rerun after projection edits (owner adjustments live in MySQL), from the repo root: `apply2026.py`,
-  `pairs.py`, `strategy.py`, then `builds_z.py`, `builds_week.py`, `bench.py`, `breakeven.py`,
-  `draft_day.py`.
+  `pairs.py`, `strategy.py`, then `builds_z.py`, `builds_week.py`, `bench.py`, `breakeven_ci.py 6 base 8`
+  and `10 base 5` (~40 min each, run side by side), `draft_day.py`.
 
 ## Draft Day tab (`/draft`)
 The app's cheat sheet: steps, diagrams, star break-evens, a max-bid lookup, bench targets. It reads
@@ -153,5 +176,5 @@ is public (owner's choice, 2026-09-30); the player data stays out of git.
 the trend and fantasy-points columns, and the position filter when the league has no position
 minimums. When `draft_day.json`'s `league` is the selected league, Player Rankings adds **Likely**
 and **Max bid**. Max bid follows the Value column (so the stats basis and star-premium slider move
-it) by the file's `rule`: stars at their break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0.
+it) by the file's `rule`: stars at their replicated break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0.
 Fantasy points stay hidden only in draft mode; dropping them for category leagues is a later job.
