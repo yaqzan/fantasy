@@ -49,9 +49,16 @@ team wins (`team_strength`). NBA-wide, shared by every league.
     production (curves flat); splitting the weight that way gains 1-2% on season value, not
     consistent by season. Not adopted.
   - **Projected games run high: experts by ~10, our model by ~3** (top 150: ESPN 70, ours 62,
-    played 59; players who missed the season count as 0). Actual games = blend x 0.88, the same in
-    every rank tier, so ranks and $ don't move; anything that uses games as an absolute (weekly
-    model, "under 60 games" rules) should read projected games x 0.88. Per-game value needs no
+    played 59; players who missed the season count as 0). Delivered share of projected games
+    (`games_haircut.py` -> `out/games_haircut.md`, top 250 x 4 seasons): **.86 overall, .84-.90
+    in every value-rank band and every age band, so ranks and $ don't move.** Not uniform on
+    injury history: under 41 games last season delivers .78, projected under 55 games .64, 66+
+    games last season .89. By season .84-.91 (the top 15 alone swung .77-1.12).
+    **It is an average, not a forecast for one player**: ~17% of the top 250 play under 41 games
+    and the rest land near their projection, so multiplying a player's games by .88 predicts him
+    no better (games MAE 14.2 vs 13.9 as projected; age, last season's games and regression lines
+    don't help either; sd around any line ~18 games). Use it as an availability rate (weekly
+    model: x .88, x .78 after a season under 41 games), not as "he plays 58". Per-game value needs no
     shrink: actual = -0.7 + 1.02 x projected (top 150), the top 5 projected delivered in full.
   - Fantrax, FanScout and RotoWire can't be scored: Fantrax and Sleeper (RotoWire) overwrite a
     past season's stored projections with actuals, and ESPN's stored 2022-23 set is a mid-season

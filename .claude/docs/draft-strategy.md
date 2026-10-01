@@ -124,6 +124,24 @@ draw). Rerun over 5-8 seeds per roster shape (`out/breakeven_ci_*.txt`):
   already count that a category can only be won once a week; they still come out under the app $ for such a player.
 - Past auctions (`below_value.py`): the app's $75+ players delivered 93% of their app $ (n=6).
 
+### Why non-stars keep the share rule, not a modelled break-even (2026-10-01, `player_breakeven.py`)
+Tried: a break-even for every player (~150; the price where the best roster with him ties the best
+roster without him, both roster shapes, 6 seeds), backtested as a max bid on both past auctions
+(296 picks, graded on the $ each delivered the season after, `out/player_breakeven.txt`).
+- **It loses to the app's $.** Rank correlation of max bid with what the pick delivered: app $ .62,
+  share rule .62, break-even .38 (.12-.35 inside every price tier vs .43-.53). Error $13.1 vs $10.3.
+- Buying whenever price <= max: share rule 145 buys returning 1.80 per $1 (passes 0.76); app $ as
+  is 160 buys at 1.53; break-even 84 buys at 1.63 (passes 0.89). The share rule was tuned on these
+  auctions, so its edge over plain app $ is in-sample.
+- Why it fails below the top: the comparison is against the best roster the search can build, so
+  every player outside that roster shows a break-even under his price (2026-27: 44 of 49 app
+  $15-39 players, break-even 19% of app $, negative under $15), and the two roster shapes disagree
+  by $41 a player. It only says "is he in the optimal roster", which the bench/target lists
+  already give. For app $75+ players it is calibrated (delivered / break-even 1.02, n=6), which
+  is why stars keep theirs.
+- **Decision: non-stars stay on share x app $** (projected performance x the tier's measured
+  overpay); stars on the replicated break-even.
+
 Why the two analyses disagreed (the ticket's six causes, in its order):
 1. **Cost basis: the cause.** `strategy.py` charged the market model's predicted prices: the top 4
    at its $105 cap (the room paid 102/92/91/90) and ranks 15-84 16% under the room's 2025 curve
