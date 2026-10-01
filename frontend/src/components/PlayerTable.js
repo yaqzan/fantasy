@@ -93,7 +93,10 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     if (!draftPlan) return null;
     const star = draftPlan.rule.stars[player.name];
     if (star != null) return star;
-    const value = getAuctionValue(player) || 1;
+    return shareMax(getAuctionValue(player) || 1);
+  };
+  // A max bid from an app $ by the Draft Day share rule (non-stars).
+  const shareMax = (value) => {
     const [, share] = draftPlan.rule.shares.find(([floor]) => value >= floor) || [0, 1];
     return Math.max(1, Math.round(value * share));
   };
@@ -583,7 +586,15 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     <>
                       <td className="table-cell text-gray-400">{likely != null ? `$${likely}` : '-'}</td>
                       <td className="table-cell font-semibold" style={{ color: bidColor(max, likely) }}
-                          title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>${max}</td>
+                          title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>
+                        ${max}
+                        {player.year3 && draftPlan.rule.stars[player.name] == null && (
+                          <sup className="ml-0.5 text-[10px] font-bold text-sky-400 cursor-help"
+                            title={`Third-year player. Max bid on his projection: $${shareMax(player.auction_value_proj || 1)}. `
+                              + `With the average third-year miss added back (+0.53 z): $${shareMax(player.year3.corrected)}. `
+                              + `If he breaks out (+2 z; 28% of third-year players do): $${shareMax(player.year3.breakout)}.`}>Y3</sup>
+                        )}
+                      </td>
                     </>
                   );
                 })()}

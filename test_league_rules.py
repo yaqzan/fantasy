@@ -85,3 +85,13 @@ def test_auction_values_skip_ineligible_players():
     assert stats['thin']['A'] == 1
     assert sum(stats[f'p{i}']['A'] for i in range(4)) == 20
     assert stats['p0']['A'] > stats['p3']['A'] >= 1 and stats['p4']['A'] == 1
+
+
+def test_auction_value_at_reads_the_curve():
+    from player_stats import auction_value_at
+    stats = {f'p{i}': {'VALUE_proj': float(i), 'AUCTION_VALUE_proj': 1 + 2 * i, 'ELIGIBLE_proj': True} for i in range(6)}
+    stats['thin'] = {'VALUE_proj': 9.0, 'AUCTION_VALUE_proj': 1, 'ELIGIBLE_proj': False}
+    assert auction_value_at(stats, 2.0) == 5
+    assert auction_value_at(stats, 2.6) == 5
+    assert auction_value_at(stats, 99.0) == 11
+    assert auction_value_at(stats, -5.0) == 1

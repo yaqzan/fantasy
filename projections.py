@@ -320,6 +320,7 @@ def player_lines(season, team_abv=None):
             if adj.games is not None:
                 line['gp'] = adj.games
         line.update({'sources': sorted(mine) + (['model'] if m else []), 'type': kind, 'expert_weight': w,
+                     'exp': m.get('exp') if m else None,  # NBA seasons before this one (our model's row)
                      'adjusted': adj is not None, 'name': (m or next(iter(mine.values())))['name']})
         lines[pid] = line
     return lines

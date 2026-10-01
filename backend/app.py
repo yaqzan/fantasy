@@ -13,7 +13,8 @@ from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer, 
                               PlayerProjection, ProjectionAdjustment)
 from projections import season_label
 from player_stats import (league_player_stats, calculate_auction_values, calculate_team_totals, week_schedule,
-                          team_games, player_week_games, best_starters, games_floor, TEAM_DICT, STAT_SUFFIXES)
+                          team_games, player_week_games, best_starters, games_floor, auction_value_at,
+                          TEAM_DICT, STAT_SUFFIXES, YEAR3_BIAS_Z, BREAKOUT_Z)
 from fantasy_config import TEAMNAMES, FPOINTS_SCORING
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
                                  league_team_ids, get_undroppable_players, set_league_flags)
@@ -229,6 +230,7 @@ def get_fantasy_players():
     players_by_name = {p.name: p for p in Player.select().where(Player.name.in_([name for name, _ in top]))}
 
     players_data = []
+    stats_all = player_stats
     for player_name, stats in top:
         player = players_by_name.get(player_name)
         team_name = player.team if player and player.team else "Unknown"
@@ -283,6 +285,11 @@ def get_fantasy_players():
             'auction_value_proj': stats.get('AUCTION_VALUE_proj', 0),
             'hot_overall': round(stats.get('Z-SCORE_5', 0) - stats.get('Z-SCORE', 0), 1),
             'is_injured': bool(player and player.injured == 1),
+            'nba_year': stats.get('NBA_YEAR'),
+            # Third-year players: the projection $ with the average third-year miss added back, and after a breakout.
+            'year3': ({'corrected': auction_value_at(stats_all, stats['VALUE_proj'] + YEAR3_BIAS_Z),
+                       'breakout': auction_value_at(stats_all, stats['VALUE_proj'] + BREAKOUT_Z)}
+                      if stats.get('NBA_YEAR') == 3 and stats.get('ELIGIBLE_proj') else None),
             'is_undroppable': player_name in undroppable,
             'drafted': team_id is not None,
             'fantasy_team': fantasy_teams.get(team_id),

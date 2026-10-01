@@ -26,6 +26,11 @@ TEAM_DICT = {
 
 PROJECTION_FADE_GAMES = 12  # a player's projection counts as this many games of his real numbers
 PROJECTION_MIN_GAMES = 20   # projected games to be in the pool the projection timeframe is scaled on
+# Players entering their third season (.claude/docs/projections.md, "Breakouts by NBA year"): the
+# blend has under-projected them by this much per-game value on average, and 28% gained 2+ z. Shown
+# as what-if prices next to the max bid; not applied to anyone's value (it failed out of sample).
+YEAR3_BIAS_Z = 0.53
+BREAKOUT_Z = 2.0
 PROJECTED_STATS = {'FGA': 'fga', 'FGM': 'fgm', 'FTA': 'fta', 'FTM': 'ftm', 'FG3M': 'fg3m', 'PTS': 'pts', 'AST': 'ast',
                    'REB': 'reb', 'STL': 'stl', 'BLK': 'blk', 'TOV': 'tov', 'BLKA': 'blka', 'DD2': 'dd2', 'TD3': 'td3',
                    'PF': 'pf', 'TECH': 'tech'}
@@ -88,6 +93,8 @@ def _add_projections(player_stats, preseason, team_win):
             stats[f'{key}_proj'] = ((projected * PROJECTION_FADE_GAMES + actual) / (PROJECTION_FADE_GAMES + played)
                                     if played else projected)
         stats['GP_proj'] = line['gp'] or 0.0
+        if line.get('exp') is not None:
+            stats['NBA_YEAR'] = line['exp'] + 1   # 3 = entering his third season
         stats['MIN_proj'] = line['min'] or 0.0
         stats['WIN%_proj'] = stats['W_proj'] = team_win.get(team_name, 0.5)
         stats['PLUS_MINUS_proj'] = 0.0
@@ -512,6 +519,18 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
             for i, p in enumerate(ranked, start=1):
                 player_stats[p][rank_key] = i
                 player_stats[p][score_key] = display[p]
+
+def auction_value_at(player_stats, value, value_key='VALUE_proj', auction_key='AUCTION_VALUE_proj'):
+    """The $ a player would carry at `value`, read off the priced players' value -> $ curve (everyone
+    else unchanged). For what-if prices; calculate_auction_values must have run for `auction_key`."""
+    eligible_key = 'ELIGIBLE' + value_key.split('VALUE', 1)[1]
+    curve = sorted((s[value_key], s[auction_key]) for s in player_stats.values()
+                   if s.get(eligible_key) and value_key in s and auction_key in s)
+    if not curve:
+        return 1
+    below = [d for v, d in curve if v <= value]
+    return max(below) if below else 1
+
 
 def add_fantasy_points(player_stats, league):
     """Points leagues: FPTS{n} per game = the league's point weights x the per-game stats, for every
