@@ -457,10 +457,18 @@ def update_player():
     return jsonify({'success': True}), 200
 
 
+def _open_slots(slots, filled):
+    open_slots = list(slots)
+    for slot in filled:
+        open_slots.remove(slot)
+    return open_slots
+
+
 @fantasy_api.route('/team-rosters', methods=['GET'])
 def get_team_rosters():
     """Every team's roster in the current league, best first, with the slot each healthy starter
-    fills (best_starters: the league's slots, season OVR) and the starters' average OVR."""
+    fills (best_starters: the league's slots, season OVR), the starters' average OVR, and the
+    starting slots no healthy player on the roster can fill (`open_slots`)."""
     league = current_league()
     player_stats = league_player_stats(league)
     injured = {p.name for p in Player.select(Player.name).where(Player.injured == 1)}
@@ -477,6 +485,7 @@ def get_team_rosters():
                          'positions': list(player_stats.get(p, {}).get('Positions') or ()), 'slot': starters.get(p)}
                         for p in sorted(names, key=score, reverse=True)],
             'score': round(sum(score(p) for p in starters) / len(starters)) if starters else 0,
+            'open_slots': _open_slots(league.slots, starters.values()),
         }
     return jsonify({'teams': out, 'roster_size': league.roster_size, 'slots': league.slots})
 

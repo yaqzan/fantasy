@@ -11,6 +11,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
   const guillotine = Boolean(config?.capabilities?.guillotine);
   const hasSlots = Boolean(config?.capabilities?.positions?.length);
   const [teamScores, setTeamScores] = useState({});
+  const [openSlots, setOpenSlots] = useState({});
   const [showModal, setShowModal] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamAbbrev, setNewTeamAbbrev] = useState('');
@@ -54,6 +55,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
       .then(data => {
         setTeamPlayers(Object.fromEntries(teams.map(t => [t.id, data.teams[t.id]?.players || []])));
         setTeamScores(Object.fromEntries(teams.map(t => [t.id, data.teams[t.id]?.score || 0])));
+        setOpenSlots(Object.fromEntries(teams.map(t => [t.id, data.teams[t.id]?.open_slots || []])));
       })
       .catch(error => console.error('Error loading rosters:', error));
   }, [teams, refreshTrigger]);
@@ -228,6 +230,11 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
                   <p className={`text-[10px] leading-tight ${(teamPlayers[team.id] || []).length > rosterSize ? 'text-red-400' : 'text-gray-500'}`}
                      title={`Roster spots used (the league has ${rosterSize})`}>
                     {(teamPlayers[team.id] || []).length}/{rosterSize}
+                  </p>
+                )}
+                {hasSlots && (teamPlayers[team.id] || []).length > 0 && openSlots[team.id]?.length > 0 && (
+                  <p className="text-[10px] leading-tight text-red-400" title="Starting slots no healthy player on this roster can fill">
+                    no {openSlots[team.id].join(' ')}
                   </p>
                 )}
                 

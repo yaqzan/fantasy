@@ -40,9 +40,10 @@ CATEGORY_CATALOG = {
     'TECH': {'label': 'TF', 'name': 'Technical fouls', 'kind': 'count', 'inverse': True, 'noise': [('TECH', 1.0)]},
     'WIN%': {'label': 'W', 'name': 'Wins', 'kind': 'wins'},
     # Points leagues: the league's own point weights (`scoring.points`) collapse every stat into this one
-    # category (player_stats.add_fantasy_points). Noise: fantasy points swing ~2.5x their mean per game
-    # (an estimate from the counting stats, not measured on game logs).
-    'FPTS': {'label': 'FPTS', 'name': 'Fantasy points', 'kind': 'count', 'noise': [('FPTS', 2.5)]},
+    # category (player_stats.add_fantasy_points). Noise: variance per game 6.0x the mean, measured on the
+    # 2025-26 game logs with the default weights (fantasy_config.FPOINTS_SCORING; 452 players, same
+    # method as above). It grows roughly with the size of the weights.
+    'FPTS': {'label': 'FPTS', 'name': 'Fantasy points', 'kind': 'count', 'noise': [('FPTS', 6.0)]},
     # Ratios are valued by impact (player_stats.py). `attempts`: the per-game attempts behind the
     # rate, as (stat, coefficient) terms. `prior`: attempts of league-average shooting a player's
     # rate is blended with before scoring (method of moments on 2025-26: TS% ~233, EFG% ~223,

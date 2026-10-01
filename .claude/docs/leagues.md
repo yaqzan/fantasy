@@ -52,7 +52,11 @@ stats) is shared by all leagues.
   league's only category is `FPTS`: `player_stats.add_fantasy_points` folds the league's weights
   (`POINT_STATS` keys) into a per-game `FPTS{n}` for every timeframe, then z-scores, totals, weekly
   matchup, pickups and standings run unchanged on that one category. A single category isn't capped at
-  +/-3 z (stars keep their full lead). Its noise (2.5x mean per game) is an estimate, not measured.
+  +/-3 z (stars keep their full lead). Its noise: variance per game 6.0x the mean (2025-26 game logs,
+  default weights, 452 players with 20+ games; the same method gives PTS 3.3 and REB 1.5, matching
+  the catalog). The 2.5x estimate it replaced made points-league win chances far too sure. The
+  coefficient grows roughly with the size of the weights, so a league with much bigger weights
+  would need its own measurement.
   `fantasy_config.FPOINTS_SCORING` is the default weight table; Courtside Tamasha (Yahoo) uses it.
   Daily Stats computes points at read time from the selected league's weights
   (`leagues.fantasy_points`, the one formula; the stored `daily_player_stats.fantasy_points` uses
