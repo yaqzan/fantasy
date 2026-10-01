@@ -145,9 +145,11 @@ roster without him, both roster shapes, 6 seeds), backtested as a max bid on bot
   already give. For app $75+ players it is calibrated (delivered / break-even 1.02, n=6), which
   is why stars keep theirs.
 - **App $ on the projection counts projected games since 2026-10-01** (surplus x projected games /
-  82, `calculate_auction_values`; projections.md). The shares above were measured on per-game $, where
-  part of the discount was missed games, so maxes now run a little conservative for players
-  projected under ~60 games. Weighting by LAST season's games does not help: surplus x last season's games share (or half-way
+  82, `calculate_auction_values`; projections.md). **Shares re-fit on the games-weighted $ (`refit_shares.py`,
+  `out/refit_shares.txt`): .79 at $40-74 (90% range .67-.90), .80 at $15-39 (.67-.92), 1.00 at $8-14:
+  no higher than before, so 85 / 80 / 100 stay and nothing is double counted.** Buys under the rule on
+  $15+ picks returned 1.21 per $1, passes 0.68. The weekly model's games haircut (.88 / .78) is a
+  separate path (star break-evens only); it is not in app $. Weighting by LAST season's games does not help: surplus x last season's games share (or half-way
   to 62 games) predicts delivered $ no better (rank correlation .61-.62 vs .62, error $10.8-11.1 vs
   $10.6; worse inside every tier). Last season's games say little about next season's (r .21).
   Projected games (sources + our model) do carry known absences; last season's count does not.
