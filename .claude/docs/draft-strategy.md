@@ -252,18 +252,17 @@ When `draft_day.json`'s `league` is the selected league the board adds one **Bid
 across its full width with **Aim, Max and Value at the same three places in every row** (`RAIL`, %
 of the cell), so they read as columns and sort from their header labels.
 - **Aim** (the price worth holding out for early: 90% of a star's max, 85% of others from $15, the
-  max itself under $15; `draft_day.json` `aim`, from the simulated auctions) is the big coloured
-  number; a solid bar runs from it to the **Max**.
+  max itself under $15; `draft_day.json` `aim`, from the simulated auctions) is the big
+  number; a bar runs from it to the **Max**.
 - **Max** follows the app value (so the stats basis and star-premium slider move it) by the file's
   `rule`: stars at their replicated break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0.
-- **Value** (the app's $, grey; not a limit) ends the rail.
-- **Room** (the likely price) is a small grey number on the rail, placed by where it falls (`roomAt`):
+- **Value** (the app's $; not a limit) ends the rail.
+- **Room** (the likely price) is a small number on the rail, placed by where it falls (`roomAt`):
   before the aim, between aim and max, between max and value, or past the value. Its distance
   inside a zone is to scale; the zones themselves are fixed.
-- The aim's colour is the gradient on max minus likely price (`frontend/src/bidColor.js`):
-  green when the room should stop well short, neutral when even, orange when it will pay well past;
-  the gap is scaled by 30% of the larger price (floor $5) so a few dollars on a star stays neutral.
-  "best buys" in the Bid header sorts by that scaled gap.
+- Colours are fixed: aim green, max amber, value white. The room's number carries the verdict: green
+  at or under the aim, grey up to the max, red past it. "best buys" in the Bid header sorts by max
+  minus likely price scaled by 30% of the larger price, floor $5 (`bidEdge` in `frontend/src/bidColor.js`).
 
 ### Live auction (2026-10-01, `frontend/src/auction.js`, `live_inflation.py`, `out/live_inflation.txt`)
 Each row has a $ box beside Draft: type the winning bid, Draft, the team. The price is stored on

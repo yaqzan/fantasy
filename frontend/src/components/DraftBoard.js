@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DraftModal from './DraftModal';
 import usePlayerValues from '../usePlayerValues';
-import { bidColor, bidEdge } from '../bidColor';
+import { bidEdge } from '../bidColor';
 import { auctionState, adjusted } from '../auction';
 
 // The Player Rankings table in draft mode: one dense row per player, built to be read while he is
@@ -40,8 +40,12 @@ const roomAt = (room, aim, max, value) => {
 };
 
 
-const EDGE_UNDER = 'rgb(74, 222, 128)';  // the room stops short of the max (bidColor's green)
-const EDGE_OVER = 'rgb(249, 115, 22)';   // the room pays past it (bidColor's orange)
+// Bid colours: the aim is green, the max amber, the value white. The room's price takes its colour
+// from where it lands: green at or under the aim, grey up to the max, red past it.
+const AIM = '#4ade80';
+const MAX = '#fbbf24';
+const ROOM_OVER = '#fb7185';
+const roomColor = (room, aim, max) => (room <= aim ? AIM : room <= max ? '#9ca3af' : ROOM_OVER);
 const UNPRICED = '#fbbf24';
 
 // Draft Day notes by where they show: strengths and gaps are the heat strip, projected games the
@@ -185,14 +189,11 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
         <span className="text-gray-300 font-medium tabular-nums">{sorted.length} players</span>
         {draftPlan && (
           <>
-            <span><b className="text-gray-200">Aim</b> hold out for this early</span>
-            <span><b className="text-gray-200">Max</b> never past it</span>
-            <span><b className="text-gray-200">Value</b> the app's $, not a limit</span>
-            <span><i className="text-gray-500 not-italic font-medium">37</i> the room's likely price, where it falls</span>
-            <span className="flex items-center gap-1.5">
-              aim colour:
-              <span className="inline-block w-3 h-2 rounded-sm" style={{ background: EDGE_UNDER }} /> room stops under your max
-              <span className="inline-block w-3 h-2 rounded-sm ml-1" style={{ background: EDGE_OVER }} /> room pays past it
+            <span><b style={{ color: AIM }}>Aim</b> hold out for this early</span>
+            <span><b style={{ color: MAX }}>Max</b> never past it</span>
+            <span><b className="text-white">Value</b> the app's $, not a limit</span>
+            <span>
+              Room's likely price: <b style={{ color: AIM }}>under your aim</b> · <b className="text-gray-400">up to your max</b> · <b style={{ color: ROOM_OVER }}>past it</b>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: UNPRICED }} /> strength the room doesn't pay for
@@ -213,7 +214,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                 title="Money the room has left above $1 a spot, against the likely prices of the best players left (one per open spot), compared with the same ratio before the draft. Under 1: the room has overpaid, so what is left should go cheaper, and the aim, max and room prices below are scaled down with it; over 1 the other way. Kept between 0.5 and 1.5. Picks entered without a price count at their likely price.">
             <b className="text-gray-200">Room</b> ${econ.left.toLocaleString()} left · {econ.open} spots ·{' '}
             {econ.priced === 0 ? 'prices move once picks have a $'
-              : <b style={{ color: factor < 0.97 ? EDGE_UNDER : factor > 1.03 ? EDGE_OVER : undefined }} className="text-gray-200">
+              : <b style={{ color: factor < 0.97 ? AIM : factor > 1.03 ? ROOM_OVER : undefined }} className="text-gray-200">
                   {factor < 0.97 ? 'overspent' : factor > 1.03 ? 'underspent'  : 'on its likely prices'}: prices left x{factor.toFixed(2)}
                 </b>}
           </span>
@@ -266,8 +267,8 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                     {[['aim', "The price worth holding out for early in the draft: 90% of a star's max (a star is only worth it at a real discount), 85% of everyone else's from $15; under $15 it is the max. Loosen toward the max later if money is left."],
                       ['max', "Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even."],
                       ['value', "The app's auction $ on the selected stats (follows the star premium and punts). Not a bid limit."]].map(([k, title]) => (
-                      <span key={k} className={`absolute top-0 -translate-x-1/2 cursor-pointer hover:text-white ${sort === k ? 'text-white' : k === 'aim' ? 'text-gray-200' : ''}`}
-                            style={{ left: `${RAIL[k]}%` }} onClick={() => sortBy(k)} title={title}>
+                      <span key={k} className={`absolute top-0 -translate-x-1/2 cursor-pointer hover:text-white `}
+                            style={{ left: `${RAIL[k]}%`, color: { aim: AIM, max: MAX, value: '#fff' }[k] }} onClick={() => sortBy(k)} title={title}>
                         {k}{sort === k && <span className="text-nba-orange">↓</span>}
                       </span>
                     ))}
@@ -354,18 +355,19 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                       <div className="relative h-7 min-w-[26rem] tabular-nums">
                         <div className="absolute top-1/2 border-t border-dotted border-gray-600" style={{ left: '3%', right: '4%' }} />
                         <div className="absolute top-1/2 h-px bg-gray-500" style={{ left: `${RAIL.max}%`, width: `${RAIL.value - RAIL.max}%` }} />
-                        <div className="absolute top-1/2 -mt-[1.5px] h-[3px] rounded-full bg-gray-300" style={{ left: `${RAIL.aim}%`, width: `${RAIL.max - RAIL.aim}%` }} />
+                        <div className="absolute top-1/2 -mt-[1.5px] h-[3px] rounded-full"
+                             style={{ left: `${RAIL.aim}%`, width: `${RAIL.max - RAIL.aim}%`, background: `linear-gradient(to right, ${AIM}, ${MAX})`, opacity: 0.75 }} />
                         {p.likely != null && (
-                          <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1 text-[11px] font-medium leading-none text-gray-500`}
-                                style={{ left: `${roomAt(p.likely, target, p.max, p.value)}%` }}>
+                          <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1 text-[11px] font-semibold leading-none`}
+                                style={{ left: `${roomAt(p.likely, target, p.max, p.value)}%`, color: roomColor(p.likely, target, p.max), opacity: 0.85 }}>
                             {p.likely}
                           </span>
                         )}
                         <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[17px] font-extrabold leading-none`}
-                              style={{ left: `${RAIL.aim}%`, color: bidColor(p.max, p.likely) }}>${target}</span>
-                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[15px] font-bold leading-none text-white`}
-                              style={{ left: `${RAIL.max}%` }}>${p.max}</span>
-                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[15px] font-semibold leading-none text-gray-400`}
+                              style={{ left: `${RAIL.aim}%`, color: AIM }}>${target}</span>
+                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[15px] font-bold leading-none`}
+                              style={{ left: `${RAIL.max}%`, color: MAX }}>${p.max}</span>
+                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[15px] font-semibold leading-none text-white`}
                               style={{ left: `${RAIL.value}%` }}>${p.value}</span>
                       </div>
                     </td>
