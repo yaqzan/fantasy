@@ -250,7 +250,7 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                           title={p.aim == null ? 'Under $15: the max is the price' : p.isStar ? 'A star is only worth it about 10% under his max; past that, pass' : 'Worth holding out for early in the draft; go to the max later if money is left'}>
                         {p.aim != null ? `$${p.aim}` : <span className="text-gray-600">-</span>}
                       </td>
-                      <td className={`${cell} ${NUM} ${mine ? 'bg-[#3a2c17]' : 'bg-[#2a2a2a] group-hover:bg-[#33302b]'} text-lg font-extrabold leading-none`} style={{ color: bidColor(p.max, p.likely) }}>
+                      <td className={`${cell} ${NUM} ${mine ? 'bg-[#3a2c17]' : 'bg-[#2a2a2a] group-hover:bg-[#33302b]'} font-bold`} style={{ color: bidColor(p.max, p.likely) }}>
                         ${p.max}
                       </td>
                       <td className={`${cell} ${rowBg} ${NUM} text-gray-400`}>{p.likely != null ? `$${p.likely}` : <span className="text-gray-600">-</span>}</td>
