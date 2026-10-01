@@ -556,14 +556,14 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   <div>
                     <div className="flex items-center space-x-2">
                       <span className={`font-medium text-white ${draftMode ? 'max-w-[11.5rem] truncate' : ''}`} title={draftMode ? player.name : undefined}>{player.name}</span>
-                      {player.is_injured && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white whitespace-nowrap">
-                          INJ{player.injured_return ? ` - ${player.injured_return}` : ''}{player.injured_games ? ` (${player.injured_games} missed)` : ''}
-                        </span>
-                      )}
                     </div>
                     <div className="text-xs text-gray-400">
                       {player.positions?.length ? player.positions.join('/') : player.position} | {player.team_abv || 'N/A'}
+                      {player.is_injured && (
+                        <span className="ml-1.5 inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold bg-red-600 text-white whitespace-nowrap">
+                          INJ{player.injured_return ? ` - ${player.injured_return}` : ''}{player.injured_games ? ` (${player.injured_games} missed)` : ''}
+                        </span>
+                      )}
                       {/* Games this week and next: in-season only, the draft doesn't need them */}
                       {!draftMode && [config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined && (
                         <React.Fragment key={i}>
