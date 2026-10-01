@@ -143,6 +143,7 @@ class FantasyTeamPlayer(BaseModel):
     fantasy_team_id = ForeignKeyField(FantasyTeam, backref='players')
     player_name = CharField(null=True)
     fantasy_team_name = CharField(null=True)
+    price = IntegerField(null=True)  # auction $ paid, when recorded on the draft board
 
     class Meta:
         table_name = 'fantasy_team_players'

@@ -248,20 +248,38 @@ sideways scroll, a header and player column that stay put while the table scroll
 and each category as one heat cell (teal strong, rose weak, value printed, score on hover).
 The Draft button opens a small menu of the teams' short names; a click records the pick (he leaves
 the Available list and shows on that team above). A drafted player's button opens the edit modal.
-When `draft_day.json`'s `league` is the selected league the board adds one **Bid** cell: the aim as
-the big number, then a price scale shared by every row (square-root $ axis to $120, ticks at $1, $5,
-$15, $40, $100), then the max and the app value as small numbers.
-- **Aim** (the price worth holding out for early: 90% of a star's max, 85% of others from $15, the
-  max itself under $15; `draft_day.json` `aim`, from the simulated auctions): the solid bar runs to it.
+When `draft_day.json`'s `league` is the selected league the board adds one **Bid** cell: each row
+lays its own four prices out left to right, lowest first, spaced by their $ but never closer than
+46px (`pathStops`), each with its number and a caption.
+- **Aim** (the price worth holding out for early: 90% of a star's max, 85% of others from $15;
+  `draft_day.json` `aim`, from the simulated auctions) is the big number; a thick bar runs from it
+  to the **Max**. Under $15 there is no aim and the max is the big number.
 - **Max** follows the app value (so the stats basis and star-premium slider move it) by the file's
-  `rule`: stars at their replicated break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0. The
-  bar continues faded from the aim to a white stop at the max.
-- **Room** (the likely price) is a numbered pill on the scale: green at or under the aim, grey up
-  to the max, orange past it. The app value is a thin line (not a limit).
-- The aim's colour is still the gradient on max minus likely price (`frontend/src/bidColor.js`):
+  `rule`: stars at their replicated break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0.
+- **Room** (the likely price, grey italic) and **Value** (the app's $, blue; not a limit) sit
+  wherever they fall: left of the aim, on the bar, or past the max.
+- The big number's colour is the gradient on max minus likely price (`frontend/src/bidColor.js`):
   green when the room should stop well short, neutral when even, orange when it will pay well past;
   the gap is scaled by 30% of the larger price (floor $5) so a few dollars on a star stays neutral.
   "best buys" in the Bid header sorts by that scaled gap; aim, max, room and value sort there too.
+
+### Live auction (2026-10-01, `frontend/src/auction.js`, `live_inflation.py`, `out/live_inflation.txt`)
+Each row has a $ box beside Draft: type the winning bid, Draft, the team. The price is stored on
+`fantasy_team_players.price` (`/api/draft-player` `price`; left out, a recorded price is kept;
+`/api/fantasy` `draft_price`). A drafted player's box shows the price and can be typed over.
+- **Factor** = the room's money left above $1 a spot / the likely $ above $1 of the best undrafted
+  players (one per open spot), against the same ratio before the draft; kept in 0.5-1.5; picks with
+  no price count at their likely price. Aim, max and room price all become 1 + (pre-draft $ - 1) x
+  factor (hover a row for the pre-draft numbers); Value does not move.
+- **Why it is trusted**: replayed in pick order on both past auctions (hold-out likely prices), the
+  factor fell to .80 / .92 after 25 picks and .57 / .60 after 100 (the room overspends early both
+  years), and later prices followed it: rank correlation of price / likely with the factor .53,
+  slope 1.8 in logs; error on the second half of the draft $4.7 -> $2.9 with the factor, first half
+  $8.9 -> $8.2. Part of the late drop is nomination order (cheap players come up last).
+- **Not tested: scaling our own aim and max by it.** It is the standard inflation rule (pay no more
+  than the going rate for what is left), and it risks leaving money unspent when the room has
+  overspent and we have not; the strip above the table shows each team's money, open spots and the
+  most it can bid, ours included. Our max is also capped at our money less $1 per other open spot.
 
 `draft_day.json` `notes` (from `draft_day.py`, up to five per player) are split by `sortNotes` on
 their text, so keep these shapes when editing the script: `unpriced +X +Y` (A-TO, 3PM, TS%, TB, TF,

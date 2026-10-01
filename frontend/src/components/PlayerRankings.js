@@ -124,7 +124,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
         statType: view.statType,
         punts: view.punts,
         onPuntsChange: (punts) => setView({ punts }),
-        ...(draftMode && { draftPlan }),
+        ...(draftMode && { draftPlan, allPlayers: players }),
       })}
     </div>
   );

@@ -109,10 +109,12 @@ export const restoreFantasyTeam = async (teamId) => {
   return response.data;
 };
 
-export const draftPlayer = async (playerName, fantasyTeamId) => {
+// price: the auction $ paid (optional; left out, a recorded price is kept)
+export const draftPlayer = async (playerName, fantasyTeamId, price = null) => {
   const response = await api.post('/draft-player', {
     player_name: playerName,
-    fantasy_team_id: fantasyTeamId
+    fantasy_team_id: fantasyTeamId,
+    ...(price != null && { price })
   });
   return response.data;
 };

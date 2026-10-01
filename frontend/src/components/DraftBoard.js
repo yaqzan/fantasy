@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import DraftModal from './DraftModal';
 import usePlayerValues from '../usePlayerValues';
 import { bidColor, bidEdge } from '../bidColor';
+import { auctionState, adjusted } from '../auction';
 
 // The Player Rankings table in draft mode: one dense row per player, built to be read while he is
 // being bid on. Left to right: who he is, what to pay (aim, max), what the room will pay (likely,
 // edge), then his categories as a heat strip and games. The rules that apply to him are tags beside his name.
 // draftPlan: the Draft Day data (/api/draft-day) when it belongs to this league; without it the
 // price columns are just the Value (or the draft round, in a snake league).
+// allPlayers: every player, filtered out or not: the prices paid so far move the prices left (auction.js).
 
 // Heat for a 0-100 score: neutral at 50, teal above, rose below (values stay printed, so the
 // colour is never the only signal).
@@ -25,12 +27,26 @@ const heat = (score) => {
   };
 };
 
-// The bid scale: one $ axis for every row, square-root so $1-15 players get room and the stars
-// still fit. The ticks are the share rule's tier floors ($15, $40) plus $1, $5 and $100.
-const SCALE_MAX = 120;
-const SCALE_TICKS = [1, 5, 15, 40, 100];
-const at = (dollars) => `${(Math.sqrt(Math.min(Math.max(dollars, 0), SCALE_MAX) / SCALE_MAX) * 100).toFixed(1)}%`;
-const BAR = '#cbd5e1';
+// The bid path: each row lays its own prices out left to right on a track this wide, spaced by
+// their $ but never closer than PATH_GAP, so all of them stay readable.
+const PATH_WIDTH = 300;
+const PATH_PAD = 20;
+const PATH_GAP = 46;
+const PATH_ORDER = ['room', 'aim', 'max', 'value'];
+const pathStops = (stops) => {
+  const list = stops.filter(stop => stop.v != null)
+    .sort((a, b) => a.v - b.v || PATH_ORDER.indexOf(a.k) - PATH_ORDER.indexOf(b.k));
+  const [lo, hi] = [list[0].v, list[list.length - 1].v];
+  list.forEach((stop, i) => {
+    const x = PATH_PAD + (hi > lo ? (stop.v - lo) / (hi - lo) : 0) * (PATH_WIDTH - 2 * PATH_PAD);
+    stop.x = i ? Math.max(x, list[i - 1].x + PATH_GAP) : x;
+  });
+  for (let i = list.length - 1; i >= 0; i--) {
+    list[i].x = Math.min(list[i].x, i === list.length - 1 ? PATH_WIDTH - PATH_PAD : list[i + 1].x - PATH_GAP);
+  }
+  return list;
+};
+
 
 const EDGE_UNDER = 'rgb(74, 222, 128)';  // the room stops short of the max (bidColor's green)
 const EDGE_OVER = 'rgb(249, 115, 22)';   // the room pays past it (bidColor's orange)
@@ -51,10 +67,9 @@ const sortNotes = (notes = []) => {
 
 const TAG = 'inline-block rounded px-1 py-[2px] text-[10.5px] leading-none font-medium whitespace-nowrap';
 const TH = 'sticky z-20 bg-gray-900 px-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-700 whitespace-nowrap select-none';
-const PILL = 'rounded px-1 text-[10.5px] leading-4 font-bold tabular-nums text-gray-900 whitespace-nowrap';
 const NUM = 'px-2 py-1 text-right tabular-nums whitespace-nowrap';
 
-const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts = [], onPuntsChange, draftPlan = null }) => {
+const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts = [], onPuntsChange, draftPlan = null }) => {
   const categories = config?.categories || [];
   const caps = config?.capabilities || {};
   const numTeams = config?.league?.settings?.num_teams || 1;
@@ -82,6 +97,7 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
     e.stopPropagation();
     const box = e.currentTarget.getBoundingClientRect();
     const height = Math.min(window.innerHeight - 16, fantasyTeams.length * 26 + 10);
+    e.currentTarget.focus();
     setTeamMenu(teamMenu?.name === player.name ? null
       : { name: player.name, right: window.innerWidth - box.left + 6, top: Math.max(8, Math.min(box.top - 4, window.innerHeight - height - 8)) });
   };
@@ -93,18 +109,42 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
     const [, share] = draftPlan.rule.shares.find(([floor]) => value >= floor) || [0, 1];
     return Math.max(1, Math.round(value * share));
   };
+  // The auction so far: the room's money and spots, each team's, and the factor the prices paid
+  // put on the prices left. Mine also caps my bids (money less $1 for each other open spot).
+  const settings = config?.league?.settings || {};
+  const leagueTeams = fantasyTeams.filter(team => !team.eliminated_stage);
+  const econ = draftPlan && leagueTeams.length
+    ? auctionState({ players: allPlayers, likely: draftPlan.likely || {}, teams: leagueTeams,
+                     budget: settings.draft?.budget || 200, rosterSize: settings.roster?.size || 1 })
+    : null;
+  const factor = econ?.factor ?? 1;
+  const myMoney = econ?.teams[leagueTeams.find(team => team.abbreviation === myTeam)?.id];
+  const myCap = myMoney?.open > 0 ? myMoney.cap : Infinity;
   // The prices for one player: the max follows the Value column (stars sit at their break-even),
   // the aim is the price worth holding out for early, the edge is the max against the room's price.
+  // Max, aim and the room's price all move with the auction's factor; max0 / likely0 are pre-draft.
   const prices = (player) => {
     const value = getAuctionValue(player);
     if (!draftPlan) return { value };
     const star = draftPlan.rule.stars[player.name];
     const isStar = star != null;
-    const max = isStar ? star : shareMax(value || 1);
+    const max0 = isStar ? star : shareMax(value || 1);
+    const max = Math.max(1, Math.min(adjusted(max0, factor), myCap));
     const rule = draftPlan.aim;
-    const aim = !rule ? null : isStar ? Math.round(max * rule.star) : max >= rule.floor ? Math.round(max * rule.other) : null;
-    const likely = draftPlan.likely?.[player.name] ?? null;
-    return { value, isStar, max, aim, likely, gap: likely == null ? null : max - likely, edge: bidEdge(max, likely) };
+    const aim = !rule ? null : isStar ? Math.max(1, Math.round(max * rule.star)) : max0 >= rule.floor ? Math.max(1, Math.round(max * rule.other)) : null;
+    const likely0 = draftPlan.likely?.[player.name] ?? null;
+    const likely = adjusted(likely0, factor);
+    return { value, isStar, max, max0, aim, likely, likely0, gap: likely == null ? null : max - likely, edge: bidEdge(max, likely) };
+  };
+  // The $ typed beside a Draft button, by player; sent with the pick.
+  const [bids, setBids] = useState({});
+  const bidFor = (name) => (/^\d+$/.test(bids[name] ?? '') ? parseInt(bids[name], 10) : null);
+  const clearBid = (name) => setBids(({ [name]: _, ...rest }) => rest);
+  // A drafted player's price, corrected in place
+  const savePrice = (player) => {
+    const price = bidFor(player.name);
+    if (price != null && price !== player.draft_price) onDraftPlayer(player.name, player.fantasy_team.id, price);
+    clearBid(player.name);
   };
   const games = (player) => player.projected_games ?? player.games_played;
   const stat = (player, key, field) => {
@@ -154,21 +194,17 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
         {draftPlan && (
           <>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-5 h-2 rounded-l-sm" style={{ background: BAR }} />
-              <b className="text-gray-200">Aim</b> hold out for this early
+              <b className="text-gray-200">Aim</b>
+              <span className="inline-block w-6 h-1 rounded-full bg-gray-300" />
+              <b className="text-gray-200">Max</b>
+              hold out for the aim early, never past the max
             </span>
+            <span><span className="text-gray-500 italic">Room</span> what they'll likely pay</span>
+            <span><span className="text-sky-300/80">Value</span> the app's $, not a limit</span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-flex items-center"><span className="inline-block w-4 h-2" style={{ background: BAR, opacity: 0.3 }} /><span className="inline-block w-0.5 h-3 bg-white" /></span>
-              <b className="text-gray-200">Max</b> stop here
-            </span>
-            <span className="flex items-center gap-1.5">
-              <b className="text-gray-200">Room's likely price</b>
-              <span className={PILL} style={{ background: EDGE_UNDER }}>under your aim</span>
-              <span className={`${PILL} !text-white bg-gray-600`}>up to your max</span>
-              <span className={PILL} style={{ background: EDGE_OVER }}>past it</span>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-px h-3 bg-gray-400" /> app value
+              aim colour:
+              <span className="inline-block w-3 h-2 rounded-sm" style={{ background: EDGE_UNDER }} /> room stops under your max
+              <span className="inline-block w-3 h-2 rounded-sm ml-1" style={{ background: EDGE_OVER }} /> room pays past it
             </span>
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: UNPRICED }} /> strength the room doesn't pay for
@@ -182,6 +218,29 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
         </span>
         {loadingCustomScores && <span className="text-nba-orange">recalculating...</span>}
       </div>
+
+      {econ && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 text-xs text-gray-400 border-b border-gray-700">
+          <span className="mr-2 tabular-nums"
+                title="Money the room has left above $1 a spot, against the likely prices of the best players left (one per open spot), compared with the same ratio before the draft. Under 1: the room has overpaid, so what is left should go cheaper, and the aim, max and room prices below are scaled down with it; over 1 the other way. Kept between 0.5 and 1.5. Picks entered without a price count at their likely price.">
+            <b className="text-gray-200">Room</b> ${econ.left.toLocaleString()} left · {econ.open} spots ·{' '}
+            {econ.priced === 0 ? 'prices move once picks have a $'
+              : <b style={{ color: factor < 0.97 ? EDGE_UNDER : factor > 1.03 ? EDGE_OVER : undefined }} className="text-gray-200">
+                  {factor < 0.97 ? 'overspent' : factor > 1.03 ? 'underspent'  : 'on its likely prices'}: prices left x{factor.toFixed(2)}
+                </b>}
+          </span>
+          {leagueTeams.map(team => {
+            const t = econ.teams[team.id];
+            const me = team.abbreviation === myTeam;
+            return (
+              <span key={team.id} className={`rounded px-1.5 py-0.5 tabular-nums whitespace-nowrap ${me ? 'bg-nba-orange/20 text-orange-200' : 'bg-gray-700/60 text-gray-300'} ${t.open === 0 ? 'opacity-40' : ''}`}
+                    title={t.open === 0 ? `${team.name}: roster full` : `${team.name}: $${t.left} left for ${t.open} spots, can bid up to $${t.cap}`}>
+                {team.abbreviation || team.name} <b>${t.left}</b><span className="text-gray-500"> · {t.open}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       <div className="overflow-auto thin-scrollbar max-h-[calc(100vh-2rem)] rounded-b-lg">
         <table className="min-w-full border-separate border-spacing-0 text-sm">
@@ -214,17 +273,9 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                       title={draftPlan ? "Tags: the rule that applies to him and how this room prices his kind (discounts players over 30, pays up for young ones). Rocket: his max if he breaks out (second- and third-year players). Yr 3: his max with the average third-year correction." : undefined}>Player</span>
               </th>
               {draftPlan ? (
-                <th className={`${TH} top-6 h-8 border-l border-gray-700`}>
-                  <div className="flex items-center gap-2">
-                    <span className="w-11 flex-none text-right text-gray-200"
-                          title="The price worth holding out for early in the draft: 90% of a star's max (a star is only worth it at a real discount), 85% of everyone else's from $15; under $15 it is the max. Loosen toward the max later if money is left.">Aim</span>
-                    <div className="relative flex-1 min-w-[15rem] h-4 font-normal normal-case tracking-normal text-[10px] text-gray-500"
-                         title="The bar runs to your aim, then faded to your max (the white stop). The pill is what this room paid for his likely bid rank in 2025 (a guess: misses by $13-16 on $20+ players). The thin line is the app's value, not a bid limit.">
-                      {SCALE_TICKS.map(t => <span key={t} className="absolute -translate-x-1/2 tabular-nums" style={{ left: at(t) }}>${t}</span>)}
-                    </div>
-                    <span className="w-12 flex-none text-right"
-                          title="Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even. Under it, the app's auction $ on the selected stats (follows the star premium and punts).">Max</span>
-                  </div>
+                <th className={`${TH} top-6 h-8 border-l border-gray-700 text-left font-normal normal-case tracking-normal text-gray-500`}
+                    title="Each row lays out its own four prices, lowest on the left. Aim: the price worth holding out for early (90% of a star's max, 85% of everyone else's from $15; under $15 the max is the price). Max: don't bid past it (85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even). Room: what this room paid for his likely bid rank in 2025 (a guess: misses by $13-16 on $20+ players). Value: the app's auction $ on the selected stats.">
+                  lowest price on the left · each row on its own scale
                 </th>
               ) : caps.auction
                 ? <Head k="value" className="text-right border-l border-gray-700" title="The app's auction $ on the selected stats (follows the star premium and punts)">Value</Head>
@@ -302,27 +353,33 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                     <td className={`${cell} ${rowBg} px-2 py-1 border-l border-l-gray-700`}
                         title={`Aim $${target} · max $${p.max} · room ${p.likely != null ? `$${p.likely}` : '-'} · value $${p.value}`
                           + (p.gap == null ? '' : p.gap >= 0 ? `. The room's likely price is $${p.gap} under your max.` : `. The room's likely price is $${-p.gap} over your max.`)
-                          + (p.isStar ? ' A star is only worth it about 10% under his max; past that, pass.' : '')}>
-                      <div className="flex items-center gap-2">
-                        <span className="w-11 flex-none text-right text-base font-extrabold tabular-nums leading-none" style={{ color: bidColor(p.max, p.likely) }}>${target}</span>
-                        <div className="relative flex-1 min-w-[15rem] h-6">
-                          {SCALE_TICKS.map(t => <div key={t} className="absolute inset-y-0 w-px bg-gray-700/70" style={{ left: at(t) }} />)}
-                          <div className="absolute top-2 h-2 left-0 rounded-l-sm" style={{ width: at(target), background: BAR }} />
-                          <div className="absolute top-2 h-2" style={{ left: at(target), width: `calc(${at(p.max)} - ${at(target)})`, background: BAR, opacity: 0.3 }} />
-                          <div className="absolute top-[5px] h-3.5 w-0.5 bg-white" style={{ left: at(p.max) }} />
-                          <div className="absolute top-0.5 bottom-0.5 w-px bg-gray-400" style={{ left: at(p.value) }} />
-                          {p.likely != null && (
-                            <span className={`absolute top-1 -translate-x-1/2 ${PILL} ${p.likely > target && p.likely <= p.max ? '!text-white bg-gray-600' : ''} ring-1 ring-gray-800`}
-                                  style={{ left: at(p.likely), background: p.likely <= target ? EDGE_UNDER : p.likely > p.max ? EDGE_OVER : undefined }}>
-                              {p.likely}
-                            </span>
-                          )}
-                        </div>
-                        <div className="w-12 flex-none text-right tabular-nums leading-tight">
-                          <div className="text-xs font-semibold text-gray-200">${p.max}</div>
-                          <div className="text-[10px] text-gray-500">val ${p.value}</div>
-                        </div>
-                      </div>
+                          + (p.isStar ? ' A star is only worth it about 10% under his max; past that, pass.' : '')
+                          + (p.max !== p.max0 || p.likely !== p.likely0 ? ` Before the draft: max $${p.max0}, room ${p.likely0 != null ? `$${p.likely0}` : '-'}.` : '')}>
+                      {(() => {
+                        const stops = pathStops([
+                          { k: 'room', v: p.likely }, { k: 'aim', v: p.aim }, { k: 'max', v: p.max }, { k: 'value', v: p.value },
+                        ]);
+                        const x = Object.fromEntries(stops.map(stop => [stop.k, stop.x]));
+                        const from = x.aim ?? x.max;
+                        const look = {
+                          aim: ['text-[17px] font-extrabold', { color: bidColor(p.max, p.likely) }],
+                          max: [p.aim == null ? 'text-[17px] font-extrabold' : 'text-sm font-bold text-white', p.aim == null ? { color: bidColor(p.max, p.likely) } : undefined],
+                          room: ['text-xs italic text-gray-500'],
+                          value: ['text-xs text-sky-300/80'],
+                        };
+                        return (
+                          <div className="relative h-8" style={{ width: PATH_WIDTH }}>
+                            <div className="absolute top-[9px] h-px bg-gray-600" style={{ left: stops[0].x, width: stops[stops.length - 1].x - stops[0].x }} />
+                            <div className="absolute top-[7px] h-[5px] rounded-full bg-gray-300" style={{ left: from, width: x.max - from }} />
+                            {stops.map(stop => (
+                              <div key={stop.k} className="absolute top-0 -translate-x-1/2 flex flex-col items-center" style={{ left: stop.x }}>
+                                <span className={`${rowBg} px-1 h-[19px] flex items-center tabular-nums leading-none ${look[stop.k][0]}`} style={look[stop.k][1]}>${stop.v}</span>
+                                <span className={`text-[9px] leading-none uppercase tracking-wide ${stop.k === 'aim' || stop.k === 'max' ? 'text-gray-400' : 'text-gray-600'}`}>{stop.k}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </td>
                   ) : (
                     <td className={`${cell} ${rowBg} ${NUM} border-l border-l-gray-700 text-gray-200 font-semibold`}>
@@ -354,7 +411,23 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                         : `${player.games_played} games last season${player.small_sample ? ': a small sample, his numbers may not hold' : ''}`}>
                     {gp ?? '-'}{player.projected_only && <span className="text-sky-400 text-[10px] ml-0.5">new</span>}
                   </td>
-                  <td className={`${cell} ${rowBg} px-2 py-1 text-right`}>
+                  <td className={`${cell} ${rowBg} px-2 py-1 text-right whitespace-nowrap`}>
+                    {caps.auction && (
+                      <input
+                        type="text" inputMode="numeric" placeholder="$" aria-label={`Price paid for ${player.name}`}
+                        value={bids[player.name] ?? (player.drafted ? player.draft_price ?? '' : '')}
+                        onChange={(e) => setBids({ ...bids, [player.name]: e.target.value.replace(/\D/g, '').slice(0, 3) })}
+                        onBlur={() => player.drafted && bids[player.name] != null && savePrice(player)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          if (player.drafted) e.currentTarget.blur();
+                          else e.currentTarget.nextSibling.click();
+                        }}
+                        disabled={fantasyTeams.length === 0}
+                        title={player.drafted ? 'The price paid: type over it to correct' : 'The winning bid, then Draft and the team'}
+                        className="w-9 mr-1 rounded border border-gray-600 bg-gray-900 px-1 py-1 text-xs text-right tabular-nums text-gray-100 placeholder-gray-600 focus:border-nba-orange focus:outline-none focus:ring-0"
+                      />
+                    )}
                     <button
                       onClick={(e) => player.drafted ? setModalPlayer({ ...player, overall_rank: rank, auction_value: p.value }) : openTeamMenu(e, player)}
                       disabled={fantasyTeams.length === 0}
@@ -378,7 +451,7 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
              style={{ top: teamMenu.top, right: teamMenu.right, maxHeight: 'calc(100vh - 16px)' }}>
           {fantasyTeams.filter(team => !team.eliminated_stage).map(team => (
             <button key={team.id}
-                    onClick={() => { setTeamMenu(null); onDraftPlayer(teamMenu.name, team.id); }}
+                    onClick={() => { setTeamMenu(null); onDraftPlayer(teamMenu.name, team.id, bidFor(teamMenu.name)); clearBid(teamMenu.name); }}
                     className={`block w-full text-left px-3 h-[26px] text-xs whitespace-nowrap hover:bg-nba-orange hover:text-gray-900 ${team.abbreviation === myTeam ? 'text-nba-orange font-semibold' : 'text-gray-200'}`}>
               {team.abbreviation || team.name}
             </button>

@@ -212,10 +212,11 @@ def get_fantasy_players():
 
     team_ids = league_team_ids(league)
     fantasy_teams = {t.id: team_json(t) for t in FantasyTeam.select().where(FantasyTeam.league == league.id)}
-    drafted = {}
+    drafted, paid = {}, {}
     if team_ids:
         for ftp in FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id.in_(team_ids)):
             drafted[ftp.player_name] = ftp.fantasy_team_id_id
+            paid[ftp.player_name] = ftp.price
     undroppable = set(get_undroppable_players(league))
     abbreviations = _team_abbreviations()
 
@@ -298,6 +299,7 @@ def get_fantasy_players():
             'drafted': team_id is not None,
             'fantasy_team': fantasy_teams.get(team_id),
             'drafted_at': None,
+            'draft_price': paid.get(player_name),
         })
 
     players_data.sort(key=lambda x: x['overall_rank'] if x['overall_rank'] else 999)
@@ -431,17 +433,24 @@ def restore_fantasy_team(team_id):
 
 @fantasy_api.route('/draft-player', methods=['POST'])
 def draft_player():
-    """Put a player on a team in the current league (moving him if another team there has him)"""
+    """Put a player on a team in the current league (moving him if another team there has him).
+    `price` is the auction $ paid; left out, a price already recorded for him is kept."""
     data = request.get_json() or {}
     league = current_league()
     player_name = data['player_name']
     player = Player.get(Player.name == player_name)
     fantasy_team = league_team(league, data['fantasy_team_id'])
+    mine = ((FantasyTeamPlayer.player_name == player_name)
+            & FantasyTeamPlayer.fantasy_team_id.in_(league_team_ids(league)))
+    if data.get('price') in (None, ''):
+        held = FantasyTeamPlayer.get_or_none(mine)
+        price = held.price if held else None
+    else:
+        price = max(0, int(data['price']))
     with DB.atomic():
-        FantasyTeamPlayer.delete().where((FantasyTeamPlayer.player_name == player_name)
-                                         & FantasyTeamPlayer.fantasy_team_id.in_(league_team_ids(league))).execute()
+        FantasyTeamPlayer.delete().where(mine).execute()
         FantasyTeamPlayer.create(player_id=player, fantasy_team_id=fantasy_team, player_name=player_name,
-                                 fantasy_team_name=fantasy_team.name)
+                                 fantasy_team_name=fantasy_team.name, price=price)
     return jsonify({'success': True}), 201
 
 

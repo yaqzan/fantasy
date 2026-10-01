@@ -56,6 +56,8 @@ def upgrade_schema(DB):
         ops.append(migrator.add_column('players', 'injured_return', CharField(max_length=16, null=True)))
     if 'positions' not in {c.name for c in DB.get_columns('league_player_flags')}:
         ops.append(migrator.add_column('league_player_flags', 'positions', CharField(max_length=32, null=True)))
+    if 'price' not in {c.name for c in DB.get_columns('fantasy_team_players')}:
+        ops.append(migrator.add_column('fantasy_team_players', 'price', IntegerField(null=True)))
     if ops:
         migrate(*ops)
         print(f'applied {len(ops)} column change(s)')
