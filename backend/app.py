@@ -288,10 +288,12 @@ def get_fantasy_players():
             'injured_return': (player.injured_return if player and player.injured == 1 else None),
             'injured_games': ((player.injured_games_to_miss or None) if player and player.injured == 1 else None),
             'nba_year': stats.get('NBA_YEAR'),
-            # Third-year players: the projection $ with the average third-year miss added back, and after a breakout.
-            'year3': ({'corrected': auction_value_at(stats_all, league, player_name, YEAR3_BIAS_Z),
-                       'breakout': auction_value_at(stats_all, league, player_name, BREAKOUT_Z)}
-                      if stats.get('NBA_YEAR') == 3 and stats.get('ELIGIBLE_proj') else None),
+            # Second- and third-year players: the projection $ after a breakout; third-years also with
+            # their average projection miss added back (second-years are projected about right).
+            'what_if': ({'corrected': (auction_value_at(stats_all, league, player_name, YEAR3_BIAS_Z)
+                                       if stats.get('NBA_YEAR') == 3 else None),
+                         'breakout': auction_value_at(stats_all, league, player_name, BREAKOUT_Z)}
+                        if stats.get('NBA_YEAR') in (2, 3) and stats.get('ELIGIBLE_proj') else None),
             'is_undroppable': player_name in undroppable,
             'drafted': team_id is not None,
             'fantasy_team': fantasy_teams.get(team_id),

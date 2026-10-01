@@ -588,12 +588,15 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                       <td className="table-cell font-semibold" style={{ color: bidColor(max, likely) }}>
                         <div className="flex items-center gap-1.5">
                         <span title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>${max}</span>
-                        {player.year3 && draftPlan.rule.stars[player.name] == null && (
-                          // Third-year what-ifs beside the max, stacked: with the average third-year miss added back / after a breakout
+                        {player.what_if && draftPlan.rule.stars[player.name] == null && (
+                          // What-if max bids beside the max, stacked. Third-year: with the average third-year miss
+                          // added back, then after a breakout. Second-year: the breakout only (they are projected about right).
                           <div className="flex flex-col text-xs leading-none gap-0.5 whitespace-nowrap cursor-help"
-                               title="Third-year player: max bid with the average third-year correction (top), and if he breaks out (bottom)">
-                            <span className="text-sky-300">📈{shareMax(player.year3.corrected)}</span>
-                            <span className="text-green-400">🚀{shareMax(player.year3.breakout)}</span>
+                               title={player.what_if.corrected != null
+                                 ? 'Third-year player: max bid with the average third-year correction (top), and if he breaks out (bottom)'
+                                 : 'Second-year player: max bid if he breaks out (32% of second-year players do)'}>
+                            {player.what_if.corrected != null && <span className="text-sky-300">📈{shareMax(player.what_if.corrected)}</span>}
+                            <span className="text-green-400">🚀{shareMax(player.what_if.breakout)}</span>
                           </div>
                         )}
                         </div>

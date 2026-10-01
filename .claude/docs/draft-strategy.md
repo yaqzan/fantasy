@@ -229,6 +229,7 @@ the room should stop well short, neutral when even, orange when it will pay well
 scaled by 30% of the larger price (floor $5) so a few dollars on a star stays neutral.
 A third-year player (not a star) carries two small stacked numbers beside his max (📈9 over 🚀17): the max with
 the average third-year miss added back (+0.53 z) and after a breakout (+2 z), from
-`/api/fantasy`'s `year3` (`player_stats.auction_value_at` on the projection curve). What-if only:
+`/api/fantasy`'s `what_if`; second-year players show the breakout number only (their projections
+are unbiased; 32% break out), (`player_stats.auction_value_at` on the projection curve). What-if only:
 no value changes (projections.md, "Breakouts by NBA year").
 Fantasy points stay hidden only in draft mode; dropping them for category leagues is a later job.
