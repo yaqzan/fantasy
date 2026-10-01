@@ -585,9 +585,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   return (
                     <>
                       <td className="table-cell text-gray-400">{likely != null ? `$${likely}` : '-'}</td>
-                      <td className="table-cell font-semibold" style={{ color: bidColor(max, likely) }}
-                          title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>
-                        ${max}
+                      <td className="table-cell font-semibold" style={{ color: bidColor(max, likely) }}>
+                        <span title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>${max}</span>
                         {player.year3 && draftPlan.rule.stars[player.name] == null && (
                           <span className="relative group ml-0.5 align-super text-[10px] font-bold text-sky-400 cursor-help">
                             Y3
