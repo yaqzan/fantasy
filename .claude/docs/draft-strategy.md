@@ -171,6 +171,27 @@ roster without him, both roster shapes, 6 seeds), backtested as a max bid on bot
 - **Decision: non-stars stay on share x app $** (projected performance x the tier's measured
   overpay); stars on the replicated break-even.
 
+### Simulated auctions around the max-bid rule (2026-10-01, `draft_sim.py`, `out/draft_sim.txt`)
+400 drafts. Room price = likely price x an error drawn from how far the same construction missed in
+the two past auctions, by tier (price / likely, 10th-90th percentile): $25-59 .51-1.52, $8-24
+.31-1.88, $2-7 .25-2.00; **the five stars .99-1.21 (n=10): they never go cheap**. We take a player
+when room price + $1 <= max and the roster rules allow, expensive players nominated first, open
+spots filled with the best $1 leftovers. Scored with the weekly model against budget teams at the
+likely prices (5.5 = an average team). Projections are treated as true, so every edge is overstated
+(tiers have delivered ~80% of app $); read the order, not the size.
+- **The rule as built: 6.36 categories a week vs 5.43 for a team that pays the room's price.** It
+  spends the whole budget (unspent $1) and lands a star in 96% of drafts, at ~$88.
+- **Pickier is better up to a point**: only buying at <=90% of max 6.61, <=80% 6.83 (unspent $23,
+  under $150 spent in 16% of drafts), <=70% 6.57 (unspent $66). The gain is six $15-39 players
+  instead of a star, one $40+ player and five $1 players.
+- **No star scores ~0.2-0.3 higher here** (rule without stars 6.64; 80% without stars 6.84; 80% for
+  non-stars with a star at up to his max 6.62). The bargains are in the middle of the board, where
+  prices swing, and a star's $88 can't be spent on them. The break-even runs had star and no-star
+  level because they priced everyone at the likely price, with no bargains to find.
+- Draft-night reading: **want ~10-20% under max on $15+ players early, loosen toward the max as
+  the draft goes and money is left; take a star only at a real discount (about 90% of his max), not
+  merely under it.** Bidding to full app $ instead of the shares is the worst rule tested (6.22).
+
 Why the two analyses disagreed (the ticket's six causes, in its order):
 1. **Cost basis: the cause.** `strategy.py` charged the market model's predicted prices: the top 4
    at its $105 cap (the room paid 102/92/91/90) and ranks 15-84 16% under the room's 2025 curve
