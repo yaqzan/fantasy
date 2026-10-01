@@ -5,7 +5,7 @@ import { bidColor, bidEdge } from '../bidColor';
 
 // The Player Rankings table in draft mode: one dense row per player, built to be read while he is
 // being bid on. Left to right: who he is, what to pay (aim, max), what the room will pay (likely,
-// edge), then his categories as a heat strip, games and the rules that apply to him.
+// edge), then his categories as a heat strip and games. The rules that apply to him are tags beside his name.
 // draftPlan: the Draft Day data (/api/draft-day) when it belongs to this league; without it the
 // price columns are just the Value (or the draft round, in a snake league).
 
@@ -153,12 +153,13 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
               <th className={`${TH} top-0 h-6 text-center border-l border-gray-700`} colSpan={categories.length + 1}>
                 {statType === 'proj' || statType === 'projected' ? 'Projected per game' : 'Per game'}
               </th>
-              <th className={`${TH} top-0 h-6 border-l border-gray-700`} colSpan={draftPlan ? 3 : 2} />
+              <th className={`${TH} top-0 h-6 border-l border-gray-700`} colSpan={2} />
             </tr>
             <tr>
               <th className={`${TH} top-6 h-8 left-0 z-30 text-left`}>
                 <span className={`cursor-pointer hover:text-white ${sort === 'rank' ? 'text-white' : ''}`} onClick={() => setSort('rank')}>#</span>
-                <span className={`cursor-pointer hover:text-white ml-4 ${sort === 'name' ? 'text-white' : ''}`} onClick={() => sortBy('name')}>Player</span>
+                <span className={`cursor-pointer hover:text-white ml-4 ${sort === 'name' ? 'text-white' : ''}`} onClick={() => sortBy('name')}
+                      title={draftPlan ? "Tags: the rule that applies to him and how this room prices his kind (discounts players over 30, pays up for young ones). Rocket: his max if he breaks out (second- and third-year players). Yr 3: his max with the average third-year correction." : undefined}>Player</span>
               </th>
               {draftPlan && (
                 <>
@@ -196,10 +197,6 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                 );
               })}
               <Head k="gp" className="text-right border-l border-gray-700" title="Projected games this season (amber under 60). Hover a number for last season's.">GP</Head>
-              {draftPlan && (
-                <th className={`${TH} top-6 h-8 text-left`}
-                    title="The rule that applies to him and how this room prices his kind (discounts players over 30, pays up for young ones). Rocket: his max if he breaks out (second- and third-year players). Yr 3: his max with the average third-year correction.">Read</th>
-              )}
               <th className={`${TH} top-6 h-8`} />
             </tr>
           </thead>
@@ -240,6 +237,15 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                           {notes.risks.map(r => <span key={r} className="text-amber-400/90"> · {r}</span>)}
                         </div>
                       </div>
+                      {draftPlan && (
+                        <div className="ml-auto pl-3 flex flex-wrap justify-end items-center gap-1 max-w-[17rem]">
+                        {notes.tags.map(n => (
+                          <span key={n.t} className={`${TAG} ${n.k === 'good' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-gray-700 text-gray-200'}`}>{n.t}</span>
+                        ))}
+                        {whatIf && <span className={`${TAG} bg-emerald-500/15 text-emerald-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀 ${shareMax(whatIf.breakout)}</span>}
+                        {whatIf && whatIf.corrected != null && <span className={`${TAG} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">yr 3 ${shareMax(whatIf.corrected)}</span>}
+                        </div>
+                      )}
                     </div>
                   </td>
                   {draftPlan && (
@@ -297,17 +303,6 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                         : `${player.games_played} games last season${player.small_sample ? ': a small sample, his numbers may not hold' : ''}`}>
                     {gp ?? '-'}{player.projected_only && <span className="text-sky-400 text-[10px] ml-0.5">new</span>}
                   </td>
-                  {draftPlan && (
-                    <td className={`${cell} ${rowBg} px-2 py-1`}>
-                      <div className="flex flex-wrap items-center gap-1 max-w-[17rem]">
-                        {notes.tags.map(n => (
-                          <span key={n.t} className={`${TAG} ${n.k === 'good' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-gray-700 text-gray-200'}`}>{n.t}</span>
-                        ))}
-                        {whatIf && <span className={`${TAG} bg-emerald-500/15 text-emerald-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀 ${shareMax(whatIf.breakout)}</span>}
-                        {whatIf && whatIf.corrected != null && <span className={`${TAG} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">yr 3 ${shareMax(whatIf.corrected)}</span>}
-                      </div>
-                    </td>
-                  )}
                   <td className={`${cell} ${rowBg} px-2 py-1 text-right`}>
                     <button
                       onClick={() => setModalPlayer({ ...player, overall_rank: rank, auction_value: p.value })}

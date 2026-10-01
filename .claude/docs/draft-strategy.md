@@ -262,8 +262,8 @@ their text, so keep these shapes when editing the script: `unpriced +X +Y` (A-TO
 which the room has not paid for) becomes an amber dot on those heat cells and an amber underline on
 the column header; `+X` / `-X` (categories at +/-1.5 z) and `57g` (projected games under 60) are
 dropped because the heat cells and the GP column (projected games, amber under 60) already say it;
-other `bad` notes (under 41 games last season, new team) go under the name; the rest are tags in
-the **Read** column (star: wait for ~10% off / pass; the overpaid tier; one $60+ max; bench target;
+other `bad` notes (under 41 games last season, new team) go under the name; the rest are tags
+beside the name (star: wait for ~10% off / pass; the overpaid tier; one $60+ max; bench target;
 30+ discount; young: room pays up) with the what-if max bids for second- and third-year players
 (rocket = after a +2 z breakout; `yr 3` = third-years with their average +0.53 z projection miss
 added back; `/api/fantasy` `what_if`, `player_stats.auction_value_at`; what-if only, no value changes).
