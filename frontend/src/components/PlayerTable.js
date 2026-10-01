@@ -445,6 +445,12 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   OVR <SortIcon columnKey="z_score" />
                 </div>
               </th>
+              {draftPlan && (
+                <th className="table-header cursor-pointer w-16 bg-nba-orange/15 hover:bg-nba-orange/25 border-x border-nba-orange/40 text-nba-orange" onClick={() => handleSort('max_bid')}
+                      title="Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even. Green: the room should stop well short of it; grey: about even; orange: the room will likely pay past it.">
+                    <div className="flex items-center font-bold tracking-wide">Max bid <SortIcon columnKey="max_bid" /></div>
+                  </th>
+              )}
               {!draftMode && <th 
                 className="table-header cursor-pointer hover:bg-gray-600 w-10 text-center px-1"
                 onClick={() => handleSort('hot_overall')}
@@ -479,10 +485,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   <th className="table-header cursor-pointer hover:bg-gray-600 w-16" onClick={() => handleSort('likely')}
                       title="What this room paid for his likely bid rank in 2025 (a guess: misses by $13-16 on $20+ players)">
                     <div className="flex items-center">Likely <SortIcon columnKey="likely" /></div>
-                  </th>
-                  <th className="table-header cursor-pointer w-16 bg-nba-orange/15 hover:bg-nba-orange/25 border-x border-nba-orange/40 text-nba-orange" onClick={() => handleSort('max_bid')}
-                      title="Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even. Green: the room should stop well short of it; grey: about even; orange: the room will likely pay past it.">
-                    <div className="flex items-center font-bold tracking-wide">Max bid <SortIcon columnKey="max_bid" /></div>
                   </th>
                   <th className="table-header w-56"
                       title="Aim: the price worth holding out for early (90% of a star's max, 85% of others at $15+). Rocket: his max if he breaks out (second- and third-year players). Chart: third-year max with the average third-year correction. Then the rule that applies, how this room prices his kind (discounts players over 30, pays up for young ones), his strong categories ('unpriced' = ones the room has not paid for), what he gives up, and risks (games, short last season, new team).">
@@ -549,6 +551,18 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     {getCustomScoreDisplay(player.name, getZScore(player))}
                   </div>
                 </td>
+                {draftPlan && (() => {
+                  // Max bid sits right after OVR so it reads first
+                  const likely = likelyPrice(player);
+                  const max = maxBid(player);
+                  return (
+                      <td className="table-cell bg-nba-orange/[0.07] border-x border-nba-orange/25" style={{ color: bidColor(max, likely) }}>
+                        <div className="flex items-center gap-2">
+                        <span className="text-xl font-extrabold tabular-nums leading-none" title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>${max}</span>
+                        </div>
+                      </td>
+                  );
+                })()}
                 {!draftMode && <td className="table-cell text-center px-1">
                   {getHotColdIndicator(player)}
                 </td>}
@@ -596,11 +610,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   return (
                     <>
                       <td className="table-cell text-gray-400">{likely != null ? `$${likely}` : '-'}</td>
-                      <td className="table-cell bg-nba-orange/[0.07] border-x border-nba-orange/25" style={{ color: bidColor(max, likely) }}>
-                        <div className="flex items-center gap-2">
-                        <span className="text-xl font-extrabold tabular-nums leading-none" title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>${max}</span>
-                        </div>
-                      </td>
                       <td className="table-cell max-w-[15rem]">
                         <div className="flex flex-wrap items-center gap-1 whitespace-normal">
                           {aim != null && <span className={`${chip} bg-nba-orange/20 text-orange-200`} title={isStar ? "A star is only worth it about 10% under his max (simulated auctions); past that, pass" : "Worth holding out for early in the draft; go to the max later if money is left"}>{isStar ? 'star ≤' : 'aim ≤'}${aim}</span>}
