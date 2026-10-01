@@ -25,6 +25,13 @@ const heat = (score) => {
   };
 };
 
+// The bid scale: one $ axis for every row, square-root so $1-15 players get room and the stars
+// still fit. The ticks are the share rule's tier floors ($15, $40) plus $1, $5 and $100.
+const SCALE_MAX = 120;
+const SCALE_TICKS = [1, 5, 15, 40, 100];
+const at = (dollars) => `${(Math.sqrt(Math.min(Math.max(dollars, 0), SCALE_MAX) / SCALE_MAX) * 100).toFixed(1)}%`;
+const BAR = '#cbd5e1';
+
 const EDGE_UNDER = 'rgb(74, 222, 128)';  // the room stops short of the max (bidColor's green)
 const EDGE_OVER = 'rgb(249, 115, 22)';   // the room pays past it (bidColor's orange)
 const UNPRICED = '#fbbf24';
@@ -44,6 +51,7 @@ const sortNotes = (notes = []) => {
 
 const TAG = 'inline-block rounded px-1 py-[2px] text-[10.5px] leading-none font-medium whitespace-nowrap';
 const TH = 'sticky z-20 bg-gray-900 px-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-700 whitespace-nowrap select-none';
+const PILL = 'rounded px-1 text-[10.5px] leading-4 font-bold tabular-nums text-gray-900 whitespace-nowrap';
 const NUM = 'px-2 py-1 text-right tabular-nums whitespace-nowrap';
 
 const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts = [], onPuntsChange, draftPlan = null }) => {
@@ -138,7 +146,6 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
   const unpricedLabels = new Set(draftPlan?.unpriced
     || Object.values(draftPlan?.notes || {}).flatMap(notes => sortNotes(notes).unpriced));
   const togglePunt = (key) => onPuntsChange?.(punts.includes(key) ? punts.filter(c => c !== key) : [...punts, key]);
-  const priceColumns = draftPlan ? 5 : 1;
 
   return (
     <>
@@ -146,12 +153,22 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
         <span className="text-gray-300 font-medium tabular-nums">{sorted.length} players</span>
         {draftPlan && (
           <>
-            <span><b className="text-gray-200">Aim</b> hold out for this early</span>
-            <span><b className="text-gray-200">Max</b> stop here</span>
-            <span><b className="text-gray-200">Room</b> what they'll likely pay</span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-2 rounded-sm" style={{ background: EDGE_UNDER }} /> room stops under your max
-              <span className="inline-block w-3 h-2 rounded-sm ml-2" style={{ background: EDGE_OVER }} /> room pays past it
+              <span className="inline-block w-5 h-2 rounded-l-sm" style={{ background: BAR }} />
+              <b className="text-gray-200">Aim</b> hold out for this early
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-flex items-center"><span className="inline-block w-4 h-2" style={{ background: BAR, opacity: 0.3 }} /><span className="inline-block w-0.5 h-3 bg-white" /></span>
+              <b className="text-gray-200">Max</b> stop here
+            </span>
+            <span className="flex items-center gap-1.5">
+              <b className="text-gray-200">Room's likely price</b>
+              <span className={PILL} style={{ background: EDGE_UNDER }}>under your aim</span>
+              <span className={`${PILL} !text-white bg-gray-600`}>up to your max</span>
+              <span className={PILL} style={{ background: EDGE_OVER }}>past it</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-px h-3 bg-gray-400" /> app value
             </span>
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: UNPRICED }} /> strength the room doesn't pay for
@@ -171,8 +188,19 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
           <thead>
             <tr>
               <th className={`${TH} top-0 h-6 left-0 z-30`} />
-              <th className={`${TH} top-0 h-6 text-center ${draftPlan ? 'text-nba-orange border-l border-gray-700' : ''}`} colSpan={priceColumns}>
-                {draftPlan ? 'Bid' : ''}
+              <th className={`${TH} top-0 h-6 text-left ${draftPlan ? 'border-l border-gray-700' : ''}`}>
+                {draftPlan && (
+                  <span className="flex items-center gap-2.5 font-medium normal-case tracking-normal">
+                    <span className="text-nba-orange font-semibold uppercase tracking-wider">Bid</span>
+                    <span className="text-gray-600">sort</span>
+                    {[['aim', 'aim'], ['max', 'max'], ['likely', 'room'], ['edge', 'best buys'], ['value', 'value']].map(([k, label]) => (
+                      <span key={k} className={`cursor-pointer hover:text-white ${sort === k ? 'text-white' : ''}`} onClick={() => sortBy(k)}
+                            title={k === 'edge' ? "Your max against the room's likely price, scaled to his size (a few dollars on a star is noise): the players the room should let go cheapest first" : undefined}>
+                        {label}{sort === k && <span className="text-nba-orange">↓</span>}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </th>
               <th className={`${TH} top-0 h-6 text-center border-l border-gray-700`} colSpan={categories.length + 1}>
                 {statType === 'proj' || statType === 'projected' ? 'Projected per game' : 'Per game'}
@@ -185,20 +213,21 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                 <span className={`cursor-pointer hover:text-white ml-4 ${sort === 'name' ? 'text-white' : ''}`} onClick={() => sortBy('name')}
                       title={draftPlan ? "Tags: the rule that applies to him and how this room prices his kind (discounts players over 30, pays up for young ones). Rocket: his max if he breaks out (second- and third-year players). Yr 3: his max with the average third-year correction." : undefined}>Player</span>
               </th>
-              {draftPlan && (
-                <>
-                  <Head k="aim" className="text-right border-l border-gray-700"
-                        title="The price worth holding out for early in the draft: 90% of a star's max (a star is only worth it at a real discount), 85% of everyone else's from $15. Loosen toward the max later if money is left.">Aim</Head>
-                  <Head k="max" className="text-right text-nba-orange"
-                        title="Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even.">Max</Head>
-                  <Head k="likely" className="text-right"
-                        title="What this room paid for his likely bid rank in 2025 (a guess: misses by $13-16 on $20+ players)">Room</Head>
-                  <Head k="edge" className="text-center"
-                        title="Your max against the room's likely price, scaled to his size (a few dollars on a star is noise). Green to the right: the room should stop short of your max. Orange to the left: it will likely pay past it.">Edge</Head>
-                </>
-              )}
-              {caps.auction
-                ? <Head k="value" className={`text-right ${draftPlan ? '' : 'border-l border-gray-700'}`} title="The app's auction $ on the selected stats (follows the star premium and punts). Not a bid limit.">Value</Head>
+              {draftPlan ? (
+                <th className={`${TH} top-6 h-8 border-l border-gray-700`}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-11 flex-none text-right text-gray-200"
+                          title="The price worth holding out for early in the draft: 90% of a star's max (a star is only worth it at a real discount), 85% of everyone else's from $15; under $15 it is the max. Loosen toward the max later if money is left.">Aim</span>
+                    <div className="relative flex-1 min-w-[15rem] h-4 font-normal normal-case tracking-normal text-[10px] text-gray-500"
+                         title="The bar runs to your aim, then faded to your max (the white stop). The pill is what this room paid for his likely bid rank in 2025 (a guess: misses by $13-16 on $20+ players). The thin line is the app's value, not a bid limit.">
+                      {SCALE_TICKS.map(t => <span key={t} className="absolute -translate-x-1/2 tabular-nums" style={{ left: at(t) }}>${t}</span>)}
+                    </div>
+                    <span className="w-12 flex-none text-right"
+                          title="Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even. Under it, the app's auction $ on the selected stats (follows the star premium and punts).">Max</span>
+                  </div>
+                </th>
+              ) : caps.auction
+                ? <Head k="value" className="text-right border-l border-gray-700" title="The app's auction $ on the selected stats (follows the star premium and punts)">Value</Head>
                 : <th className={`${TH} top-6 h-8 text-right border-l border-gray-700`} title={`The draft round his rank goes in (${numTeams} teams)`}>Rd</th>}
               <Head k="score" className="text-center border-l border-gray-700" title="Overall score, 0-100, on the categories not punted">OVR</Head>
               {categories.map(c => {
@@ -236,6 +265,7 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
               const scoreMoved = customScores[player.name] ? score - Math.round(getZScore(player)) : 0;
               const whatIf = draftPlan && !p.isStar ? player.what_if : null;
               const gp = games(player);
+              const target = p.aim ?? p.max;
               const cell = 'border-b border-gray-700/60';
               const rowBg = mine ? 'bg-[#3a2c17]' : 'bg-gray-800 group-hover:bg-[#283548]';
               return (
@@ -268,36 +298,37 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                       </div>
                     </div>
                   </td>
-                  {draftPlan && (
-                    <>
-                      <td className={`${cell} ${rowBg} ${NUM} text-gray-300 border-l border-l-gray-700`}
-                          title={p.aim == null ? 'Under $15: the max is the price' : p.isStar ? 'A star is only worth it about 10% under his max; past that, pass' : 'Worth holding out for early in the draft; go to the max later if money is left'}>
-                        {p.aim != null ? `$${p.aim}` : <span className="text-gray-600">-</span>}
-                      </td>
-                      <td className={`${cell} ${NUM} ${mine ? 'bg-[#3a2c17]' : 'bg-[#2a2a2a] group-hover:bg-[#33302b]'} font-bold`} style={{ color: bidColor(p.max, p.likely) }}>
-                        ${p.max}
-                      </td>
-                      <td className={`${cell} ${rowBg} ${NUM} text-gray-400`}>{p.likely != null ? `$${p.likely}` : <span className="text-gray-600">-</span>}</td>
-                      <td className={`${cell} ${rowBg} px-2 py-1`}
-                          title={p.gap == null ? undefined : p.gap >= 0 ? `Room's likely price is $${p.gap} under your max` : `Room's likely price is $${-p.gap} over your max`}>
-                        {p.gap != null && (
-                          <div className="flex items-center gap-1.5">
-                            <div className="relative w-14 h-2.5 flex-none">
-                              <div className="absolute inset-y-0 left-1/2 w-px bg-gray-500" />
-                              <div className="absolute inset-y-0.5 rounded-sm"
-                                   style={p.edge >= 0
-                                     ? { left: '50%', width: `${p.edge * 50}%`, background: EDGE_UNDER }
-                                     : { right: '50%', width: `${-p.edge * 50}%`, background: EDGE_OVER }} />
-                            </div>
-                            <span className="w-7 text-right text-xs tabular-nums text-gray-300">{p.gap > 0 ? '+' : ''}{p.gap}</span>
-                          </div>
-                        )}
-                      </td>
-                    </>
+                  {draftPlan ? (
+                    <td className={`${cell} ${rowBg} px-2 py-1 border-l border-l-gray-700`}
+                        title={`Aim $${target} · max $${p.max} · room ${p.likely != null ? `$${p.likely}` : '-'} · value $${p.value}`
+                          + (p.gap == null ? '' : p.gap >= 0 ? `. The room's likely price is $${p.gap} under your max.` : `. The room's likely price is $${-p.gap} over your max.`)
+                          + (p.isStar ? ' A star is only worth it about 10% under his max; past that, pass.' : '')}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-11 flex-none text-right text-base font-extrabold tabular-nums leading-none" style={{ color: bidColor(p.max, p.likely) }}>${target}</span>
+                        <div className="relative flex-1 min-w-[15rem] h-6">
+                          {SCALE_TICKS.map(t => <div key={t} className="absolute inset-y-0 w-px bg-gray-700/70" style={{ left: at(t) }} />)}
+                          <div className="absolute top-2 h-2 left-0 rounded-l-sm" style={{ width: at(target), background: BAR }} />
+                          <div className="absolute top-2 h-2" style={{ left: at(target), width: `calc(${at(p.max)} - ${at(target)})`, background: BAR, opacity: 0.3 }} />
+                          <div className="absolute top-[5px] h-3.5 w-0.5 bg-white" style={{ left: at(p.max) }} />
+                          <div className="absolute top-0.5 bottom-0.5 w-px bg-gray-400" style={{ left: at(p.value) }} />
+                          {p.likely != null && (
+                            <span className={`absolute top-1 -translate-x-1/2 ${PILL} ${p.likely > target && p.likely <= p.max ? '!text-white bg-gray-600' : ''} ring-1 ring-gray-800`}
+                                  style={{ left: at(p.likely), background: p.likely <= target ? EDGE_UNDER : p.likely > p.max ? EDGE_OVER : undefined }}>
+                              {p.likely}
+                            </span>
+                          )}
+                        </div>
+                        <div className="w-12 flex-none text-right tabular-nums leading-tight">
+                          <div className="text-xs font-semibold text-gray-200">${p.max}</div>
+                          <div className="text-[10px] text-gray-500">val ${p.value}</div>
+                        </div>
+                      </div>
+                    </td>
+                  ) : (
+                    <td className={`${cell} ${rowBg} ${NUM} border-l border-l-gray-700 text-gray-200 font-semibold`}>
+                      {caps.auction ? `$${p.value}` : Math.ceil((rank || 0) / numTeams) || '-'}
+                    </td>
                   )}
-                  <td className={`${cell} ${rowBg} ${NUM} text-gray-500 ${draftPlan ? '' : 'border-l border-l-gray-700 text-gray-200 font-semibold'}`}>
-                    {caps.auction ? `$${p.value}` : Math.ceil((rank || 0) / numTeams) || '-'}
-                  </td>
                   <td className={`${cell} ${rowBg} p-0.5 pl-1.5 border-l border-l-gray-700`}>
                     <div className="h-7 min-w-[2.5rem] px-1 rounded-sm flex items-center justify-center gap-0.5 tabular-nums text-[13px]" style={{ ...heat(score), fontWeight: 700 }}>
                       {score}
