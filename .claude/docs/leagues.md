@@ -45,7 +45,8 @@ stats) is shared by all leagues.
   localStorage `fantasy.view.<league>.<tab>`. Only what the user picked is stored, over defaults
   that can change (the default timeframe flips when a season starts); a sanitizer drops stored
   values the league no longer has (a category, a week, a position chip). `<main key={leagueId}>`
-  remounts every tab on a switch, so each reads its own league's state. Draft mode is per league
+  remounts every tab on a switch, so each reads its own league's state (test:
+  `frontend/src/useLeagueViewState.test.js`, `CI=true npx react-scripts test --watchAll=false`). Draft mode is per league
   too (`fantasy.draftMode.<league>`); by default on until 6 h past the draft date, or with no date
   while nobody in the league has players (`config.rostered`).
 - **Scoring mode.** `settings.scoring`: `{type: 'categories'|'points', points: {stat: weight}}`. A points
