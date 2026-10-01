@@ -589,10 +589,14 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                           title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>
                         ${max}
                         {player.year3 && draftPlan.rule.stars[player.name] == null && (
-                          <sup className="ml-0.5 text-[10px] font-bold text-sky-400 cursor-help"
-                            title={`Third-year player. Max bid on his projection: $${shareMax(player.auction_value_proj || 1)}. `
-                              + `With the average third-year miss added back (+0.53 z): $${shareMax(player.year3.corrected)}. `
-                              + `If he breaks out (+2 z; 28% of third-year players do): $${shareMax(player.year3.breakout)}.`}>Y3</sup>
+                          <span className="relative group ml-0.5 align-super text-[10px] font-bold text-sky-400 cursor-help">
+                            Y3
+                            {/* Third-year what-ifs: max with the average third-year miss added back, and after a breakout */}
+                            <span className="hidden group-hover:flex absolute right-0 top-full z-30 mt-1 gap-2 whitespace-nowrap rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm font-semibold shadow-lg">
+                              <span className="text-sky-300" aria-label="Max with the average third-year correction">📈 ${shareMax(player.year3.corrected)}</span>
+                              <span className="text-green-400" aria-label="Max if he breaks out">🚀 ${shareMax(player.year3.breakout)}</span>
+                            </span>
+                          </span>
                         )}
                       </td>
                     </>
