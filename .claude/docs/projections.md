@@ -75,6 +75,14 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   bias makes year-3 error worse (MAE 2.23 -> 2.26); among draftable year-3 players (projected
   value above the ~110th player) the bias is -0.21 (n=33). An owner adjustment (`production`) is
   the place for a view on one player.
+- **Auction $ on the projection are games-weighted** (2026-10-01): surplus over replacement x
+  projected games / 82, so a known absence (ACL return in January) is priced. 4-season backtest of
+  the blend ($ of delivered season value, top 140): error 9.37 per game only -> 9.05 weighted (better
+  in 3 of 4 seasons, level in the other); players projected under 55 games were $17 overpriced, now $10. Weighting
+  only the under-55 group gives 9.15. Ranks and z stay per game. On 2026-27 it moves the 140 drafted
+  players $1.6 on average, 9 by $5+ (the long absences down $5-12, the two most durable stars up $5-9).
+  The `injured` flag (owner-set; 2026-10-01 from sourced reports, `out/injuries/`) only drives the
+  healthy filter and lineups; the price uses projected games, which already carry those absences.
 - **Stats basis `_proj`** (`player_stats._add_projections`): every rostered player with a line,
   rookies included; `GP_proj` >= 20 makes the scaling pool, and only pool players get an auction $ (any timeframe:
   `ELIGIBLE{n}`; the rest show $1. A model-only line on 67 career minutes had priced at $18); ratios are not shrunk again. Once

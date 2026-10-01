@@ -79,19 +79,34 @@ def test_minimums_upgrade_to_slots():
 def test_auction_values_skip_ineligible_players():
     """A high per-game value on too few (projected) games is not priced: $1, and the money goes to the rest."""
     league = SimpleNamespace(num_teams=2, roster_size=2, budget=10, price_exponent=1.0)
-    stats = {'thin': {'VALUE_proj': 9.0, 'ELIGIBLE_proj': False}}
-    stats.update({f'p{i}': {'VALUE_proj': float(5 - i), 'ELIGIBLE_proj': True} for i in range(6)})
+    stats = {'thin': {'VALUE_proj': 9.0, 'GP_proj': 10, 'ELIGIBLE_proj': False}}
+    stats.update({f'p{i}': {'VALUE_proj': float(5 - i), 'GP_proj': 82, 'ELIGIBLE_proj': True} for i in range(6)})
     calculate_auction_values(stats, league, value_key='VALUE_proj', out_key='A')
     assert stats['thin']['A'] == 1
     assert sum(stats[f'p{i}']['A'] for i in range(4)) == 20
     assert stats['p0']['A'] > stats['p3']['A'] >= 1 and stats['p4']['A'] == 1
 
 
-def test_auction_value_at_reads_the_curve():
+def test_auction_value_at_prices_extra_value():
     from player_stats import auction_value_at
-    stats = {f'p{i}': {'VALUE_proj': float(i), 'AUCTION_VALUE_proj': 1 + 2 * i, 'ELIGIBLE_proj': True} for i in range(6)}
-    stats['thin'] = {'VALUE_proj': 9.0, 'AUCTION_VALUE_proj': 1, 'ELIGIBLE_proj': False}
-    assert auction_value_at(stats, 2.0) == 5
-    assert auction_value_at(stats, 2.6) == 5
-    assert auction_value_at(stats, 99.0) == 11
-    assert auction_value_at(stats, -5.0) == 1
+    league = SimpleNamespace(num_teams=1, roster_size=3, budget=88, price_exponent=1.0)
+    stats = {'full': {'VALUE_proj': 5.0, 'GP_proj': 82, 'ELIGIBLE_proj': True},
+             'half': {'VALUE_proj': 5.0, 'GP_proj': 41, 'ELIGIBLE_proj': True},
+             'low': {'VALUE_proj': 1.0, 'GP_proj': 82, 'ELIGIBLE_proj': True},
+             'out': {'VALUE_proj': 0.0, 'GP_proj': 82, 'ELIGIBLE_proj': True}}
+    assert auction_value_at(stats, league, 'low', 0.0) == 11       # as priced: 1 + 10
+    assert auction_value_at(stats, league, 'low', 1.0) == 21       # twice the surplus
+    assert auction_value_at(stats, league, 'out', 1.0) == 11       # an undrafted player reaching 'low'
+    assert auction_value_at(stats, league, 'half', 5.0) == 51      # games share applies to the extra too
+
+
+def test_projection_prices_count_projected_games():
+    """Same per-game value, half the projected games: about half the surplus $."""
+    league = SimpleNamespace(num_teams=1, roster_size=3, budget=88, price_exponent=1.0)
+    stats = {'full': {'VALUE_proj': 5.0, 'GP_proj': 82, 'ELIGIBLE_proj': True},
+             'half': {'VALUE_proj': 5.0, 'GP_proj': 41, 'ELIGIBLE_proj': True},
+             'low': {'VALUE_proj': 1.0, 'GP_proj': 82, 'ELIGIBLE_proj': True},
+             'out': {'VALUE_proj': 0.0, 'GP_proj': 82, 'ELIGIBLE_proj': True}}
+    calculate_auction_values(stats, league, value_key='VALUE_proj', out_key='A')
+    assert stats['full']['A'] - 1 == 2 * (stats['half']['A'] - 1)
+    assert sum(stats[p]['A'] for p in ('full', 'half', 'low')) == 88

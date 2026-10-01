@@ -29,6 +29,7 @@ PROJECTION_MIN_GAMES = 20   # projected games to be in the pool the projection t
 # Players entering their third season (.claude/docs/projections.md, "Breakouts by NBA year"): the
 # blend has under-projected them by this much per-game value on average, and 28% gained 2+ z. Shown
 # as what-if prices next to the max bid; not applied to anyone's value (it failed out of sample).
+SEASON_GAMES = 82
 YEAR3_BIAS_Z = 0.53
 BREAKOUT_Z = 2.0
 PROJECTED_STATS = {'FGA': 'fga', 'FGM': 'fgm', 'FTA': 'fta', 'FTM': 'ftm', 'FG3M': 'fg3m', 'PTS': 'pts', 'AST': 'ast',
@@ -520,16 +521,24 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
                 player_stats[p][rank_key] = i
                 player_stats[p][score_key] = display[p]
 
-def auction_value_at(player_stats, value, value_key='VALUE_proj', auction_key='AUCTION_VALUE_proj'):
-    """The $ a player would carry at `value`, read off the priced players' value -> $ curve (everyone
-    else unchanged). For what-if prices; calculate_auction_values must have run for `auction_key`."""
+def auction_value_at(player_stats, league, name, delta, value_key='VALUE_proj'):
+    """The $ `name` would carry with `delta` more value, everyone else unchanged: his surplus over
+    replacement (x his projected games share, as in calculate_auction_values) priced at the going
+    rate per unit of surplus. For what-if prices (the Y3 tag)."""
     eligible_key = 'ELIGIBLE' + value_key.split('VALUE', 1)[1]
-    curve = sorted((s[value_key], s[auction_key]) for s in player_stats.values()
-                   if s.get(eligible_key) and value_key in s and auction_key in s)
-    if not curve:
+    ranked = sorted((p for p, s in player_stats.items() if s.get(eligible_key) and value_key in s),
+                    key=lambda p: player_stats[p][value_key], reverse=True)
+    n = league.num_teams * league.roster_size
+    if len(ranked) <= n or name not in player_stats:
         return 1
-    below = [d for v, d in curve if v <= value]
-    return max(below) if below else 1
+    replacement = player_stats[ranked[n]][value_key]
+    weighted = value_key.endswith('_proj')
+    games = lambda p: min((player_stats[p].get('GP_proj') or 0) / SEASON_GAMES, 1.0) if weighted else 1.0
+    surplus = lambda p, extra=0.0: (max(player_stats[p][value_key] + extra - replacement, 0.0) * games(p)) ** league.price_exponent
+    total = sum(surplus(p) for p in ranked[:n])
+    if not total:
+        return 1
+    return 1 + round(surplus(name, delta) / total * (league.num_teams * league.budget - n))
 
 
 def add_fantasy_points(player_stats, league):
@@ -554,7 +563,12 @@ def calculate_auction_values(player_stats, league, price_exponent=None, value_ke
 
     Only players eligible for the timeframe (ELIGIBLE{n} from calculate_overall_scores) are priced:
     a per-game line from a handful of games, or a projection under PROJECTION_MIN_GAMES games,
-    is not something to bid on, whatever its rank. They show $1."""
+    is not something to bid on, whatever its rank. They show $1.
+
+    On the projection timeframe the surplus is multiplied by projected games / 82: a player out half
+    the season returns half his value over replacement (the spot holds a replacement meanwhile).
+    Backtested on 4 seasons: $ error 9.4 -> 9.1, and players projected under 55 games went from $17
+    overpriced to $10 (.claude/docs/projections.md). Ranks stay per game."""
     if price_exponent is None:
         price_exponent = league.price_exponent
     eligible_key = 'ELIGIBLE' + value_key.split('VALUE', 1)[1]
@@ -568,7 +582,9 @@ def calculate_auction_values(player_stats, league, price_exponent=None, value_ke
     undrafted = ranked[len(drafted):]
     replacement = (player_stats[undrafted[0]][value_key] if undrafted
                    else min(player_stats[p][value_key] for p in drafted))
-    surplus = {p: max(player_stats[p][value_key] - replacement, 0.0) ** price_exponent for p in drafted}
+    games = ((lambda p: min((player_stats[p].get('GP_proj') or 0) / SEASON_GAMES, 1.0))
+             if value_key.endswith('_proj') else (lambda p: 1.0))
+    surplus = {p: (max(player_stats[p][value_key] - replacement, 0.0) * games(p)) ** price_exponent for p in drafted}
     total_surplus = sum(surplus.values())
     spend = max(league.num_teams * league.budget - len(drafted), 0)
     exact = {p: 1 + (surplus[p] / total_surplus * spend if total_surplus else spend / len(drafted))
