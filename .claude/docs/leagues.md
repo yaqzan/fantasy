@@ -17,6 +17,16 @@ stats) is shared by all leagues.
   pull_fantrax.py teams --league <fantrax id> [--apply]` renames teams to match Fantrax by id (dry
   run by default; a team with no id links by its current name, else set the id by hand). Match
   rosters/schedules by id, never by name.
+- **Platform importers** (dry run unless `--apply`; `settings.platform` + `platform_league_id` pick
+  the league). `pull_fantrax.py` (saved browser cookie): team names by id, projections, techs.
+  `pull_yahoo.py` (Yahoo OAuth: the owner's app keys in `.env`, `auth` once, refresh token in
+  gitignored `yahoo_token.json`; XML API, `nba.l.<number>` = the current season's league): teams
+  linked by Yahoo team id (first sync by name), each roster made exactly Yahoo's, every rostered or
+  available player's eligibility into `league_player_flags.positions`, Yahoo's can't-cut list into
+  `undroppable` (a hand-set flag is never cleared, only reported). Its starting slots are compared
+  with `roster.slots` and reported, never written. Names match through `projections.norm_name`.
+  Parsers are tested on Yahoo-shaped XML (`test_pull_yahoo.py`); draft results and transactions
+  aren't read (rosters are the current truth; no pick order is stored).
 - **Which league a request is about.** `X-League` header (the frontend's switcher, stored in
   localStorage `fantasy.league`), else `?league=`, else the active league. Switching in the UI
   also activates the league, so CLI scripts (`lineup_optimizer.py`, default `--league`) follow

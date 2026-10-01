@@ -203,9 +203,10 @@ On Windows, `ops/windows/install-tasks.ps1` registers a 5-minute watchdog that r
 
 | file | what it is |
 |---|---|
-| `.env` | Fantrax login, MySQL settings |
+| `.env` | Fantrax login, Yahoo app keys (`YAHOO_CLIENT_ID`/`SECRET`), MySQL settings |
 | `ops/cloudflared-config.yml` | your tunnel, copied from the `.example` |
 | `fantraxloggedin.cookie` | the saved Fantrax session |
+| `yahoo_token.json` | the Yahoo login (`pull_yahoo.py auth`), refreshed automatically |
 | the MySQL `fantasy` database | stats, leagues (rules, schedules), teams, rosters |
 
 None of it is in git. (An older install's `league.json` is imported once by `init_db.py` and then

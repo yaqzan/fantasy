@@ -2,6 +2,7 @@
 .env
 league.json
 *.cookie
+yahoo_token.json
 frontend/.env*.local
 
 # Personal hosting glue

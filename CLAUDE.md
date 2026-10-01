@@ -4,8 +4,8 @@ NBA fantasy basketball dashboard and lineup optimizer: https://fantasy.yaqzan.de
 Flask + Peewee/MySQL backend, React (CRA) + Tailwind frontend, one process on port 5001.
 
 **Public repo (github.com/yaqzan/fantasy), plug and play.** Owner state is gitignored or in MySQL:
-`.env` (Fantrax login, DB), the `leagues` table (rules, schedule, league mates' names),
-`*.cookie` (Fantrax session), `ops/cloudflared-config.yml`. Tracked files carry no credential,
+`.env` (Fantrax login, Yahoo app keys, DB), the `leagues` table (rules, schedule, league mates' names),
+`*.cookie` (Fantrax session), `yahoo_token.json`, `ops/cloudflared-config.yml`. Tracked files carry no credential,
 league id or person's name. Pre-2026-09-23 history (it holds a real password) is in private
 `yaqzan/fantasy-archive`.
 
@@ -21,6 +21,7 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 - `python import_projections.py players|teams <csv> [--source X]` - load another projection source
 - `python pull_fantrax.py projections|techs --league <fantrax id>` - Fantrax projections / past techs (saved login)
 - `python pull_fantrax.py teams --league <fantrax id> [--apply]` - sync team names by Fantrax team id
+- `python pull_yahoo.py auth` once, then `sync --league <yahoo league number> [--apply]` - Yahoo teams, rosters, positions, can't-cut
 - `python lineup_optimizer.py [--league <id>] [--moves]` - this week's matchup (and best pickups) in the terminal
 - `ops\windows\install-tasks.ps1 -Controller C:\Development\server.ps1` - watchdog task; ELEVATED shell
 
