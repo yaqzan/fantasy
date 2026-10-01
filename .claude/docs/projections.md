@@ -65,6 +65,13 @@ team wins (`team_strength`). NBA-wide, shared by every league.
     one (~40 games a player; never backtest on it). Hashtag Basketball's Wayback pages hold the
     top 30 only. Untested sources stay at equal weight; dropping any one moves the 140 drafted
     players $0.7-1.3 on average (`pricing_check.py`, auction `.horizon`).
+- **Breakouts by NBA year** (`breakout_by_year.py` -> `out/breakout_by_year.md`; 2,834 season pairs
+  2012-13..2025-26, WSOP-8 per-game value, breakout = +2 z): the biggest jump is into **year 2**
+  (+0.84 z, 32% break out), then year 3 (+0.52, 28%), flat from year 4 (+0.13, 22%), falling from
+  year 6. But **projections miss year 3 the most**: the blend under-projects players entering year 3
+  by 0.53 z (ESPN -0.54, ours -0.42; n=132), year 2 by 0.08, and over-projects year 6+ by 0.76.
+  About $3 at $6 a z in the middle of the board. Not applied in code; an owner adjustment
+  (`production`) is the place for a view on one player.
 - **Stats basis `_proj`** (`player_stats._add_projections`): every rostered player with a line,
   rookies included; `GP_proj` >= 20 makes the scaling pool, and only pool players get an auction $ (any timeframe:
   `ELIGIBLE{n}`; the rest show $1. A model-only line on 67 career minutes had priced at $18); ratios are not shrunk again. Once
