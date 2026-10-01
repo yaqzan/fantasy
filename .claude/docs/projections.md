@@ -83,6 +83,9 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   players $1.6 on average, 9 by $5+ (the long absences down $5-12, the two most durable stars up $5-9).
   The `injured` flag (owner-set; 2026-10-01 from sourced reports, `out/injuries/`) only drives the
   healthy filter and lineups; the price uses projected games, which already carry those absences.
+  Set it only for absences of ~10+ games or no timetable (it hides the player from the default
+  rankings view); `players.injured_return` (month, or `season`) and `injured_games_to_miss` show in
+  the tag as `INJ - Jan (45 missed)`. Unflagging in the app clears both.
 - **Stats basis `_proj`** (`player_stats._add_projections`): every rostered player with a line,
   rookies included; `GP_proj` >= 20 makes the scaling pool, and only pool players get an auction $ (any timeframe:
   `ELIGIBLE{n}`; the rest show $1. A model-only line on 67 career minutes had priced at $18); ratios are not shrunk again. Once

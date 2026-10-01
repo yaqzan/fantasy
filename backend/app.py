@@ -285,6 +285,8 @@ def get_fantasy_players():
             'auction_value_proj': stats.get('AUCTION_VALUE_proj', 0),
             'hot_overall': round(stats.get('Z-SCORE_5', 0) - stats.get('Z-SCORE', 0), 1),
             'is_injured': bool(player and player.injured == 1),
+            'injured_return': (player.injured_return if player and player.injured == 1 else None),
+            'injured_games': ((player.injured_games_to_miss or None) if player and player.injured == 1 else None),
             'nba_year': stats.get('NBA_YEAR'),
             # Third-year players: the projection $ with the average third-year miss added back, and after a breakout.
             'year3': ({'corrected': auction_value_at(stats_all, league, player_name, YEAR3_BIAS_Z),
@@ -458,6 +460,8 @@ def update_player():
     data = request.get_json() or {}
     player = Player.get(Player.name == data['player_name'])
     player.injured = 1 if data.get('is_injured', False) else 0
+    if not player.injured:      # the return month and games belong to one injury
+        player.injured_return, player.injured_games_to_miss = None, 0
     player.save()
     if 'is_undroppable' in data:
         set_league_flags(current_league(), player.id, undroppable=bool(data['is_undroppable']))

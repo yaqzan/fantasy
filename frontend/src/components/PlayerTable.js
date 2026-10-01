@@ -553,8 +553,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     <div className="flex items-center space-x-2">
                       <span className="font-medium text-white">{player.name}</span>
                       {player.is_injured && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white">
-                          INJ
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white whitespace-nowrap">
+                          INJ{player.injured_return ? ` - ${player.injured_return}` : ''}{player.injured_games ? ` (${player.injured_games} missed)` : ''}
                         </span>
                       )}
                     </div>

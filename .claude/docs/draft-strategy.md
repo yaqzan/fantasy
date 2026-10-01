@@ -27,6 +27,10 @@ per-game category z-scores (`market.py`), pooled, log-price per 1 z (90% bootstr
   TB was not priced even in 2024, when it was scored. Wins are paid a little (stars play on winners).
 - Fit on one draft, predict the other: rank correlation .83 (equal-weight z over all cats: .6).
   Dollar error is big: MAE $13-16 on $20+ players, only ~40% within $10. Treat gaps under ~$15 as noise.
+- Age: against the category model the room paid 1.3-1.4x for players in NBA years 2-5 and 0.92x for
+  year 6+ (0.86x at age 30+), both auctions. But an age term barely helps on hold-out (error $9.8/8.2
+  -> $9.5/8.1, rho unchanged; coefficient 2x apart between the drafts), and it moves a 21-year-old's
+  likely price ~15%. Not added: Likely runs low for hyped young players and the model can't see hype.
 - Position premium: centers +$0.6, nothing. Games played matters (more games, higher price).
 - The league never pays past ~$102 (top prices 100, 102; 91-100 in 2024).
 - Output: `out/f2026.csv` (per player: our $, market $, edge, category z). Player-level gaps
