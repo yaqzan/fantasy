@@ -148,6 +148,12 @@ roster without him, both roster shapes, 6 seeds), backtested as a max bid on bot
   to 62 games) predicts delivered $ no better (rank correlation .61-.62 vs .62, error $10.8-11.1 vs
   $10.6; worse inside every tier). Last season's games say little about next season's (r .21).
   Availability stays in the weekly model (star break-evens) and the "under ~60 games" judgement.
+- **Both kinds of max mean the same thing: the price where a pick returns $1 per $1.** Checked
+  2026-10-01 on the 296 past picks: delivered / app $ is .86 at app $40-74 (share .85), .77 at
+  $15-39 (share .80), 1.07 at $8-14 (share 1.0; .68 and 1.59 by year); stars delivered 1.02 per $1 of
+  break-even. So nothing is rescaled. Picks priced 100-120% of max returned 1.08 (90% range
+  .88-1.25, n=18): not evidence that the limit sits higher. Value (app $ before the tier discount)
+  and Likely (the room's price) are not bid limits.
 - **Decision: non-stars stay on share x app $** (projected performance x the tier's measured
   overpay); stars on the replicated break-even.
 
