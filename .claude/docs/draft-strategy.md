@@ -102,16 +102,21 @@ inside one price structure is .5-.8 categories a week).
   price (A-TO, 3PM, TS%, TB, TF, W).
 
 ### How sure is a break-even (2026-09-30, `breakeven_ci.py`, `pricing_check.py`)
+**Since 2026-10-01 the weekly model's availability is projected games / 82 x the games haircut**
+(`recon.availability`: .88, .78 after a season under 41 games; projections.md). The 2026-27 weekly
+numbers below this section predate it; rerun values: best star build 6.68 vs no-star 6.47 (six-man),
+7.06 vs 7.07 (ten-man); best $1 bench +0.5 over a random one. Star break-evens moved -$9 to +$7
+(up for durable stars, down for the two with a short last season).
 The first break-evens came from one run each (one opponent field, one random bench, one injury
 draw). Rerun over 5-8 seeds per roster shape (`out/breakeven_ci_*.txt`):
 - **One run is off by $10-20**: a star's break-even ranges $35-45 across seeds; the pooled fit has
   a standard error of about $5 per shape. One ten-man run had put a top-3 star $18 under his
   replicated number. `draft_day.py` now reads the replicated values.
-- Six-man core and ten-man roster agree within $4 for two of the top three and $11 for the third;
-  the Draft Day max is their average. Slope -0.07 categories a week per $10 in every run.
+- The ten-man roster puts break-evens $6-16 under the six-man core (the no-star roster gains more
+  from a bench it can choose); the Draft Day max is their average. Slope -0.07 categories a week per $10 in every run.
 - **Projected games are the biggest lever: ~$4 of break-even per game** for a star (5 fewer games
-  took $19 off). Cutting everyone's games to 88% (what projected games delivered, projections.md)
-  raises star break-evens $4-10: missed weeks hurt a no-star roster as much.
+  took $19 off). The haircut itself raised the durable stars' six-man break-evens $7-11 (missed weeks hurt a
+  no-star roster as much) and left the ten-man ones within $2.
 - Against the best roster that may hold another star at the room's price, break-evens are $10-15
   lower: at most one of the top three is a buy, whichever goes cheapest.
 - The break-even is not the app's $. App $ = per-game value over replacement (z capped at +/-3,
