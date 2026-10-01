@@ -30,7 +30,7 @@ const EDGE_OVER = 'rgb(249, 115, 22)';   // the room pays past it (bidColor's or
 const UNPRICED = '#fbbf24';
 
 // Draft Day notes by where they show: strengths and gaps are the heat strip, projected games the
-// GP column, the rest tags (rules, how the room prices him) or risks under his name.
+// GP column, the rest tags under his name: rules and how the room prices him, and risks in amber.
 const sortNotes = (notes = []) => {
   const out = { tags: [], risks: [], unpriced: [] };
   notes.forEach(n => {
@@ -42,7 +42,7 @@ const sortNotes = (notes = []) => {
   return out;
 };
 
-const TAG = 'inline-block rounded px-1.5 py-[3px] text-[11px] leading-none font-medium whitespace-nowrap';
+const TAG = 'inline-block rounded px-1 py-[2px] text-[10.5px] leading-none font-medium whitespace-nowrap';
 const TH = 'sticky z-20 bg-gray-900 px-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-700 whitespace-nowrap select-none';
 const NUM = 'px-2 py-1 text-right tabular-nums whitespace-nowrap';
 
@@ -216,13 +216,13 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
               const rowBg = mine ? 'bg-[#3a2c17]' : 'bg-gray-800 group-hover:bg-[#283548]';
               return (
                 <tr key={player.name} className={`group ${gone ? 'opacity-40' : ''}`}>
-                  <td className={`${cell} ${rowBg} sticky left-0 z-10 pl-3 pr-3 py-1 ${mine ? 'shadow-[inset_3px_0_0_#FF8C00]' : ''}`}>
+                  <td className={`${cell} ${rowBg} sticky left-0 z-10 w-[1%] pl-3 pr-3 py-1 ${mine ? 'shadow-[inset_3px_0_0_#FF8C00]' : ''}`}>
                     <div className="flex items-center gap-2.5">
                       <div className="w-7 flex-none text-right tabular-nums text-xs text-gray-500 leading-tight">
                         {rank}
                         {moved !== 0 && <div className={`text-[10px] ${moved > 0 ? 'text-green-400' : 'text-red-400'}`}>{moved > 0 ? '+' : ''}{moved}</div>}
                       </div>
-                      <div className="min-w-0">
+                      <div className="w-[14.5rem]">
                         <div className="flex items-center gap-1.5">
                           <span className="font-semibold text-gray-100 max-w-[11.5rem] truncate leading-tight" title={player.name}>{player.name}</span>
                           {p.isStar && <span className="text-[10px] text-nba-orange" title="Star: priced at his break-even, not the share rule">★</span>}
@@ -232,20 +232,16 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-gray-500 leading-tight whitespace-nowrap">
-                          {player.positions?.length ? player.positions.join('/') : player.position} · {player.team_abv || 'N/A'}
-                          {notes.risks.map(r => <span key={r} className="text-amber-400/90"> · {r}</span>)}
+                        <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 mt-0.5 text-[11px] text-gray-500 leading-tight">
+                          <span className="whitespace-nowrap mr-0.5">{player.positions?.length ? player.positions.join('/') : player.position} · {player.team_abv || 'N/A'}</span>
+                          {notes.tags.map(n => (
+                            <span key={n.t} className={`${TAG} ${n.k === 'good' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-gray-700 text-gray-200'}`}>{n.t}</span>
+                          ))}
+                          {whatIf && <span className={`${TAG} bg-emerald-500/15 text-emerald-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀 ${shareMax(whatIf.breakout)}</span>}
+                          {whatIf && whatIf.corrected != null && <span className={`${TAG} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">yr 3 ${shareMax(whatIf.corrected)}</span>}
+                          {notes.risks.map(r => <span key={r} className={`${TAG} bg-amber-500/15 text-amber-300`}>{r}</span>)}
                         </div>
                       </div>
-                      {draftPlan && (
-                        <div className="ml-auto pl-3 flex flex-wrap justify-end items-center gap-1 max-w-[17rem]">
-                        {notes.tags.map(n => (
-                          <span key={n.t} className={`${TAG} ${n.k === 'good' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-gray-700 text-gray-200'}`}>{n.t}</span>
-                        ))}
-                        {whatIf && <span className={`${TAG} bg-emerald-500/15 text-emerald-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀 ${shareMax(whatIf.breakout)}</span>}
-                        {whatIf && whatIf.corrected != null && <span className={`${TAG} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">yr 3 ${shareMax(whatIf.corrected)}</span>}
-                        </div>
-                      )}
                     </div>
                   </td>
                   {draftPlan && (
