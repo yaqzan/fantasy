@@ -74,8 +74,10 @@ def _token_request(data):
 def auth(code=None):
     client_id, _, redirect = _client()
     if not code:
+        # Ask for Fantasy Sports read explicitly: without it Yahoo can grant a token that every
+        # fantasy call answers 403 "not authorized" (seen 2026-09-30).
         query = urlencode({'client_id': client_id, 'redirect_uri': redirect, 'response_type': 'code',
-                           'language': 'en-us'})
+                           'scope': 'fspt-r', 'language': 'en-us'})
         print(f"Open this and approve. Yahoo then sends you to {redirect}/?code=... (that page won't load):\n"
               f'copy the code and run `python pull_yahoo.py auth --code <code>`.\n{AUTH_URL}?{query}')
         return
