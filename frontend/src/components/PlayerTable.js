@@ -1,18 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import DraftModal from './DraftModal';
-import { calculateCustomZScores, calculateCustomAuctionValues } from '../services/api';
+import usePlayerValues from '../usePlayerValues';
 import { weekRange } from '../weeks';
-import { bidColor } from '../bidColor';
 
-// API field suffix for each stats choice ('proj' = this season's projection).
-const PERIOD_SUFFIX = { season: '_season', '5': '_5', '10': '_10', projected: '_projected', proj: '_proj' };
-
+// The in-season player table (draft mode renders DraftBoard instead).
 // priceExponent: null means the league's own draft.price_exponent (the server's default values).
 // punts: categories left out of value (the tab's view state), changed through onPuntsChange.
-// draftMode: before the league's draft, hide in-season columns (trends) and the per-week games under the name.
-// draftPlan: the Draft Day data (/api/draft-day) when it belongs to this league: adds Likely $ and
-// Max bid, the max following the Value column (share of it by price band, stars at break-even).
-const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange, draftMode = false, draftPlan = null }) => {
+const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
   // The league's categories, in display order, with labels and percent/inverse flags.
   const categoryMeta = config?.categories || [];
   const CATEGORIES = categoryMeta.map(c => c.key);
@@ -24,82 +18,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
   const [sortConfig, setSortConfig] = useState({ key: 'overall_rank', direction: 'asc' });
   const [draftModalPlayer, setDraftModalPlayer] = useState(null);
   const includedCategories = CATEGORIES.filter(c => !puntCategories.includes(c));
-  const [customScores, setCustomScores] = useState({});
-  const [loadingCustomScores, setLoadingCustomScores] = useState(false);
-  const [customAuctionValues, setCustomAuctionValues] = useState({});
-  const [, setLoadingAuctionValues] = useState(false);
-
-  // Force re-sort when custom scores change
-  useEffect(() => {
-    if (Object.keys(customScores).length > 0) {
-      // Trigger a re-sort by updating the sort config
-      setSortConfig(prev => ({ ...prev }));
-    }
-  }, [customScores]);
-
-  // Punted scores are per timeframe: fetched for the punts (restored ones too) and the timeframe.
-  const puntKey = puntCategories.join(',');
-  useEffect(() => {
-    if (puntCategories.length === 0) {
-      setCustomScores({});
-      return;
-    }
-    let cancelled = false;
-    setLoadingCustomScores(true);
-    calculateCustomZScores(puntCategories, statType)
-      .then(response => { if (!cancelled) setCustomScores(response.custom_scores); })
-      .catch(error => console.error('Error calculating custom z-scores:', error))
-      .finally(() => { if (!cancelled) setLoadingCustomScores(false); });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [puntKey, statType]);
-
-  // Force re-sort when statType changes to update OVR and rankings
-  useEffect(() => {
-    // Trigger a re-sort by updating the sort config
-    setSortConfig(prev => ({ ...prev }));
-  }, [statType]);
-
-  // Auction values follow the star-premium slider and the punted categories; with neither
-  // changed, the server's values (the league's own exponent, nothing punted) stand.
-  useEffect(() => {
-    if (priceExponent === null && puntCategories.length === 0) {
-      setCustomAuctionValues({});
-      return;
-    }
-    let cancelled = false;
-    setLoadingAuctionValues(true);
-    calculateCustomAuctionValues(priceExponent, puntCategories, statType)
-      .then(response => { if (!cancelled) setCustomAuctionValues(response.auction_values || {}); })
-      .catch(error => {
-        console.error('Error calculating custom auction values:', error);
-        if (!cancelled) setCustomAuctionValues({});
-      })
-      .finally(() => { if (!cancelled) setLoadingAuctionValues(false); });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priceExponent, puntKey, statType]);
-
-  // The field for the selected stats: periodKey('z_score') -> 'z_score_season' etc.
-  const periodKey = (base) => `${base}${PERIOD_SUFFIX[statType] || '_projected'}`;
-
-  // Auction value on the same stats as the rank (custom slider/punt values when set)
-  const getAuctionValue = (player) => {
-    return customAuctionValues[player.name]?.auction_value || (player[periodKey('auction_value')] ?? player.auction_value);
-  };
-
-  const likelyPrice = (player) => draftPlan?.likely?.[player.name] ?? null;
-  const maxBid = (player) => {
-    if (!draftPlan) return null;
-    const star = draftPlan.rule.stars[player.name];
-    if (star != null) return star;
-    return shareMax(getAuctionValue(player) || 1);
-  };
-  // A max bid from an app $ by the Draft Day share rule (non-stars).
-  const shareMax = (value) => {
-    const [, share] = draftPlan.rule.shares.find(([floor]) => value >= floor) || [0, 1];
-    return Math.max(1, Math.round(value * share));
-  };
+  const { customScores, loadingCustomScores, periodKey, getAuctionValue, getZScore, getOverallRank } =
+    usePlayerValues({ punts: puntCategories, statType, priceExponent });
 
   // Unchecking a category punts it (the scores refetch through the effect above)
   const handleCategoryInclusionChange = (category) => onPuntsChange?.(puntCategories.includes(category)
@@ -333,18 +253,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     setSortConfig({ key, direction });
   };
 
-  // Helper function to get the correct z_score based on statType
-  const getZScore = (player) => {
-    const zScoreKey = periodKey('z_score');
-    return player[zScoreKey] !== undefined ? player[zScoreKey] : player.z_score;
-  };
-
-  // Helper function to get the correct overall_rank based on statType
-  const getOverallRank = (player) => {
-    const rankKey = periodKey('overall_rank');
-    return player[rankKey] !== undefined ? player[rankKey] : player.overall_rank;
-  };
-
   const sortedPlayers = [...players].sort((a, b) => {
     // Always use custom rank if available for default sorting, otherwise original rank
     if (sortConfig.direction === null || sortConfig.key === 'overall_rank') {
@@ -363,14 +271,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     else if (sortConfig.key === 'auction_value') {
       aValue = getAuctionValue(a);
       bValue = getAuctionValue(b);
-    }
-    else if (sortConfig.key === 'max_bid') {
-      aValue = maxBid(a) ?? 0;
-      bValue = maxBid(b) ?? 0;
-    }
-    else if (sortConfig.key === 'likely') {
-      aValue = likelyPrice(a) ?? 0;
-      bValue = likelyPrice(b) ?? 0;
     }
     // Handle nested stat properties like "stats.PTS.value"
     else if (sortConfig.key.startsWith('stats.')) {
@@ -445,13 +345,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   OVR <SortIcon columnKey="z_score" />
                 </div>
               </th>
-              {draftPlan && (
-                <th className="table-header cursor-pointer w-16 bg-nba-orange/15 hover:bg-nba-orange/25 border-x border-nba-orange/40 text-nba-orange" onClick={() => handleSort('max_bid')}
-                      title="Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even. Green: the room should stop well short of it; grey: about even; orange: the room will likely pay past it.">
-                    <div className="flex items-center font-bold tracking-wide">Max bid <SortIcon columnKey="max_bid" /></div>
-                  </th>
-              )}
-              {!draftMode && <th 
+              <th 
                 className="table-header cursor-pointer hover:bg-gray-600 w-10 text-center px-1"
                 onClick={() => handleSort('hot_overall')}
                 title="OVR Trend (5-game vs season)"
@@ -459,7 +353,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 <div className="flex items-center justify-center">
                   📈<SortIcon columnKey="hot_overall" />
                 </div>
-              </th>}
+              </th>
               <th 
                 className="table-header cursor-pointer hover:bg-gray-600 w-48"
                 onClick={() => handleSort('name')}
@@ -479,18 +373,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 </th>
               ) : (
                 <th className="table-header w-12" title={`The draft round his rank goes in (${numTeams} teams)`}>Rd</th>
-              )}
-              {draftPlan && (
-                <>
-                  <th className="table-header cursor-pointer hover:bg-gray-600 w-16" onClick={() => handleSort('likely')}
-                      title="What this room paid for his likely bid rank in 2025 (a guess: misses by $13-16 on $20+ players)">
-                    <div className="flex items-center">Likely <SortIcon columnKey="likely" /></div>
-                  </th>
-                  <th className="table-header w-56"
-                      title="Aim: the price worth holding out for early (90% of a star's max, 85% of others at $15+). Rocket: his max if he breaks out (second- and third-year players). Chart: third-year max with the average third-year correction. Then the rule that applies, how this room prices his kind (discounts players over 30, pays up for young ones), his strong categories ('unpriced' = ones the room has not paid for), what he gives up, and risks (games, short last season, new team).">
-                    Notes
-                  </th>
-                </>
               )}
               {CATEGORIES.map(category => {
                 const isPunted = !includedCategories.includes(category);
@@ -551,25 +433,13 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     {getCustomScoreDisplay(player.name, getZScore(player))}
                   </div>
                 </td>
-                {draftPlan && (() => {
-                  // Max bid sits right after OVR so it reads first
-                  const likely = likelyPrice(player);
-                  const max = maxBid(player);
-                  return (
-                      <td className="table-cell bg-nba-orange/[0.07] border-x border-nba-orange/25" style={{ color: bidColor(max, likely) }}>
-                        <div className="flex items-center gap-2">
-                        <span className="text-xl font-extrabold tabular-nums leading-none" title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>${max}</span>
-                        </div>
-                      </td>
-                  );
-                })()}
-                {!draftMode && <td className="table-cell text-center px-1">
+                <td className="table-cell text-center px-1">
                   {getHotColdIndicator(player)}
-                </td>}
+                </td>
                 <td className="table-cell">
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className={`font-medium text-white ${draftMode ? 'max-w-[11.5rem] truncate' : ''}`} title={draftMode ? player.name : undefined}>{player.name}</span>
+                      <span className="font-medium text-white">{player.name}</span>
                     </div>
                     <div className="text-xs text-gray-400">
                       {player.positions?.length ? player.positions.join('/') : player.position} | {player.team_abv || 'N/A'}
@@ -578,8 +448,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                           INJ{player.injured_return ? ` - ${player.injured_return}` : ''}{player.injured_games ? ` (${player.injured_games} missed)` : ''}
                         </span>
                       )}
-                      {/* Games this week and next: in-season only, the draft doesn't need them */}
-                      {!draftMode && [config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined && (
+                      {[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined && (
                         <React.Fragment key={i}>
                           {' | '}
                           <span className="text-gray-300">{player[i ? 'next_week_games' : 'current_week_games']} GP</span>
@@ -598,31 +467,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     {Math.ceil((customScores[player.name]?.custom_z_rank || getOverallRank(player) || 0) / numTeams) || '-'}
                   </td>
                 )}
-                {draftPlan && (() => {
-                  const likely = likelyPrice(player);
-                  const max = maxBid(player);
-                  const isStar = draftPlan.rule.stars[player.name] != null;
-                  const rule = draftPlan.aim;
-                  // The price worth holding out for early: a share of the max (stars, and others from the floor up)
-                  const aim = !rule ? null : isStar ? Math.round(max * rule.star) : max >= rule.floor ? Math.round(max * rule.other) : null;
-                  const whatIf = !isStar ? player.what_if : null;
-                  const chip = 'inline-block rounded-full px-1.5 py-0.5 text-[11px] leading-none font-medium whitespace-nowrap';
-                  return (
-                    <>
-                      <td className="table-cell text-gray-400">{likely != null ? `$${likely}` : '-'}</td>
-                      <td className="table-cell max-w-[15rem]">
-                        <div className="flex flex-wrap items-center gap-1 whitespace-normal">
-                          {aim != null && <span className={`${chip} bg-nba-orange/20 text-orange-200`} title={isStar ? "A star is only worth it about 10% under his max (simulated auctions); past that, pass" : "Worth holding out for early in the draft; go to the max later if money is left"}>{isStar ? 'star ≤' : 'aim ≤'}${aim}</span>}
-                          {whatIf && <span className={`${chip} bg-green-500/15 text-green-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀${shareMax(whatIf.breakout)}</span>}
-                          {whatIf && whatIf.corrected != null && <span className={`${chip} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">📈${shareMax(whatIf.corrected)}</span>}
-                          {(draftPlan.notes?.[player.name] || []).map((n, k) => (
-                            <span key={k} className={`${chip} ${n.k === 'good' ? 'bg-emerald-500/10 text-emerald-300' : n.k === 'bad' ? 'bg-red-500/10 text-red-300' : 'bg-gray-600/40 text-gray-200'}`}>{n.t}</span>
-                          ))}
-                        </div>
-                      </td>
-                    </>
-                  );
-                })()}
                 {CATEGORIES.map(category => {
                   const stat = player.stats[category];
                   const isPunted = !includedCategories.includes(category);

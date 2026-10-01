@@ -242,21 +242,29 @@ is public (owner's choice, 2026-09-30); the player data stays out of git.
 **Draft mode** (header toggle, per league in localStorage): on by default for an auction league until
 6 hours past `draft.date`. It hides the in-season tabs (lineups, pickups, daily stats, standings),
 the trend and fantasy-points columns, the games-this-week line under each name, and the position filter when the league has no position
-minimums. When `draft_day.json`'s `league` is the selected league, Player Rankings adds **Likely**
-and **Max bid**. Max bid follows the Value column (so the stats basis and star-premium slider move
-it) by the file's `rule`: stars at their replicated break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0.
-The Max bid colour is a gradient on max minus likely price (`frontend/src/bidColor.js`): green when
-the room should stop well short, neutral when even, orange when it will pay well past; the gap is
-scaled by 30% of the larger price (floor $5) so a few dollars on a star stays neutral.
-A **Notes** column (draft mode, when the plan belongs to the league) holds chips per player:
-`aim <=$N` (the price worth holding out for early: 90% of a star's max, 85% of others from $15,
-`draft_day.json` `aim`, from the simulated auctions), the what-if max bids for second- and third-year
-players (rocket = after a +2 z breakout; chart = third-years with their average +0.53 z projection
-miss added back; `/api/fantasy` `what_if`, `player_stats.auction_value_at`; what-if only, no value
-changes), then up to five `draft_day.json` `notes` from `draft_day.py`, in this order: the rule that applies
-(star: wait for ~10% off / pass; the overpaid tier when the room is likely over our max; one $60+
-max; bench target), how the room prices his kind (30+ discount when he is a target; pays up for
-second- and third-year players), categories at +1.5 z (`unpriced` = A-TO, 3PM, TS%, TB, TF, which the
-room has not paid for), categories at -1.5 z, then risks (projected games under 60, under 41 games
-last season, new team). The name column is capped at the width of the longest star name in draft mode.
+minimums. Player Rankings renders `frontend/src/components/DraftBoard.js` instead of `PlayerTable.js` (rank,
+score and $ come from the shared `usePlayerValues.js`): 40px rows that fit a 1650px pane without
+sideways scroll, a header and player column that stay put while the table scrolls in its own pane,
+and each category as one heat cell (teal strong, rose weak, value printed, score on hover).
+When `draft_day.json`'s `league` is the selected league the board adds a **Bid** group:
+- **Aim** (the price worth holding out for early: 90% of a star's max, 85% of others from $15;
+  `draft_day.json` `aim`, from the simulated auctions).
+- **Max** follows the Value column (so the stats basis and star-premium slider move it) by the file's
+  `rule`: stars at their replicated break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0. Its
+  colour is a gradient on max minus likely price (`frontend/src/bidColor.js`): green when the room
+  should stop well short, neutral when even, orange when it will pay well past; the gap is scaled by
+  30% of the larger price (floor $5) so a few dollars on a star stays neutral.
+- **Room** (the likely price) and **Edge** (the same scaled gap as a bar either side of a centre
+  line, with the $ gap; sorting by it lists the best buys first). Value sits last, greyed: not a limit.
+
+`draft_day.json` `notes` (from `draft_day.py`, up to five per player) are split by `sortNotes` on
+their text, so keep these shapes when editing the script: `unpriced +X +Y` (A-TO, 3PM, TS%, TB, TF,
+which the room has not paid for) becomes an amber dot on those heat cells and an amber underline on
+the column header; `+X` / `-X` (categories at +/-1.5 z) and `57g` (projected games under 60) are
+dropped because the heat cells and the GP column (projected games, amber under 60) already say it;
+other `bad` notes (under 41 games last season, new team) go under the name; the rest are tags in
+the **Read** column (star: wait for ~10% off / pass; the overpaid tier; one $60+ max; bench target;
+30+ discount; young: room pays up) with the what-if max bids for second- and third-year players
+(rocket = after a +2 z breakout; `yr 3` = third-years with their average +0.53 z projection miss
+added back; `/api/fantasy` `what_if`, `player_stats.auction_value_at`; what-if only, no value changes).
 Fantasy points stay hidden only in draft mode; dropping them for category leagues is a later job.

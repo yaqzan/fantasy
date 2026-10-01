@@ -84,4 +84,9 @@
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  .thin-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #4b5563 transparent;
+  }
 }

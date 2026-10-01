@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import PlayerTable from './PlayerTable';
+import DraftBoard from './DraftBoard';
 import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
 
 const selectClass = 'px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent';
@@ -112,20 +113,19 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
         </div>
       </div>
 
-      <PlayerTable
-        players={filtered}
-        fantasyTeams={fantasyTeams}
-        onDraftPlayer={onDraftPlayer}
-        onUndraftPlayer={onUndraftPlayer}
-        onUpdatePlayer={onUpdatePlayer}
-        priceExponent={view.priceExponent}
-        config={config}
-        statType={view.statType}
-        punts={view.punts}
-        onPuntsChange={(punts) => setView({ punts })}
-        draftMode={draftMode}
-        draftPlan={draftPlan}
-      />
+      {React.createElement(draftMode ? DraftBoard : PlayerTable, {
+        players: filtered,
+        fantasyTeams,
+        onDraftPlayer,
+        onUndraftPlayer,
+        onUpdatePlayer,
+        priceExponent: view.priceExponent,
+        config,
+        statType: view.statType,
+        punts: view.punts,
+        onPuntsChange: (punts) => setView({ punts }),
+        ...(draftMode && { draftPlan }),
+      })}
     </div>
   );
 };
