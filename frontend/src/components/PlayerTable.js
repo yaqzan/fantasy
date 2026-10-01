@@ -586,16 +586,17 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     <>
                       <td className="table-cell text-gray-400">{likely != null ? `$${likely}` : '-'}</td>
                       <td className="table-cell font-semibold" style={{ color: bidColor(max, likely) }}>
+                        <div className="flex items-center gap-1.5">
                         <span title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>${max}</span>
                         {player.year3 && draftPlan.rule.stars[player.name] == null && (
-                          // Third-year what-ifs, always shown: max with the average third-year miss added back, and after a breakout
-                          <div className="mt-0.5 text-[10px] leading-3 font-semibold whitespace-nowrap cursor-help"
-                               title="Third-year player: max bid with the average third-year correction, and if he breaks out">
-                            <span className="text-sky-400">Y3</span>
-                            <span className="text-sky-300"> 📈{shareMax(player.year3.corrected)}</span>
-                            <span className="text-green-400"> 🚀{shareMax(player.year3.breakout)}</span>
+                          // Third-year what-ifs beside the max, stacked: with the average third-year miss added back / after a breakout
+                          <div className="flex flex-col text-xs leading-none gap-0.5 whitespace-nowrap cursor-help"
+                               title="Third-year player: max bid with the average third-year correction (top), and if he breaks out (bottom)">
+                            <span className="text-sky-300">📈{shareMax(player.year3.corrected)}</span>
+                            <span className="text-green-400">🚀{shareMax(player.year3.breakout)}</span>
                           </div>
                         )}
+                        </div>
                       </td>
                     </>
                   );
