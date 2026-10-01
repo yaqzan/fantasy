@@ -253,7 +253,10 @@ A **Notes** column (draft mode, when the plan belongs to the league) holds chips
 `draft_day.json` `aim`, from the simulated auctions), the what-if max bids for second- and third-year
 players (rocket = after a +2 z breakout; chart = third-years with their average +0.53 z projection
 miss added back; `/api/fantasy` `what_if`, `player_stats.auction_value_at`; what-if only, no value
-changes), then `draft_day.json` `notes` from `draft_day.py`: categories at +1.5 z or better, at -1.5
-or worse, the rule that applies (star, the tier the room overpays), bench target, projected games
-under 60. The name column is capped at the width of the longest star name in draft mode.
+changes), then up to five `draft_day.json` `notes` from `draft_day.py`, in this order: the rule that applies
+(star: wait for ~10% off / pass; the overpaid tier when the room is likely over our max; one $60+
+max; bench target), how the room prices his kind (30+ discount when he is a target; pays up for
+second- and third-year players), categories at +1.5 z (`unpriced` = A-TO, 3PM, TS%, TB, TF, which the
+room has not paid for), categories at -1.5 z, then risks (projected games under 60, under 41 games
+last season, new team). The name column is capped at the width of the longest star name in draft mode.
 Fantasy points stay hidden only in draft mode; dropping them for category leagues is a later job.

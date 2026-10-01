@@ -485,7 +485,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     <div className="flex items-center font-bold tracking-wide">Max bid <SortIcon columnKey="max_bid" /></div>
                   </th>
                   <th className="table-header w-56"
-                      title="Aim: the price worth holding out for early (90% of a star's max, 85% of others at $15+). Rocket: his max if he breaks out (second- and third-year players). Chart: third-year max with the average third-year correction. Then where his value is, what he gives up, and the rule that applies.">
+                      title="Aim: the price worth holding out for early (90% of a star's max, 85% of others at $15+). Rocket: his max if he breaks out (second- and third-year players). Chart: third-year max with the average third-year correction. Then the rule that applies, how this room prices his kind (discounts players over 30, pays up for young ones), his strong categories ('unpriced' = ones the room has not paid for), what he gives up, and risks (games, short last season, new team).">
                     Notes
                   </th>
                 </>
@@ -603,7 +603,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                       </td>
                       <td className="table-cell max-w-[15rem]">
                         <div className="flex flex-wrap items-center gap-1 whitespace-normal">
-                          {aim != null && <span className={`${chip} bg-nba-orange/20 text-orange-200`} title="Worth holding out for early in the draft; go to the max later if money is left">aim ≤${aim}</span>}
+                          {aim != null && <span className={`${chip} bg-nba-orange/20 text-orange-200`} title={isStar ? "A star is only worth it about 10% under his max (simulated auctions); past that, pass" : "Worth holding out for early in the draft; go to the max later if money is left"}>{isStar ? 'star ≤' : 'aim ≤'}${aim}</span>}
                           {whatIf && <span className={`${chip} bg-green-500/15 text-green-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀${shareMax(whatIf.breakout)}</span>}
                           {whatIf && whatIf.corrected != null && <span className={`${chip} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">📈${shareMax(whatIf.corrected)}</span>}
                           {(draftPlan.notes?.[player.name] || []).map((n, k) => (
