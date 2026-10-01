@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 
 from leagues import LeagueConfig, validate_settings, slot_reach
-from player_stats import fill_slots, player_week_games, team_week_totals
+from player_stats import calculate_auction_values, fill_slots, player_week_games, team_week_totals
 
 WEEK = [date(2026, 10, 26) + timedelta(days=i) for i in range(7)]
 SCHEDULE = {'Team': {day: 0.5 for day in WEEK}}  # every player's team plays every day
@@ -74,3 +74,14 @@ def test_minimums_upgrade_to_slots():
                            'fantrax_league_id': 'abc'})
     assert s['roster']['slots'] == ['G', 'G', 'F', 'C', 'UTIL', 'UTIL']
     assert 'min_guards' not in s['roster'] and s['platform_league_id'] == 'abc'
+
+
+def test_auction_values_skip_ineligible_players():
+    """A high per-game value on too few (projected) games is not priced: $1, and the money goes to the rest."""
+    league = SimpleNamespace(num_teams=2, roster_size=2, budget=10, price_exponent=1.0)
+    stats = {'thin': {'VALUE_proj': 9.0, 'ELIGIBLE_proj': False}}
+    stats.update({f'p{i}': {'VALUE_proj': float(5 - i), 'ELIGIBLE_proj': True} for i in range(6)})
+    calculate_auction_values(stats, league, value_key='VALUE_proj', out_key='A')
+    assert stats['thin']['A'] == 1
+    assert sum(stats[f'p{i}']['A'] for i in range(4)) == 20
+    assert stats['p0']['A'] > stats['p3']['A'] >= 1 and stats['p4']['A'] == 1

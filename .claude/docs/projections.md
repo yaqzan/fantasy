@@ -66,7 +66,8 @@ team wins (`team_strength`). NBA-wide, shared by every league.
     top 30 only. Untested sources stay at equal weight; dropping any one moves the 140 drafted
     players $0.7-1.3 on average (`pricing_check.py`, auction `.horizon`).
 - **Stats basis `_proj`** (`player_stats._add_projections`): every rostered player with a line,
-  rookies included; `GP_proj` >= 20 makes the scaling pool; ratios are not shrunk again. Once
+  rookies included; `GP_proj` >= 20 makes the scaling pool, and only pool players get an auction $ (any timeframe:
+  `ELIGIBLE{n}`; the rest show $1. A model-only line on 67 career minutes had priced at $18); ratios are not shrunk again. Once
   his games this season are loaded (`api_updated_at` after opening night), each stat fades:
   (projection x 12 + actual total) / (12 + games). Pre-season the UI defaults to it.
 - **Team wins** (`team_projection_index`, `team_strength`): sources weighted by past accuracy

@@ -476,6 +476,8 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
       VALUE{n}, RANK{n}  summed z over every category, and the rank by it
       Z-VALUE{n}, Z-RANK{n}  summed z over the categories not punted, and the rank by it
       SCORE{n}, Z-SCORE{n}   VALUE / Z-VALUE as 0-100 display scores (see _overall_display)
+      ELIGIBLE{n}            in the pool the timeframe is scaled on (games floor, or projected games);
+                             calculate_auction_values prices only these
     Punted categories keep their SCORE-{cat} and count in VALUE, but not in Z-VALUE.
     """
     if not player_stats:
@@ -500,6 +502,7 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
             for category in categories:
                 stats[f'SCORE-{category}{n}'] = _category_display(z_all[p][category])
             stats[f'VALUE{n}'] = sum(z_all[p][c] for c in categories)
+            stats[f'ELIGIBLE{n}'] = p in eligible
             stats[f'Z-VALUE{n}'] = sum(z_scored[p][c] for c in scored)
 
         for rank_key, value_key, score_key in ((f'RANK{n}', f'VALUE{n}', f'SCORE{n}'),
@@ -528,12 +531,18 @@ def calculate_auction_values(player_stats, league, price_exponent=None, value_ke
     league's money is split by how far each sits above replacement (the best player left
     undrafted), raised to `price_exponent`: 1 is linear, above 1 pays stars more. The default is
     the league's draft.price_exponent. Undrafted players are $1. Rounded so the drafted players
-    add up to exactly the league's budget."""
+    add up to exactly the league's budget.
+
+    Only players eligible for the timeframe (ELIGIBLE{n} from calculate_overall_scores) are priced:
+    a per-game line from a handful of games, or a projection under PROJECTION_MIN_GAMES games,
+    is not something to bid on, whatever its rank. They show $1."""
     if price_exponent is None:
         price_exponent = league.price_exponent
-    ranked = sorted(player_stats, key=lambda p: player_stats[p].get(value_key, 0), reverse=True)
-    for p in ranked:
-        player_stats[p][out_key] = 1
+    eligible_key = 'ELIGIBLE' + value_key.split('VALUE', 1)[1]
+    for stats in player_stats.values():
+        stats[out_key] = 1
+    ranked = sorted((p for p, stats in player_stats.items() if stats.get(eligible_key, True)),
+                    key=lambda p: player_stats[p].get(value_key, 0), reverse=True)
     drafted = ranked[:league.num_teams * league.roster_size]
     if not drafted:
         return

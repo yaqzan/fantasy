@@ -144,6 +144,10 @@ roster without him, both roster shapes, 6 seeds), backtested as a max bid on bot
   by $41 a player. It only says "is he in the optimal roster", which the bench/target lists
   already give. For app $75+ players it is calibrated (delivered / break-even 1.02, n=6), which
   is why stars keep theirs.
+- Weighting app $ by games doesn't help either: surplus x last season's games share (or half-way
+  to 62 games) predicts delivered $ no better (rank correlation .61-.62 vs .62, error $10.8-11.1 vs
+  $10.6; worse inside every tier). Last season's games say little about next season's (r .21).
+  Availability stays in the weekly model (star break-evens) and the "under ~60 games" judgement.
 - **Decision: non-stars stay on share x app $** (projected performance x the tier's measured
   overpay); stars on the replicated break-even.
 
