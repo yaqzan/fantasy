@@ -593,10 +593,10 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                           // added back, then after a breakout. Second-year: the breakout only (they are projected about right).
                           <div className="flex flex-col text-xs leading-none gap-0.5 whitespace-nowrap cursor-help"
                                title={player.what_if.corrected != null
-                                 ? 'Third-year player: max bid with the average third-year correction (top), and if he breaks out (bottom)'
+                                 ? 'Third-year player: max bid if he breaks out (top), and with the average third-year correction (bottom)'
                                  : 'Second-year player: max bid if he breaks out (32% of second-year players do)'}>
-                            {player.what_if.corrected != null && <span className="text-sky-300">📈{shareMax(player.what_if.corrected)}</span>}
                             <span className="text-green-400">🚀{shareMax(player.what_if.breakout)}</span>
+                            {player.what_if.corrected != null && <span className="text-sky-300">📈{shareMax(player.what_if.corrected)}</span>}
                           </div>
                         )}
                         </div>
