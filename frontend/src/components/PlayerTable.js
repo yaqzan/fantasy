@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DraftModal from './DraftModal';
 import { calculateCustomZScores, calculateCustomAuctionValues } from '../services/api';
 import { weekRange } from '../weeks';
+import { bidColor } from '../bidColor';
 
 // API field suffix for each stats choice ('proj' = this season's projection).
 const PERIOD_SUFFIX = { season: '_season', '5': '_5', '10': '_10', projected: '_projected', proj: '_proj' };
@@ -578,11 +579,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 {draftPlan && (() => {
                   const likely = likelyPrice(player);
                   const max = maxBid(player);
-                  const target = likely != null && likely <= max;
                   return (
                     <>
                       <td className="table-cell text-gray-400">{likely != null ? `$${likely}` : '-'}</td>
-                      <td className={`table-cell font-semibold ${target ? 'text-green-400' : 'text-nba-orange'}`}>${max}</td>
+                      <td className="table-cell font-semibold" style={{ color: bidColor(max, likely) }}
+                          title={likely != null ? `Room's likely price $${likely}: ${max >= likely ? `$${max - likely} under your max` : `$${likely - max} over your max`}` : undefined}>${max}</td>
                     </>
                   );
                 })()}

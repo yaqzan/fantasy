@@ -210,4 +210,7 @@ the trend and fantasy-points columns, and the position filter when the league ha
 minimums. When `draft_day.json`'s `league` is the selected league, Player Rankings adds **Likely**
 and **Max bid**. Max bid follows the Value column (so the stats basis and star-premium slider move
 it) by the file's `rule`: stars at their replicated break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0.
+The Max bid colour is a gradient on max minus likely price (`frontend/src/bidColor.js`): green when
+the room should stop well short, neutral when even, orange when it will pay well past; the gap is
+scaled by 30% of the larger price (floor $5) so a few dollars on a star stays neutral.
 Fantasy points stay hidden only in draft mode; dropping them for category leagues is a later job.
