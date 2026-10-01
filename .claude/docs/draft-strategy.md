@@ -246,6 +246,8 @@ minimums. Player Rankings renders `frontend/src/components/DraftBoard.js` instea
 score and $ come from the shared `usePlayerValues.js`): 40px rows that fit a 1650px pane without
 sideways scroll, a header and player column that stay put while the table scrolls in its own pane,
 and each category as one heat cell (teal strong, rose weak, value printed, score on hover).
+The Draft button opens a small menu of the teams' short names; a click records the pick (he leaves
+the Available list and shows on that team above). A drafted player's button opens the edit modal.
 When `draft_day.json`'s `league` is the selected league the board adds a **Bid** group:
 - **Aim** (the price worth holding out for early: 90% of a star's max, 85% of others from $15;
   `draft_day.json` `aim`, from the simulated auctions).

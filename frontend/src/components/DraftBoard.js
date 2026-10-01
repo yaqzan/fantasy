@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DraftModal from './DraftModal';
 import usePlayerValues from '../usePlayerValues';
 import { bidColor, bidEdge } from '../bidColor';
@@ -53,6 +53,30 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
   const myTeam = config?.MY_TEAM_ABV;
   const [sort, setSort] = useState('rank');
   const [modalPlayer, setModalPlayer] = useState(null);
+  // The Draft button's team menu: { name, top, right } (fixed to the button, so the table's scroll can't clip it).
+  const [teamMenu, setTeamMenu] = useState(null);
+  useEffect(() => {
+    if (!teamMenu) return undefined;
+    const close = () => setTeamMenu(null);
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [teamMenu]);
+  const openTeamMenu = (e, player) => {
+    e.stopPropagation();
+    const box = e.currentTarget.getBoundingClientRect();
+    const height = Math.min(window.innerHeight - 16, fantasyTeams.length * 26 + 10);
+    setTeamMenu(teamMenu?.name === player.name ? null
+      : { name: player.name, right: window.innerWidth - box.left + 6, top: Math.max(8, Math.min(box.top - 4, window.innerHeight - height - 8)) });
+  };
   const { customScores, loadingCustomScores, periodKey, getAuctionValue, getOverallRank, getZScore, getRank, getScore } =
     usePlayerValues({ punts, statType, priceExponent });
 
@@ -301,12 +325,12 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
                   </td>
                   <td className={`${cell} ${rowBg} px-2 py-1 text-right`}>
                     <button
-                      onClick={() => setModalPlayer({ ...player, overall_rank: rank, auction_value: p.value })}
+                      onClick={(e) => player.drafted ? setModalPlayer({ ...player, overall_rank: rank, auction_value: p.value }) : openTeamMenu(e, player)}
                       disabled={fantasyTeams.length === 0}
                       className={player.drafted
                         ? 'rounded px-2 py-1 text-xs font-semibold bg-gray-600 text-white hover:bg-gray-500'
                         : 'rounded px-2 py-1 text-xs font-medium border border-gray-600 text-gray-300 hover:border-nba-orange hover:text-nba-orange disabled:opacity-40'}
-                      title={player.drafted ? 'Change or undo' : 'Mark him drafted'}
+                      title={player.drafted ? 'Change or undo' : 'Pick the team that bought him'}
                     >
                       {player.drafted ? (player.fantasy_team?.abbreviation || player.fantasy_team?.name || 'Taken') : 'Draft'}
                     </button>
@@ -317,6 +341,19 @@ const DraftBoard = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onU
           </tbody>
         </table>
       </div>
+
+      {teamMenu && (
+        <div className="fixed z-50 py-1 rounded-md bg-gray-900 border border-gray-600 shadow-xl overflow-y-auto thin-scrollbar"
+             style={{ top: teamMenu.top, right: teamMenu.right, maxHeight: 'calc(100vh - 16px)' }}>
+          {fantasyTeams.filter(team => !team.eliminated_stage).map(team => (
+            <button key={team.id}
+                    onClick={() => { setTeamMenu(null); onDraftPlayer(teamMenu.name, team.id); }}
+                    className={`block w-full text-left px-3 h-[26px] text-xs whitespace-nowrap hover:bg-nba-orange hover:text-gray-900 ${team.abbreviation === myTeam ? 'text-nba-orange font-semibold' : 'text-gray-200'}`}>
+              {team.abbreviation || team.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {modalPlayer && (
         <DraftModal
