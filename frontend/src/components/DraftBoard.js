@@ -27,11 +27,15 @@ const heat = (score) => {
   };
 };
 
-// The bid rail: Aim, Max and Value sit at the same three places in every row (% of the cell), so
-// they read as columns. The room's price is a quiet number on the rail, placed by where it falls:
-// before the aim, between two of the three, or past the value. ROOM_ZONES keeps it clear of them.
-const RAIL = { aim: 24, max: 58, value: 84 };
-const ROOM_ZONES = { low: [3, 15.5], bar: [32.5, 49.5], over: [66.5, 75.5], past: [92.5, 96] };
+// The bid ruler: a graduated rule with Aim, Max and Value at the same three marks in every row (%
+// of the cell, RULER_UNIT apart), so they read as columns. The room's price is a smaller pointer
+// on the same rule, placed by where it falls: before the aim, between two of the three, or past the
+// value. ROOM_ZONES keeps its number clear of theirs.
+const RULER_UNIT = 4.25;
+const RULER = [3, 3 + 22 * RULER_UNIT];
+const GRADUATIONS = Array.from({ length: 21 }, (_, i) => 3 + (i + 1) * RULER_UNIT);
+const RAIL = { aim: 3 + 5 * RULER_UNIT, max: 3 + 13 * RULER_UNIT, value: 3 + 19 * RULER_UNIT };
+const ROOM_ZONES = { low: [4, 15.5], bar: [33, 49.5], over: [67, 75], past: [92.5, 95.5] };
 const roomAt = (room, aim, max, value) => {
   const [zone, lo, hi] = room < aim ? ['low', 0, aim] : room <= max ? ['bar', aim, max]
     : room <= value ? ['over', max, value] : ['past', value, value * 1.5];
@@ -352,23 +356,29 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                           + (p.gap == null ? '' : p.gap >= 0 ? `. The room's likely price is $${p.gap} under your max.` : `. The room's likely price is $${-p.gap} over your max.`)
                           + (p.isStar ? ' A star is only worth it about 10% under his max; past that, pass.' : '')
                           + (p.max !== p.max0 || p.likely !== p.likely0 ? ` Before the draft: max $${p.max0}, room ${p.likely0 != null ? `$${p.likely0}` : '-'}.` : '')}>
-                      <div className="relative h-7 min-w-[26rem] tabular-nums">
-                        <div className="absolute top-1/2 border-t border-dotted border-gray-600" style={{ left: '3%', right: '4%' }} />
-                        <div className="absolute top-1/2 h-px bg-gray-500" style={{ left: `${RAIL.max}%`, width: `${RAIL.value - RAIL.max}%` }} />
-                        <div className="absolute top-1/2 -mt-[1.5px] h-[3px] rounded-full"
-                             style={{ left: `${RAIL.aim}%`, width: `${RAIL.max - RAIL.aim}%`, background: `linear-gradient(to right, ${AIM}, ${MAX})`, opacity: 0.75 }} />
-                        {p.likely != null && (
-                          <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1 text-[11px] font-semibold leading-none`}
-                                style={{ left: `${roomAt(p.likely, target, p.max, p.value)}%`, color: roomColor(p.likely, target, p.max), opacity: 0.85 }}>
-                            {p.likely}
-                          </span>
-                        )}
-                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[17px] font-extrabold leading-none`}
-                              style={{ left: `${RAIL.aim}%`, color: AIM }}>${target}</span>
-                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[15px] font-bold leading-none`}
-                              style={{ left: `${RAIL.max}%`, color: MAX }}>${p.max}</span>
-                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[15px] font-semibold leading-none text-white`}
-                              style={{ left: `${RAIL.value}%` }}>${p.value}</span>
+                      <div className="relative h-[34px] min-w-[26rem] tabular-nums">
+                        {/* the ruler: a baseline with end stops, a graduation every unit, the aim-to-max span drawn heavy */}
+                        <div className="absolute top-[29px] h-px bg-gray-600" style={{ left: `${RULER[0]}%`, width: `${RULER[1] - RULER[0]}%` }} />
+                        {GRADUATIONS.map(x => <div key={x} className="absolute top-[26px] h-[3px] w-px bg-gray-600" style={{ left: `${x}%` }} />)}
+                        {RULER.map(x => <div key={x} className="absolute top-[22px] h-[8px] w-px bg-gray-500" style={{ left: `${x}%` }} />)}
+                        <div className="absolute top-[28px] h-[2px]"
+                             style={{ left: `${RAIL.aim}%`, width: `${RAIL.max - RAIL.aim}%`, background: `linear-gradient(to right, ${AIM}, ${MAX})` }} />
+                        {[['aim', target, AIM, 'text-[17px] font-extrabold'], ['max', p.max, MAX, 'text-[15px] font-bold top-px'], ['value', p.value, '#fff', 'text-[15px] font-semibold top-px']].map(([k, dollars, color, size]) => (
+                          <React.Fragment key={k}>
+                            <span className={`absolute -translate-x-1/2 leading-none ${size}`} style={{ left: `${RAIL[k]}%`, color }}>${dollars}</span>
+                            <div className="absolute top-[19px] h-[11px] w-[2px] -ml-px" style={{ left: `${RAIL[k]}%`, background: color }} />
+                          </React.Fragment>
+                        ))}
+                        {p.likely != null && (() => {
+                          const x = roomAt(p.likely, target, p.max, p.value);
+                          const color = roomColor(p.likely, target, p.max);
+                          return (
+                            <>
+                              <span className="absolute top-[7px] -translate-x-1/2 text-[11px] font-semibold leading-none" style={{ left: `${x}%`, color }}>{p.likely}</span>
+                              <div className="absolute top-[20px] h-[10px] w-px" style={{ left: `${x}%`, background: color }} />
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                   ) : (

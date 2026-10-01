@@ -248,16 +248,18 @@ sideways scroll, a header and player column that stay put while the table scroll
 and each category as one heat cell (teal strong, rose weak, value printed, score on hover).
 The Draft button opens a small menu of the teams' short names; a click records the pick (he leaves
 the Available list and shows on that team above). A drafted player's button opens the edit modal.
-When `draft_day.json`'s `league` is the selected league the board adds one **Bid** cell, a rail
-across its full width with **Aim, Max and Value at the same three places in every row** (`RAIL`, %
-of the cell), so they read as columns and sort from their header labels.
+When `draft_day.json`'s `league` is the selected league the board adds one **Bid** cell, a ruler
+across its full width: a baseline with end stops and a graduation every 4.25% of the cell, and
+**Aim, Max and Value at the same three marks in every row** (`RAIL`), each number above a tick in
+its colour, so they read as columns and sort from their header labels. The graduations are
+decoration (the three marks are fixed, not to a $ scale); only the room's pointer moves.
 - **Aim** (the price worth holding out for early: 90% of a star's max, 85% of others from $15, the
   max itself under $15; `draft_day.json` `aim`, from the simulated auctions) is the big
   number; a bar runs from it to the **Max**.
 - **Max** follows the app value (so the stats basis and star-premium slider move it) by the file's
   `rule`: stars at their replicated break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0.
 - **Value** (the app's $; not a limit) ends the rail.
-- **Room** (the likely price) is a small number on the rail, placed by where it falls (`roomAt`):
+- **Room** (the likely price) is a smaller number with its own tick, placed by where it falls (`roomAt`):
   before the aim, between aim and max, between max and value, or past the value. Its distance
   inside a zone is to scale; the zones themselves are fixed.
 - Colours are fixed: aim green, max amber, value white. The room's number carries the verdict: green
