@@ -9,7 +9,7 @@ const PERIOD_SUFFIX = { season: '_season', '5': '_5', '10': '_10', projected: '_
 
 // priceExponent: null means the league's own draft.price_exponent (the server's default values).
 // punts: categories left out of value (the tab's view state), changed through onPuntsChange.
-// draftMode: before the league's draft, hide in-season columns (trends).
+// draftMode: before the league's draft, hide in-season columns (trends) and the per-week games under the name.
 // draftPlan: the Draft Day data (/api/draft-day) when it belongs to this league: adds Likely $ and
 // Max bid, the max following the Value column (share of it by price band, stars at break-even).
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange, draftMode = false, draftPlan = null }) => {
@@ -560,7 +560,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     </div>
                     <div className="text-xs text-gray-400">
                       {player.positions?.length ? player.positions.join('/') : player.position} | {player.team_abv || 'N/A'}
-                      {[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined && (
+                      {/* Games this week and next: in-season only, the draft doesn't need them */}
+                      {!draftMode && [config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined && (
                         <React.Fragment key={i}>
                           {' | '}
                           <span className="text-gray-300">{player[i ? 'next_week_games' : 'current_week_games']} GP</span>
