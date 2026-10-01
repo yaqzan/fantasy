@@ -2,11 +2,13 @@
 Yahoo's can't-cut list. The Yahoo counterpart of pull_fantrax.py.
 
 One-time setup (the owner's Yahoo app): create an app at https://developer.yahoo.com/apps/
-(API permissions: Fantasy Sports, read; redirect URI `oob`), put its keys in .env as
-YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET, then
+(client type Confidential; API permissions: Fantasy Sports, read; no OpenID Connect; redirect URI
+https://localhost:8080, since Yahoo no longer takes `oob`), put its keys in .env as YAHOO_CLIENT_ID
+and YAHOO_CLIENT_SECRET (plus YAHOO_REDIRECT_URI if you registered another address), then
 
-    python pull_yahoo.py auth                  # prints a Yahoo URL; approve, copy the code
-    python pull_yahoo.py auth --code <code>    # saves yahoo_token.json (gitignored), refreshed automatically
+    python pull_yahoo.py auth                  # prints a Yahoo URL; approve it
+    python pull_yahoo.py auth --code <code>    # the code= value of the localhost address Yahoo sends you to
+                                               # (that page won't load); saves yahoo_token.json (gitignored)
 
 Then, for a league whose settings say platform = yahoo and platform_league_id = <Yahoo league number>:
 
@@ -30,6 +32,7 @@ import json
 import os
 import time
 import xml.etree.ElementTree as ET
+from urllib.parse import urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -51,7 +54,7 @@ def _client():
     client_id, secret = os.getenv('YAHOO_CLIENT_ID'), os.getenv('YAHOO_CLIENT_SECRET')
     if not (client_id and secret):
         raise SystemExit('set YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET in .env (see the top of pull_yahoo.py)')
-    return client_id, secret, os.getenv('YAHOO_REDIRECT_URI', 'oob')
+    return client_id, secret, os.getenv('YAHOO_REDIRECT_URI', 'https://localhost:8080')
 
 
 def _token_request(data):
@@ -71,8 +74,10 @@ def _token_request(data):
 def auth(code=None):
     client_id, _, redirect = _client()
     if not code:
-        print(f'Open this, approve, and run `python pull_yahoo.py auth --code <the code Yahoo shows>`:\n'
-              f'{AUTH_URL}?client_id={client_id}&redirect_uri={redirect}&response_type=code&language=en-us')
+        query = urlencode({'client_id': client_id, 'redirect_uri': redirect, 'response_type': 'code',
+                           'language': 'en-us'})
+        print(f"Open this and approve. Yahoo then sends you to {redirect}/?code=... (that page won't load):\n"
+              f'copy the code and run `python pull_yahoo.py auth --code <code>`.\n{AUTH_URL}?{query}')
         return
     _token_request({'grant_type': 'authorization_code', 'code': code})
     print(f'saved {TOKEN_FILE}')
