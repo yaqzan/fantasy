@@ -31,6 +31,11 @@ per-game category z-scores (`market.py`), pooled, log-price per 1 z (90% bootstr
   year 6+ (0.86x at age 30+), both auctions. But an age term barely helps on hold-out (error $9.8/8.2
   -> $9.5/8.1, rho unchanged; coefficient 2x apart between the drafts), and it moves a 21-year-old's
   likely price ~15%. Not added: Likely runs low for hyped young players and the model can't see hype.
+- Likely prices feed the model this season's PROJECTED category z (it was fit on last season's
+  actual stats). Checked on hold-out with each season's blend: projections predict the room as well
+  or better (error $9.0 / $8.1 vs $9.8 / $8.2 on last-season stats; $20+ picks $16.7 / $17.8 vs $20.1 /
+  $19.0). Kept. One player is still +/-$17-20: the same veteran was predicted $48 (paid $48) one year
+  and $24 (paid $70) the other.
 - Position premium: centers +$0.6, nothing. Games played matters (more games, higher price).
 - The league never pays past ~$102 (top prices 100, 102; 91-100 in 2024).
 - Output: `out/f2026.csv` (per player: our $, market $, edge, category z). Player-level gaps
@@ -222,7 +227,7 @@ it) by the file's `rule`: stars at their replicated break-even, else Value x 0.8
 The Max bid colour is a gradient on max minus likely price (`frontend/src/bidColor.js`): green when
 the room should stop well short, neutral when even, orange when it will pay well past; the gap is
 scaled by 30% of the larger price (floor $5) so a few dollars on a star stays neutral.
-A third-year player (not a star) carries a **Y3** tag on his max; its hover gives the max with
+A third-year player (not a star) carries a small line under his max, `Y3 📈9 🚀17`: the max with
 the average third-year miss added back (+0.53 z) and after a breakout (+2 z), from
 `/api/fantasy`'s `year3` (`player_stats.auction_value_at` on the projection curve). What-if only:
 no value changes (projections.md, "Breakouts by NBA year").
