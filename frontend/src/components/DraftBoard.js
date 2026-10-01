@@ -27,24 +27,16 @@ const heat = (score) => {
   };
 };
 
-// The bid path: each row lays its own prices out left to right on a track this wide, spaced by
-// their $ but never closer than PATH_GAP, so all of them stay readable.
-const PATH_WIDTH = 300;
-const PATH_PAD = 20;
-const PATH_GAP = 46;
-const PATH_ORDER = ['room', 'aim', 'max', 'value'];
-const pathStops = (stops) => {
-  const list = stops.filter(stop => stop.v != null)
-    .sort((a, b) => a.v - b.v || PATH_ORDER.indexOf(a.k) - PATH_ORDER.indexOf(b.k));
-  const [lo, hi] = [list[0].v, list[list.length - 1].v];
-  list.forEach((stop, i) => {
-    const x = PATH_PAD + (hi > lo ? (stop.v - lo) / (hi - lo) : 0) * (PATH_WIDTH - 2 * PATH_PAD);
-    stop.x = i ? Math.max(x, list[i - 1].x + PATH_GAP) : x;
-  });
-  for (let i = list.length - 1; i >= 0; i--) {
-    list[i].x = Math.min(list[i].x, i === list.length - 1 ? PATH_WIDTH - PATH_PAD : list[i + 1].x - PATH_GAP);
-  }
-  return list;
+// The bid rail: Aim, Max and Value sit at the same three places in every row (% of the cell), so
+// they read as columns. The room's price is a quiet number on the rail, placed by where it falls:
+// before the aim, between two of the three, or past the value. ROOM_ZONES keeps it clear of them.
+const RAIL = { aim: 24, max: 58, value: 84 };
+const ROOM_ZONES = { low: [3, 15.5], bar: [32.5, 49.5], over: [66.5, 75.5], past: [92.5, 96] };
+const roomAt = (room, aim, max, value) => {
+  const [zone, lo, hi] = room < aim ? ['low', 0, aim] : room <= max ? ['bar', aim, max]
+    : room <= value ? ['over', max, value] : ['past', value, value * 1.5];
+  const [from, to] = ROOM_ZONES[zone];
+  return from + Math.min(1, Math.max(0, hi > lo ? (room - lo) / (hi - lo) : 0.5)) * (to - from);
 };
 
 
@@ -193,14 +185,10 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
         <span className="text-gray-300 font-medium tabular-nums">{sorted.length} players</span>
         {draftPlan && (
           <>
-            <span className="flex items-center gap-1.5">
-              <b className="text-gray-200">Aim</b>
-              <span className="inline-block w-6 h-1 rounded-full bg-gray-300" />
-              <b className="text-gray-200">Max</b>
-              hold out for the aim early, never past the max
-            </span>
-            <span><span className="text-gray-500 italic">Room</span> what they'll likely pay</span>
-            <span><span className="text-sky-300/80">Value</span> the app's $, not a limit</span>
+            <span><b className="text-gray-200">Aim</b> hold out for this early</span>
+            <span><b className="text-gray-200">Max</b> never past it</span>
+            <span><b className="text-gray-200">Value</b> the app's $, not a limit</span>
+            <span><i className="text-gray-500 not-italic font-medium">37</i> the room's likely price, where it falls</span>
             <span className="flex items-center gap-1.5">
               aim colour:
               <span className="inline-block w-3 h-2 rounded-sm" style={{ background: EDGE_UNDER }} /> room stops under your max
@@ -252,7 +240,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                   <span className="flex items-center gap-2.5 font-medium normal-case tracking-normal">
                     <span className="text-nba-orange font-semibold uppercase tracking-wider">Bid</span>
                     <span className="text-gray-600">sort</span>
-                    {[['aim', 'aim'], ['max', 'max'], ['likely', 'room'], ['edge', 'best buys'], ['value', 'value']].map(([k, label]) => (
+                    {[['edge', 'best buys'], ['likely', 'room']].map(([k, label]) => (
                       <span key={k} className={`cursor-pointer hover:text-white ${sort === k ? 'text-white' : ''}`} onClick={() => sortBy(k)}
                             title={k === 'edge' ? "Your max against the room's likely price, scaled to his size (a few dollars on a star is noise): the players the room should let go cheapest first" : undefined}>
                         {label}{sort === k && <span className="text-nba-orange">↓</span>}
@@ -273,9 +261,17 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                       title={draftPlan ? "Tags: the rule that applies to him and how this room prices his kind (discounts players over 30, pays up for young ones). Rocket: his max if he breaks out (second- and third-year players). Yr 3: his max with the average third-year correction." : undefined}>Player</span>
               </th>
               {draftPlan ? (
-                <th className={`${TH} top-6 h-8 border-l border-gray-700 text-left font-normal normal-case tracking-normal text-gray-500`}
-                    title="Each row lays out its own four prices, lowest on the left. Aim: the price worth holding out for early (90% of a star's max, 85% of everyone else's from $15; under $15 the max is the price). Max: don't bid past it (85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even). Room: what this room paid for his likely bid rank in 2025 (a guess: misses by $13-16 on $20+ players). Value: the app's auction $ on the selected stats.">
-                  lowest price on the left · each row on its own scale
+                <th className={`${TH} top-6 h-8 border-l border-gray-700`}>
+                  <div className="relative h-4 min-w-[26rem]">
+                    {[['aim', "The price worth holding out for early in the draft: 90% of a star's max (a star is only worth it at a real discount), 85% of everyone else's from $15; under $15 it is the max. Loosen toward the max later if money is left."],
+                      ['max', "Don't bid past this. 85% of Value at $40+, 80% at $15-39, Value under $15; stars at their break-even."],
+                      ['value', "The app's auction $ on the selected stats (follows the star premium and punts). Not a bid limit."]].map(([k, title]) => (
+                      <span key={k} className={`absolute top-0 -translate-x-1/2 cursor-pointer hover:text-white ${sort === k ? 'text-white' : k === 'aim' ? 'text-gray-200' : ''}`}
+                            style={{ left: `${RAIL[k]}%` }} onClick={() => sortBy(k)} title={title}>
+                        {k}{sort === k && <span className="text-nba-orange">↓</span>}
+                      </span>
+                    ))}
+                  </div>
                 </th>
               ) : caps.auction
                 ? <Head k="value" className="text-right border-l border-gray-700" title="The app's auction $ on the selected stats (follows the star premium and punts)">Value</Head>
@@ -355,31 +351,23 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                           + (p.gap == null ? '' : p.gap >= 0 ? `. The room's likely price is $${p.gap} under your max.` : `. The room's likely price is $${-p.gap} over your max.`)
                           + (p.isStar ? ' A star is only worth it about 10% under his max; past that, pass.' : '')
                           + (p.max !== p.max0 || p.likely !== p.likely0 ? ` Before the draft: max $${p.max0}, room ${p.likely0 != null ? `$${p.likely0}` : '-'}.` : '')}>
-                      {(() => {
-                        const stops = pathStops([
-                          { k: 'room', v: p.likely }, { k: 'aim', v: p.aim }, { k: 'max', v: p.max }, { k: 'value', v: p.value },
-                        ]);
-                        const x = Object.fromEntries(stops.map(stop => [stop.k, stop.x]));
-                        const from = x.aim ?? x.max;
-                        const look = {
-                          aim: ['text-[17px] font-extrabold', { color: bidColor(p.max, p.likely) }],
-                          max: [p.aim == null ? 'text-[17px] font-extrabold' : 'text-sm font-bold text-white', p.aim == null ? { color: bidColor(p.max, p.likely) } : undefined],
-                          room: ['text-xs italic text-gray-500'],
-                          value: ['text-xs text-sky-300/80'],
-                        };
-                        return (
-                          <div className="relative h-8" style={{ width: PATH_WIDTH }}>
-                            <div className="absolute top-[9px] h-px bg-gray-600" style={{ left: stops[0].x, width: stops[stops.length - 1].x - stops[0].x }} />
-                            <div className="absolute top-[7px] h-[5px] rounded-full bg-gray-300" style={{ left: from, width: x.max - from }} />
-                            {stops.map(stop => (
-                              <div key={stop.k} className="absolute top-0 -translate-x-1/2 flex flex-col items-center" style={{ left: stop.x }}>
-                                <span className={`${rowBg} px-1 h-[19px] flex items-center tabular-nums leading-none ${look[stop.k][0]}`} style={look[stop.k][1]}>${stop.v}</span>
-                                <span className={`text-[9px] leading-none uppercase tracking-wide ${stop.k === 'aim' || stop.k === 'max' ? 'text-gray-400' : 'text-gray-600'}`}>{stop.k}</span>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
+                      <div className="relative h-7 min-w-[26rem] tabular-nums">
+                        <div className="absolute top-1/2 border-t border-dotted border-gray-600" style={{ left: '3%', right: '4%' }} />
+                        <div className="absolute top-1/2 h-px bg-gray-500" style={{ left: `${RAIL.max}%`, width: `${RAIL.value - RAIL.max}%` }} />
+                        <div className="absolute top-1/2 -mt-[1.5px] h-[3px] rounded-full bg-gray-300" style={{ left: `${RAIL.aim}%`, width: `${RAIL.max - RAIL.aim}%` }} />
+                        {p.likely != null && (
+                          <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1 text-[11px] font-medium leading-none text-gray-500`}
+                                style={{ left: `${roomAt(p.likely, target, p.max, p.value)}%` }}>
+                            {p.likely}
+                          </span>
+                        )}
+                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[17px] font-extrabold leading-none`}
+                              style={{ left: `${RAIL.aim}%`, color: bidColor(p.max, p.likely) }}>${target}</span>
+                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[15px] font-bold leading-none text-white`}
+                              style={{ left: `${RAIL.max}%` }}>${p.max}</span>
+                        <span className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${rowBg} px-1.5 text-[15px] font-semibold leading-none text-gray-400`}
+                              style={{ left: `${RAIL.value}%` }}>${p.value}</span>
+                      </div>
                     </td>
                   ) : (
                     <td className={`${cell} ${rowBg} ${NUM} border-l border-l-gray-700 text-gray-200 font-semibold`}>

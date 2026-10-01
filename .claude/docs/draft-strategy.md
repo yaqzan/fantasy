@@ -248,20 +248,22 @@ sideways scroll, a header and player column that stay put while the table scroll
 and each category as one heat cell (teal strong, rose weak, value printed, score on hover).
 The Draft button opens a small menu of the teams' short names; a click records the pick (he leaves
 the Available list and shows on that team above). A drafted player's button opens the edit modal.
-When `draft_day.json`'s `league` is the selected league the board adds one **Bid** cell: each row
-lays its own four prices out left to right, lowest first, spaced by their $ but never closer than
-46px (`pathStops`), each with its number and a caption.
-- **Aim** (the price worth holding out for early: 90% of a star's max, 85% of others from $15;
-  `draft_day.json` `aim`, from the simulated auctions) is the big number; a thick bar runs from it
-  to the **Max**. Under $15 there is no aim and the max is the big number.
+When `draft_day.json`'s `league` is the selected league the board adds one **Bid** cell, a rail
+across its full width with **Aim, Max and Value at the same three places in every row** (`RAIL`, %
+of the cell), so they read as columns and sort from their header labels.
+- **Aim** (the price worth holding out for early: 90% of a star's max, 85% of others from $15, the
+  max itself under $15; `draft_day.json` `aim`, from the simulated auctions) is the big coloured
+  number; a solid bar runs from it to the **Max**.
 - **Max** follows the app value (so the stats basis and star-premium slider move it) by the file's
   `rule`: stars at their replicated break-even, else Value x 0.85 ($40+) / 0.80 ($15-39) / 1.0.
-- **Room** (the likely price, grey italic) and **Value** (the app's $, blue; not a limit) sit
-  wherever they fall: left of the aim, on the bar, or past the max.
-- The big number's colour is the gradient on max minus likely price (`frontend/src/bidColor.js`):
+- **Value** (the app's $, grey; not a limit) ends the rail.
+- **Room** (the likely price) is a small grey number on the rail, placed by where it falls (`roomAt`):
+  before the aim, between aim and max, between max and value, or past the value. Its distance
+  inside a zone is to scale; the zones themselves are fixed.
+- The aim's colour is the gradient on max minus likely price (`frontend/src/bidColor.js`):
   green when the room should stop well short, neutral when even, orange when it will pay well past;
   the gap is scaled by 30% of the larger price (floor $5) so a few dollars on a star stays neutral.
-  "best buys" in the Bid header sorts by that scaled gap; aim, max, room and value sort there too.
+  "best buys" in the Bid header sorts by that scaled gap.
 
 ### Live auction (2026-10-01, `frontend/src/auction.js`, `live_inflation.py`, `out/live_inflation.txt`)
 Each row has a $ box beside Draft: type the winning bid, Draft, the team. The price is stored on
