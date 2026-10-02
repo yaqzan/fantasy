@@ -109,6 +109,23 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   `TEAM_SOURCE_WEIGHT` once a season's preseason numbers can be scored against what happened.
   The backtest scripts (ESPN vs model vs last season, per-type weights, expert averages, team-win
   accuracy) live outside the repo, in this machine's `.horizon/projections-2026-27/driver`.
+- **Fantrax's own player ranking (`Rk`/`Score` in `getPlayerStats`, projection view) vs ours**
+  (WSOP 2026-27, checked 2026-10-02, top 400 by our `overall_rank_proj`):
+  - **Calibrated to the league's categories in the header only**: columns are TS%, 3PTM, NFT, PTS,
+    REB, A-TO, ST, BLK, TF, BLKD, W (the same 11). Displayed NFT and A-TO equal 2*FTM-FTA and AST-TOV
+    from the stored Fantrax line (r .998/.999). But **TF, BLKD and W are 0 for every player**, so the
+    Score ranks on 8 of 11 categories. It also isn't an equal-weight z-sum of those 8: best fit
+    R2 .81 per game, .89 on season totals (games count), PTS weighted ~2x the others and TS% ~0 or
+    negative. Don't treat `Score` as a reference for our value.
+  - Rank agreement with ours: Spearman .80 (top 100 overlap 64, top 150 109). Our value without W/TB/TF
+    against Fantrax: .88 (top 100 overlap 74). So the three categories Fantrax zeroes explain about
+    half the gap; the rest is Fantrax's Score formula and its games (it ranks on totals, so players with
+    a short projected season sink: Fantrax gp 20-25 vs ours 28-42 for the injured). Rank gap vs
+    W+TB+TF z-sum r .44.
+  - Direction: Fantrax over-ranks high-usage scorers who are blocked a lot and play for weak teams
+    (our TB and W cost them 2-3 z) and under-ranks low-usage defensive bigs and wings on good teams.
+  - Name collisions: Fantrax lists two players under one name (two Jalen Johnsons, two Jaylin
+    Williamses); join on team too or keep the better rank, or a scrub's row overwrites the starter's.
 - **Check a new source before blending it**: median per-game ratio to ESPN per stat and games.
   CBS 2026-27 came out at .84 points / 1.12 games (totals over too many games) and is in
   `NOT_BLENDED`; the others sit within ~7% (ESPN is the most optimistic, as in the backtests).
