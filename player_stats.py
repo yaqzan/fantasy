@@ -15,7 +15,11 @@ TIMEFRAMES = ['', '_5', '_10', '_projected', '_proj']  # '_proj': this season's 
 # The frontend's stats choices -> key suffix. 'projected': half season, half last 10 games.
 STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected', 'proj': '_proj'}
 Z_CAP = 3.0       # a category's z-score is capped at +/-Z_CAP before categories are summed
-POOL_PASSES = 3   # re-rank passes that settle the draftable pool the z-scores are measured against
+POOL_PASSES = 3   # re-rank passes that settle the pool the z-scores are measured against
+# Players in that pool per roster spot. Teams reach past the top `spots` for categories and injuries
+# bring in more (only ~74% of past picks were in our top 140), and summed z tracked categories won
+# best at ~1.8x in 3 seasons (.claude/docs/draft-strategy.md, "10 spots"). Auction $ still price `spots`.
+SCALING_POOL_FACTOR = 1.8
 _NORMAL = NormalDist()
 VALID_POSITIONS = ['C', 'F', 'G']
 STAT_AVG_WEIGHTS = {'': 0.5, '_10': 0.5, '_5': 0.0}
@@ -424,12 +428,12 @@ def _category_values(player_stats, category, n, pool):
 
 
 def _z_scores(player_stats, categories, inverse, n, eligible, pool_size):
-    """{player: {category: z}}, each z capped at +/-Z_CAP, measured against the draftable pool.
+    """{player: {category: z}}, each z capped at +/-Z_CAP, measured against the scaling pool.
 
     The pool starts as every eligible player and becomes the top `pool_size` of them by summed z,
-    re-ranked POOL_PASSES times: value is relative to the players who actually get drafted, not
-    to hundreds of bench players (the average scorer in the whole pool is at 10 PPG, the average
-    drafted one at 17). A single category (points leagues) isn't capped: there is nothing for one
+    re-ranked POOL_PASSES times: value is relative to the players who get rostered over a season
+    (SCALING_POOL_FACTOR x the roster spots), not to hundreds of bench players (the average scorer
+    among everyone is at 10 PPG, the average drafted one at 17). A single category (points leagues) isn't capped: there is nothing for one
     freak number to outweigh, and a star's whole lead is what he is worth."""
     cap = Z_CAP if len(categories) > 1 else float('inf')
     pool = sorted(eligible)
@@ -452,8 +456,8 @@ def _z_scores(player_stats, categories, inverse, n, eligible, pool_size):
 
 
 def _category_display(z):
-    """0-100 display scale for one category's z: 50 is the average drafted player, 0 and 100
-    are -/+Z_CAP."""
+    """0-100 display scale for one category's z: 50 is the average player in the scaling pool,
+    0 and 100 are -/+Z_CAP."""
     return max(0.0, min(100.0, 50.0 + 50.0 * z / Z_CAP))
 
 
@@ -473,14 +477,14 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
     """Category z-scores and overall value for every player, per timeframe.
 
     For each category, a player's per-game value (ratios: impact, see _category_values) is turned
-    into a z-score against the draftable pool (see _z_scores) and capped at +/-Z_CAP. The cap
+    into a z-score against the scaling pool (see _z_scores) and capped at +/-Z_CAP. The cap
     keeps one freak number from outweighing whole categories (Dillon Brooks' technical fouls sit
     6.8 SD out) while a real specialist still counts in full up to 3 SD. Categories are then
     summed, so each one is worth the same, as in the league's scoring. Scarce stats are weighted
     by their spread: one block is worth about sixteen points.
 
     Keys written, per timeframe n ('', '_5', '_10', '_projected'):
-      SCORE-{cat}{n}     one category, 0-100: 50 + 50 * z / Z_CAP (50 = average drafted player)
+      SCORE-{cat}{n}     one category, 0-100: 50 + 50 * z / Z_CAP (50 = average of the scaling pool)
       VALUE{n}, RANK{n}  summed z over every category, and the rank by it
       Z-VALUE{n}, Z-RANK{n}  summed z over the categories not punted, and the rank by it
       SCORE{n}, Z-SCORE{n}   VALUE / Z-VALUE as 0-100 display scores (see _overall_display)
@@ -497,7 +501,8 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
     scored = [c for c in categories if c not in punt_categories]
     qualified = _qualified_pool(player_stats)
     projected = {p for p, s in player_stats.items() if s.get('GP_proj', 0) >= PROJECTION_MIN_GAMES}
-    pool_size = max(league.num_teams * league.roster_size, 1)
+    drafted = max(league.num_teams * league.roster_size, 1)
+    pool_size = round(drafted * SCALING_POOL_FACTOR)
 
     for n in TIMEFRAMES:
         if n == '_proj' and not projected:
@@ -515,7 +520,7 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
 
         for rank_key, value_key, score_key in ((f'RANK{n}', f'VALUE{n}', f'SCORE{n}'),
                                                (f'Z-RANK{n}', f'Z-VALUE{n}', f'Z-SCORE{n}')):
-            display = _overall_display(player_stats, value_key, eligible, pool_size)
+            display = _overall_display(player_stats, value_key, eligible, drafted)
             ranked = sorted(player_stats, key=lambda p: player_stats[p][value_key], reverse=True)
             for i, p in enumerate(ranked, start=1):
                 player_stats[p][rank_key] = i

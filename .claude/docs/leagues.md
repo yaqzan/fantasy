@@ -122,10 +122,11 @@ stats) is shared by all leagues.
   of category ranks, which in a points league is the rank by projected points. `playoffs.teams`
   draws the cut line.
 - **Player value** (`calculate_overall_scores`): per category, a z-score of the per-game value
-  against the draftable pool (`num_teams x roster.size`, re-ranked 3 times from the qualified
-  players), capped at ±3, then summed (`VALUE`; `Z-VALUE` without punted categories). Ratios are
+  against the scaling pool (1.8 x `num_teams x roster.size`, `SCALING_POOL_FACTOR`, re-ranked 3
+  times from the qualified players; bigger than the drafted set because it tracked categories won
+  better, draft-strategy.md "10 spots"), capped at ±3, then summed (`VALUE`; `Z-VALUE` without punted categories). Ratios are
   scored as impact, attempts per game x (rate shrunk by `prior` - pool rate). Display scores are
-  0-100 with 50 = the average drafted player: per category 0/100 = ∓3 SD, overall (`SCORE`,
+  0-100: per category 50 = the scaling pool's average, 0/100 = ∓3 SD; overall (`SCORE`,
   `Z-SCORE`, the UI's OVR) 10 points per SD of value among drafted players. Don't reintroduce min/max scaling
   (garbage-time players set the scale) or a logistic squash (it priced specialists like Gobert
   64 spots too low); both were tried 2026-09. Non-auction leagues show the draft round (value
@@ -159,7 +160,10 @@ stats) is shared by all leagues.
   played, or the next one on its last day. The player table shows each NBA team's GP for this and
   next week (`config.current_week`/`next_week`). Empty schedule: Monday-Sunday weeks, no opponent.
   "Fill weeks from NBA calendar" (`/api/leagues/generate-weeks`) makes opening day + every Monday
-  from the stored NBA schedule, opponents blank. The NBA leaves the Cup knockout window (Dec 4-11
+  from the stored NBA schedule, opponents blank. Fantrax leagues: `pull_fantrax.py schedule` copies
+  Fantrax's scoring periods and my opponents (by Fantrax team id; playoff opponents stay blank, seeding
+  decides them) and fills an unset `playoffs.first_week`. Playoff weeks already set are kept: Fantrax's
+  matchup list runs past the real rounds (WSOP 2026-27: 4 listed, 2 played; its settings page is the truth). The NBA leaves the Cup knockout window (Dec 4-11
   in 2026) unscheduled until the group stage ends, so those days have no games until a later
   schedule pull.
 - **Team Manager** (`/api/team-rosters`, one request for every team): rosters best first, each
