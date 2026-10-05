@@ -213,12 +213,12 @@ const Projections = ({ config }) => {
   const view = tabs.some(([key]) => key === picked) ? picked : tabs[0][0];
   const setView = (v) => setViewState({ view: v });
   return (
-    <div className="p-6">
+    <div className="py-2 sm:p-6">
       <h2 className="text-2xl font-bold text-white mb-4">Projections</h2>
       <div className="flex gap-2 mb-4">
         {tabs.map(([key, label]) => (
           <button key={key} onClick={() => setView(key)}
-                  className={`px-3 py-1.5 rounded text-sm ${view === key ? 'bg-nba-orange text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
+                  className={`px-3 py-1.5 rounded text-sm ${view === key ? 'bg-nba-orange text-onaccent' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
             {label}
           </button>
         ))}

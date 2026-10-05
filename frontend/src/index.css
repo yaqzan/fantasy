@@ -10,7 +10,7 @@
 
 @layer components {
   .table-header {
-    @apply bg-nba-blue text-white px-2 py-3 text-left text-xs font-medium uppercase tracking-wider;
+    @apply bg-th text-onth px-2 py-3 text-left text-xs font-medium uppercase tracking-wider;
   }
   
   .table-cell {
@@ -18,7 +18,7 @@
   }
   
   .btn-primary {
-    @apply bg-nba-orange hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200;
+    @apply bg-nba-orange hover:opacity-90 text-onaccent font-medium py-2 px-4 rounded-md transition-colors duration-200;
   }
   
   .btn-secondary {
@@ -26,7 +26,7 @@
   }
   
   .ovr-badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-fantasy-gold text-nba-blue;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-fantasy-gold text-black;
   }
   
   .drafted-row {
@@ -45,7 +45,7 @@
   }
   
   .slider::-webkit-slider-track {
-    background: #374151;
+    background: rgb(var(--gray-700));
     height: 8px;
     border-radius: 4px;
   }
@@ -53,7 +53,7 @@
   .slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    background: #f97316;
+    background: rgb(var(--accent));
     height: 20px;
     width: 20px;
     border-radius: 50%;
@@ -61,14 +61,14 @@
   }
   
   .slider::-moz-range-track {
-    background: #374151;
+    background: rgb(var(--gray-700));
     height: 8px;
     border-radius: 4px;
     border: none;
   }
   
   .slider::-moz-range-thumb {
-    background: #f97316;
+    background: rgb(var(--accent));
     height: 20px;
     width: 20px;
     border-radius: 50%;
@@ -87,6 +87,6 @@
 
   .thin-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: #4b5563 transparent;
+    scrollbar-color: rgb(var(--gray-600)) transparent;
   }
 }

@@ -141,7 +141,7 @@ const TeamStandings = ({ config }) => {
   const getCategoryName = (category) => category_names?.[category] || category;
 
   return (
-    <div className="p-6">
+    <div className="py-2 sm:p-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-white mb-4">Team Standings</h2>
         

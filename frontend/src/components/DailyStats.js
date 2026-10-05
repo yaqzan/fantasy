@@ -71,7 +71,7 @@ const DailyStats = ({ config }) => {
   };
 
   return (
-    <div className="p-6">
+    <div className="py-2 sm:p-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-white mb-4">Daily Player Stats</h2>
         
@@ -211,7 +211,7 @@ const DailyStats = ({ config }) => {
                   </td>
                   {points && (
                     <td className="table-cell text-center">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-nba-orange text-white">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-nba-orange text-onaccent">
                         {stat.fantasy_points || 0}
                       </span>
                     </td>

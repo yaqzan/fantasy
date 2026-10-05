@@ -44,6 +44,9 @@ ESPN_URL = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/fba/seasons/{yea
 ESPN_STATS = {'0': 'pts', '1': 'blk', '2': 'stl', '3': 'ast', '6': 'reb', '11': 'tov', '13': 'fgm', '14': 'fga',
               '15': 'ftm', '16': 'fta', '17': 'fg3m', '40': 'min', '42': 'gp'}
 ESPN_POSITIONS = {1: 'G', 2: 'G', 3: 'F', 4: 'F', 5: 'C'}
+# History (nba_api) abbreviations that differ from the teams table's. Without this every returning
+# Net, Hornet and Sun counted as a team changer.
+NBA_TO_TEAMS_ABV = {'BKN': 'BRK', 'CHA': 'CHO', 'PHX': 'PHO'}
 
 
 def season_label(today=None):
@@ -256,7 +259,8 @@ def player_type(model_row, current_team_abv):
         return 'rookie'
     if model_row['exp'] <= 2:
         return 'year 2-3'
-    if model_row.get('prev_team') and current_team_abv and model_row['prev_team'] != current_team_abv:
+    prev = NBA_TO_TEAMS_ABV.get(model_row.get('prev_team'), model_row.get('prev_team'))
+    if prev and current_team_abv and prev != current_team_abv:
         return 'changed team'
     if (model_row.get('age') or 0) >= 32:
         return 'age 32+'

@@ -45,8 +45,32 @@ export function auctionState({ players, likely, teams, budget, rosterSize }) {
     const start = (teams.length * budget - spots) / before;
     factor = Math.min(LIMITS[1], Math.max(LIMITS[0], ((left - open) / ahead) / start));
   }
-  return { factor, left, open, priced, teams: byTeam };
+  return { factor, left, open, priced, teams: byTeam, progress: spots ? 1 - open / spots : 0 };
 }
 
 // A pre-draft price moved by the factor ($1 stays $1).
 export const adjusted = (dollars, factor) => (dollars == null ? null : Math.max(1, Math.round(1 + (dollars - 1) * factor)));
+
+// The room overpays early, past what the factor (1 at the start) knows. Both past auctions replayed
+// (early.py): paid / (likely x factor) in the first 20% of the draft, likely $5-25 1.65-2.0, $26+
+// 1.06-1.16; at 20-30% 1.55 and 0.89. [likely from, to, markup, back to 1 by]: full until 20% of the
+// spots, then a straight line down. Cut the early miss 10.6 -> 9.6 and 9.3 -> 7.9 $ (n=49 a year).
+export const EARLY = [[5, 25, 1.6, 0.35], [26, Infinity, 1.1, 0.25]];
+const EARLY_FULL = 0.2;
+export function earlyMarkup(likely, progress) {
+  const tier = likely == null ? null : EARLY.find(([lo, hi]) => likely >= lo && likely <= hi);
+  if (!tier) return 1;
+  const [, , top, end] = tier;
+  if (progress <= EARLY_FULL) return top;
+  return 1 + (top - 1) * Math.max(0, (end - progress) / (end - EARLY_FULL));
+}
+
+// The room's price for a player put up now: the pre-draft likely price x the factor x the early markup.
+export const roomPrice = (likely, factor, progress) => (likely == null ? null
+  : Math.max(1, Math.round((1 + (likely - 1) * factor) * earlyMarkup(likely, progress))));
+
+// Max bids from an app $ by the share rule ([[floor, share], ...], floors descending): one candidate per
+// tier he reaches, each tier's $ capped just under the next tier's floor. The board takes the largest,
+// so a max never falls as the value rises (a $15 player at 80% would otherwise sit under a $14 one).
+export const shareMaxOf = (shares, value) => shares
+  .map(([floor, share], i) => (value >= floor ? Math.round(Math.min(value, i > 0 ? shares[i - 1][0] - 1 : value) * share) : 0));

@@ -12,7 +12,7 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 ## Commands
 
 - `C:\Development\server.ps1 start|status|logs -Service fantasy` - api + tunnel (`fantasy-api`, `fantasy-tunnel`)
-- `npm --prefix frontend run build` - deploy a frontend change (Flask serves `frontend/build`, live on reload)
+- `npm --prefix frontend run build` - deploy a frontend change (Flask serves `frontend/build`, live on reload; the site is down while it builds, no-downtime swap in `.claude/docs/frontend.md`)
 - `python init_db.py` - create/upgrade the database + tables (safe to re-run, additive only)
 - `python pull_api_data.py [--season 2025-26 --force]` - schedule, standings, rosters, stats, techs
 - `python pull_technical_fouls.py` - play-by-play tech scan alone (~3s per new game)
@@ -21,6 +21,8 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 - `python import_projections.py players|teams <csv> [--source X]` - load another projection source
 - `python pull_fantrax.py projections|techs --league <fantrax id>` - Fantrax projections / past techs (saved login)
 - `python pull_fantrax.py teams --league <fantrax id> [--apply]` - sync team names by Fantrax team id
+- `python pull_fantrax.py schedule --league <fantrax id> [--apply]` - weeks + my opponents from Fantrax
+- `python pull_fantrax.py draft --league <fantrax id> [--apply] [--watch 60]` - live auction picks + prices onto the draft board (Fantrax wins for sold players; unsold hand entries stay)
 - `python pull_yahoo.py auth` once, then `sync --league <yahoo league number> [--apply]` - Yahoo teams, rosters, positions, can't-cut
 - `python lineup_optimizer.py [--league <id>] [--moves]` - this week's matchup (and best pickups) in the terminal
 - `ops\windows\install-tasks.ps1 -Controller C:\Development\server.ps1` - watchdog task; ELEVATED shell
@@ -42,5 +44,6 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 Detail: leagues, categories, daily vs weekly lineups -> `.claude/docs/leagues.md`.
 Projections (players, rookies, team wins, sources, backtests) -> `.claude/docs/projections.md`.
 Draft strategy: what the room pays for, price-tier returns, category pairs, anchor builds -> `.claude/docs/draft-strategy.md`.
+Frontend colour schemes (CSS variables behind the Tailwind classes), logo -> `.claude/docs/frontend.md`.
 Hosting, tunnel, watchdog, cutover history -> `.claude/docs/ops.md`.
 Kanban -> vault `Engineering Wiki/Projects/Fantasy/`.

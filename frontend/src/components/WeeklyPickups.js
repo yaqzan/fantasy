@@ -44,7 +44,7 @@ const WeeklyPickups = ({ config }) => {
     : data?.opponent ? data.opponent : 'a team exactly as strong as yours';
 
   return (
-    <div className="p-6">
+    <div className="py-2 sm:p-6">
       <div className="mb-4">
         <h2 className="text-2xl font-bold text-white mb-4">Weekly Pickups</h2>
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
@@ -126,7 +126,7 @@ const WeeklyPickups = ({ config }) => {
                           <span
                             key={day}
                             title={shortDate(day)}
-                            className={`w-5 text-center text-[10px] rounded ${p.days.includes(day) ? 'bg-nba-orange text-white' : 'bg-gray-700 text-gray-500'}`}
+                            className={`w-5 text-center text-[10px] rounded ${p.days.includes(day) ? 'bg-nba-orange text-onaccent' : 'bg-gray-700 text-gray-500'}`}
                           >
                             {weekdayLetter(day)}
                           </span>

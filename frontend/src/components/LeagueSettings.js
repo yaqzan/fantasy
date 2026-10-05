@@ -106,8 +106,8 @@ const LeagueSettings = ({ mode, league, leagues, catalog, defaults, pointStats =
   const teamAbbreviations = teams.map(t => t.abbreviation).filter(Boolean);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-start justify-center z-50 overflow-y-auto py-8 px-4">
-      <form onSubmit={save} className="bg-gray-800 rounded-lg p-6 w-full max-w-3xl shadow-2xl">
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-start justify-center z-50 overflow-y-auto py-3 px-2 sm:py-8 sm:px-4">
+      <form onSubmit={save} className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-3xl shadow-2xl">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-semibold text-white">{mode === 'edit' ? 'League settings' : 'New league'}</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>

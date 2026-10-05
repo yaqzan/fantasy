@@ -115,7 +115,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const claims = data?.claims_per_week || config.capabilities?.claims_per_week || 1;
 
   return (
-    <div className="bg-gray-800 rounded-lg shadow-xl p-6">
+    <div className="bg-gray-800 rounded-lg shadow-xl p-3 sm:p-6">
       <div className="flex flex-wrap items-center gap-4 mb-4">
         <h2 className="text-2xl font-bold text-nba-orange mr-4">Lineup Optimizer</h2>
         <WeekSelect weeks={weeks} value={view.week} onChange={(week) => setView({ week })} />

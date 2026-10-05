@@ -75,6 +75,14 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   bias makes year-3 error worse (MAE 2.23 -> 2.26); among draftable year-3 players (projected
   value above the ~110th player) the bias is -0.21 (n=33). An owner adjustment (`production`) is
   the place for a view on one player.
+- **Web breakout / MIP reports vs ours (checked 2026-10-03):** the summer's role changes (trades,
+  new starters) are already in the expert lines' minutes, so a breakout list adds narrative, not
+  information. MIP rewards a points jump; our value is per-game category z, so a scorer who leaps on
+  poor efficiency (the usual MIP long shot) barely moves a price. No systematic adjustment; a view on
+  one player is an owner `production` factor.
+- **Team-changer typing maps history abbreviations** (`NBA_TO_TEAMS_ABV`: BKN/CHA/PHX -> BRK/CHO/PHO).
+  Before 2026-10-03 every returning Net, Hornet and Sun was weighted as a team changer; fixing it
+  moved 18 players' type and at most $1.
 - **Auction $ on the projection are games-weighted** (2026-10-01): surplus over replacement x
   projected games / 82, so a known absence (ACL return in January) is priced. 4-season backtest of
   the blend ($ of delivered season value, top 140): error 9.37 per game only -> 9.05 weighted (better

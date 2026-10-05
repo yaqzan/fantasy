@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getDraftDay, errorMessage } from '../services/api';
+import { roomPrice } from '../auction';
 
 // Categorical slots 1-3 (dataviz reference palette, dark steps; validated on gray-800 #1f2937:
 // all-pairs CVD dE 9.4, normal-vision 20.9, >= 3:1 contrast).
@@ -11,7 +12,7 @@ const money = (v) => `$${v}`;
 
 function Section({ title, subtitle, children }) {
   return (
-    <section className="bg-gray-800 rounded-lg shadow-xl p-5 mb-6">
+    <section className="bg-gray-800 rounded-lg shadow-xl p-4 sm:p-5 mb-4 sm:mb-6">
       <h2 className="text-lg font-semibold text-white">{title}</h2>
       {subtitle && <p className="text-sm text-gray-400 mt-1 mb-4">{subtitle}</p>}
       {!subtitle && <div className="mb-4" />}
@@ -77,163 +78,187 @@ function GroupedBars({ rows, series, max, reference, referenceLabel, format, min
   );
 }
 
-const STEPS = [
-  { title: 'Stars: one at most, only at or under his max', body: 'Star or no star is a coin flip for the season (within 0.2 categories a week). Buy one only if the bid stays at or under his max below. Never two $60+ players.' },
-  { title: '$40-74: bid up to 85% of the app\'s $', body: 'This tier lost money in both past auctions because the room paid above value (0.59 back per $1). Bought at or under value it broke even. The app\'s $ runs ~15% high here, so cap at 85%, lower if he projects under ~60 games.' },
-  { title: '$15-39: bid up to 80% of the app\'s $', body: 'Same story, a little stronger: the app\'s value delivered ~77% in this range.' },
-  { title: 'Under $15: the app\'s $ is your max', body: 'Cheap players delivered 1.2x their app value. This is where the room leaves money on the table.' },
-  { title: 'Hunt the categories nobody pays for', body: 'A-TO, 3PM, TS%, TB, TF and W are unpriced by this room. Points and blocks are overpaid.' },
-  { title: 'Pick your 4 bench players like starters', body: 'With daily lineups your bench plays most of its games. The right four $1 players beat four random ones by ~0.5 categories a week, more than the star question. Keep $4-10 for them.' },
+// Draft night by phase (share of the league's 160 spots filled). Sources: .claude/docs/draft-strategy.md "Live auction"
+// (dynamics.py, auction_sim.py, stress.py, mixed*.py, gradient*.py, focus.py, my_draft.py), 2026-10-03.
+const PHASES = [
+  {
+    when: 'Picks 1-32', share: 'first 20%', aim: '85-86%',
+    room: 'Overspends: 1.1-1.4x likely prices. Mid-tier players nominated now went for 1.7x and returned 0.93 per $1.',
+    do: [
+      'Nominate players the room overpays for (list below), so other teams spend on them.',
+      'Buy only players valued at or above your spot bar ($25 at the start).',
+      'Skip players with a likely price of $5-25 (red "early" tag). They come back cheaper.',
+      'Stars only at or under their max. The room is likely to pay more: let them go.',
+    ],
+  },
+  {
+    when: 'Picks 33-80', share: '20-50%', aim: '86-91%',
+    room: 'Still spending. The last $40-74 players sell here, and the ones bought at 20-35% returned 1.20 per $1.',
+    do: [
+      'This is where your first good buys usually land: the room has cooled, you still have money.',
+      'Watch Pace: never get 3+ spots ahead of the room (the 2025 mistake: full at 55% of the draft).',
+      'Never two $60+ players.',
+    ],
+  },
+  {
+    when: 'Picks 81-128', share: '50-80%', aim: '91-100%',
+    room: 'Money runs low. Prices fall below likely, and most teams can no longer bid big.',
+    do: [
+      "Being well behind the room with money left is normal. It is the plan working. Don't chase: every catch-up rule tested lost.",
+      'Your limit climbs to the full max by 80%. Keep nominating the best players left that you want.',
+    ],
+  },
+  {
+    when: 'Picks 129-160', share: 'last 20%', aim: 'full max',
+    room: 'Broke. Late $1-2 players went cheap because nobody had money (second-highest team cap: $2), not because nobody wanted them. They returned 2x their price.',
+    do: [
+      'The spot bar lifts: fill every open spot.',
+      'One dollar over "Others\' top bid" wins anyone. Take the best players left first, then the bench targets.',
+      'Leftover money is fine. Overpaying is not.',
+    ],
+  },
 ];
 
-function Verdict({ p }) {
-  if (p.likely <= p.max) {
-    return <span className="text-green-400 font-medium">Target: likely ~{money(p.likely)}, bid up to {money(p.max)}</span>;
-  }
-  return <span className="text-gray-400">Pass unless it stays at or under {money(p.max)} (likely ~{money(p.likely)})</span>;
-}
+const AIM_CURVE = [[0, 85], [20, 86], [40, 89], [50, 91], [60, 93], [70, 96], [80, 100]];
+
+const BOARD = [
+  ['Aim (green)', 'Your limit right now: a share of the max that rises with the draft (strip: "Aim 89% of max").'],
+  ['Max (amber)', 'Never past it. Fixed for the whole draft: it does not shrink when the room overspends.'],
+  ['Value (white)', "The app's $. Not a bid limit."],
+  ['Room price (small number)', 'The likely price, scaled as the room spends, and marked up early (x1.6 on $5-25 players until 20% of the draft, x1.1 on $26+). Green: at or under your aim. Grey: up to your max. Red: past it. A forecast only: still bid to your aim.'],
+  ['Pace', "Your spots filled vs the room's average. Red at 3+ ahead: stop buying. Amber \"don't chase\" when 3+ behind past half-way."],
+  ['Spot bar', '1.25x your money per open spot. Dimmed rows ("not a spot yet") are valued under it. Lifts at 80%.'],
+  ["Others' top bid", 'The most any other team can bid now. Late in the draft, $1 over it wins anyone.'],
+  ['"early: room pays 1.7x"', 'Likely $5-25 player in the first 20% of the draft. Let him go.'],
+  ['Amber dots', 'Strength in A-TO, 3PM or TB: cheap and still worth winning. Use to break ties, not to raise a bid.'],
+  ['Sorts', "\"best buys\": max far above the room's price. \"nominate\": room's price far above your max (put them up)."],
+];
+
+const TESTED = [
+  ['Fixed max, rising aim, spot bar, pace guard (tonight)', 'best in all 6 simulated rooms', true],
+  ["Max that shrinks with the room's spending (old board)", '-0.3 to -1.4 a week, $64-126 unspent', false],
+  ['Bid to max from pick 1', '-0.24', false],
+  ['Catch up when behind or cash-rich', '-0.02 to -0.45', false],
+  ['U-shaped curve, deeper cut on $40-74', '-0.09 to +0.02', false],
+  ['Bid only on a target list', '-0.35 to -1.39, $79-172 unspent', false],
+  ['Category weights in the max', '-0.08 to +0.03', false],
+];
+
+// Room prices at the start of the draft, with the early markup (auction.js): what the nominate and star lists compare.
+const opening = (likely) => roomPrice(likely, 1, 0);
 
 function DraftDay() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [query, setQuery] = useState('');
-  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     getDraftDay().then(setData).catch(e => setError(errorMessage(e)));
   }, []);
 
-  const matches = useMemo(() => {
-    if (!data) return [];
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return data.players.filter(p => p.name.toLowerCase().includes(q)).slice(0, 8);
-  }, [data, query]);
-
-  const targets = useMemo(() => {
-    if (!data) return [];
-    return data.players.filter(p => !p.star && p.likely <= p.max)
-      .sort((a, b) => (b.max - b.likely) - (a.max - a.likely));
-  }, [data]);
+  // Players the room will likely pay most past your max: put them up on your nomination turns.
+  const nominate = useMemo(() => (data ? data.players.map(p => ({ ...p, room: opening(p.likely) })).filter(p => p.room > p.max)
+    .sort((a, b) => (b.room - b.max) - (a.room - a.max)).slice(0, 12) : []), [data]);
 
   if (error) return <div className="bg-gray-800 rounded-lg p-6 text-gray-300">{error}</div>;
   if (!data) return <div className="bg-gray-800 rounded-lg p-6 text-gray-400">Loading the draft plan...</div>;
 
-  const tableRows = showAll ? data.players : targets.slice(0, 25);
-
   return (
     <div className="max-w-5xl">
-      <div className="bg-gray-800 rounded-lg shadow-xl p-6 mb-6 border-l-4 border-nba-orange">
-        <p className="text-sm text-gray-400">WSOP auction · {data.draft} · $200 · 10 spots, 6 active daily</p>
-        <h1 className="text-2xl font-bold text-white mt-1">Bid on price, not structure.</h1>
+      <div className="bg-gray-800 rounded-lg shadow-xl p-4 sm:p-6 mb-4 sm:mb-6 border-l-4 border-nba-orange">
+        <p className="text-sm text-gray-400">WSOP auction · {data.draft} · 16 teams · $200 · 10 spots, 6 active daily · no injury slot</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Be patient early, buy when the room is broke.</h1>
         <p className="text-gray-300 mt-2">
-          One star or none makes no real difference over a season. What wins: never paying above a
-          player's max, and filling all 10 spots with players who help this league's categories.
+          The room spends big early and runs dry by the last fifth. Hold your aim, don't fill spots with cheap players,
+          and let the late rounds come to you. Expect about one player by half-way and money left at the end: that's the plan working.
         </p>
+        <div className="mt-4 grid sm:grid-cols-3 gap-3 text-sm">
+          <div className="bg-gray-900 rounded p-3"><p className="text-gray-400">Before the first pick</p><p className="text-white">Stats dropdown on <b>2026-27 projection</b>.</p></div>
+          <div className="bg-gray-900 rounded p-3"><p className="text-gray-400">Every pick</p><p className="text-white">Enter the winning <b>price</b>, then Draft. Aim, pace, spot bar and top bid update from it.</p></div>
+          <div className="bg-gray-900 rounded p-3"><p className="text-gray-400">Never</p><p className="text-white">Past the max, two $60+ players, or 3+ spots ahead of the room.</p></div>
+        </div>
       </div>
 
-      <Section title="Max bid lookup" subtitle="Type a name when he's nominated.">
-        <input
-          type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="e.g. Curry"
-          className="w-full md:w-80 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-nba-orange"
-        />
-        {matches.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {matches.map(p => (
-              <div key={p.name} className="bg-gray-900 rounded p-3 flex flex-wrap items-baseline gap-x-6 gap-y-1">
-                <span className="text-white font-semibold w-52">{p.name}</span>
-                <span className="text-2xl font-bold text-nba-orange tabular-nums">max {money(p.max)}</span>
-                <span className="text-sm text-gray-400">app {money(p.app)} · {p.gp} games{p.gp < 60 ? ' (injury risk)' : ''}</span>
-                <span className="text-sm w-full"><Verdict p={p} /></span>
+      <Section title="Draft night by phase" subtitle="Phases by how many of the league's 160 roster spots are filled.">
+        <div className="space-y-3">
+          {PHASES.map(ph => (
+            <div key={ph.when} className="bg-gray-900 rounded p-4 grid md:grid-cols-[11rem_1fr] gap-3">
+              <div>
+                <p className="text-white font-semibold">{ph.when}</p>
+                <p className="text-xs text-gray-400">{ph.share} of the draft</p>
+                <p className="text-sm mt-2"><span className="text-gray-400">Aim </span><b className="text-green-400 tabular-nums">{ph.aim}</b><span className="text-gray-400"> of max</span></p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-400">{ph.room}</p>
+                <ul className="mt-2 space-y-1 text-sm text-gray-200 list-disc ml-5">
+                  {ph.do.map(d => <li key={d}>{d}</li>)}
+                </ul>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4">
+          <p className="text-xs text-gray-400 mb-2">Your limit as a share of the max, by share of the draft filled ($15+ players; under $15 the max is the limit from the start; stars start at 90%)</p>
+          <div className="grid grid-cols-4 sm:flex gap-1">
+            {AIM_CURVE.map(([at, pct]) => (
+              <div key={at} className="flex-1 bg-gray-900 rounded p-2 text-center">
+                <p className="text-xs text-gray-500">{at}%</p>
+                <p className="text-sm font-semibold text-green-400 tabular-nums">{pct}%</p>
               </div>
             ))}
           </div>
-        )}
-        {query && matches.length === 0 && <p className="mt-3 text-sm text-gray-400">No player in the top 190 by value matches.</p>}
-      </Section>
-
-      <Section title="The steps">
-        <ol className="space-y-4">
-          {STEPS.map((s, i) => (
-            <li key={s.title} className="flex gap-4">
-              <span className="flex-none w-8 h-8 rounded-full bg-nba-orange text-gray-900 font-bold flex items-center justify-center">{i + 1}</span>
-              <div>
-                <p className="text-white font-medium">{s.title}</p>
-                <p className="text-sm text-gray-400">{s.body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </Section>
-
-      <Section title="The stars" subtitle="Max = where a build around him ties the best no-star roster (weekly matchup simulation). Each $10 over costs ~0.08 categories a week.">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {data.stars.map(s => {
-            const ok = s.likely <= s.max;
-            return (
-              <div key={s.name} className={`rounded p-4 bg-gray-900 border ${ok ? 'border-green-600' : 'border-gray-700'}`}>
-                <p className="text-white font-semibold">{s.name}</p>
-                <p className="text-sm text-gray-400">likely ~{money(s.likely)} · app {money(s.app)}</p>
-                <p className="mt-2 text-xl font-bold tabular-nums text-nba-orange">max {money(s.max)}</p>
-                <p className={`text-sm mt-1 ${ok ? 'text-green-400' : 'text-gray-400'}`}>
-                  {ok ? 'Worth his likely price' : `Let him go: ~${money(s.likely - s.max)} too pricey`}
-                </p>
-              </div>
-            );
-          })}
         </div>
-        <p className="text-xs text-gray-500 mt-3">Break-evens are noisy by about $10. Only one star, ever.</p>
       </Section>
 
-      <Section title="Why structure doesn't matter"
-               subtitle="Expected categories won per week (of 11). Past seasons: random teams at that year's real prices, graded on what happened. 2026-27: best builds on projections.">
-        <GroupedBars
-          rows={data.structures}
-          series={[
-            { key: 'star', label: 'One star + cheap', color: C1 },
-            { key: 'balanced', label: 'Balanced (nobody over $45)', color: C2 },
-            { key: 'two', label: 'Two $60+ players', color: C3 },
-          ]}
-          min={4.5} max={7.2} format={v => v.toFixed(2)}
-          reference={5.5} referenceLabel="league average (5.5)"
-        />
-        <p className="text-sm text-gray-400 mt-3">The winner flips by season. Who you buy inside a tier moves a team ~3x more.</p>
+      <div className="grid md:grid-cols-2 gap-x-6 md:gap-y-6">
+        <Section title="Nominate these" subtitle="The room's likely price is furthest past your max: put them up early on your turns and let other teams spend.">
+          <div className="space-y-1.5">
+            {nominate.map(p => (
+              <div key={p.name} className="flex justify-between bg-gray-900 rounded px-3 py-1.5 text-sm">
+                <span className="text-white">{p.name}{p.star ? ' ★' : ''}</span>
+                <span className="tabular-nums text-gray-400">room ~{money(p.room)} · max <span className="text-amber-300">{money(p.max)}</span></span>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <Section title="The stars" subtitle="Max = where a roster built around him ties the best roster without a star (weekly simulation, 8 runs). Good to about ±$10.">
+          <div className="space-y-1.5">
+            {data.stars.map(s => {
+              const room = opening(s.likely);
+              const ok = room <= s.max;
+              return (
+                <div key={s.name} className={`flex justify-between rounded px-3 py-1.5 text-sm bg-gray-900 border ${ok ? 'border-green-600' : 'border-transparent'}`}>
+                  <span className="text-white">{s.name}</span>
+                  <span className="tabular-nums text-gray-400">room ~{money(room)} · max <b className="text-amber-300">{money(s.max)}</b> · {ok ? <span className="text-green-400">worth it</span> : <span>pass</span>}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-gray-500 mt-3">At most one star, and only at or under his max. All five are likely to go for more: buy one only if the bidding stalls.</p>
+        </Section>
+      </div>
+
+      <Section title="Reading the board">
+        <dl className="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          {BOARD.map(([k, v]) => (
+            <div key={k} className="flex gap-3">
+              <dt className="flex-none w-40 text-white font-medium">{k}</dt>
+              <dd className="text-gray-400">{v}</dd>
+            </div>
+          ))}
+        </dl>
       </Section>
 
-      <Section title="Where the room loses money"
-               subtitle="Value delivered per $1 paid, by price tier, in past auctions (1.0 = got what you paid for).">
-        <GroupedBars
-          rows={data.tiers}
-          series={[
-            { key: 'orig', label: '2025, that league\'s categories', color: C1 },
-            { key: 'w25', label: '2025, our 11 categories', color: C2 },
-            { key: 'w24', label: '2024, our 11 categories', color: C3 },
-          ]}
-          max={1.8} format={v => v.toFixed(2)} reference={1} referenceLabel="break-even (1.0)"
-        />
-        <p className="text-sm text-gray-400 mt-3 mb-5">$40-74 is the worst tier in both years. But it's about the price paid, not the players:</p>
-        <GroupedBars
-          rows={data.below_value.map(b => ({ label: `n=${b.n}`, ret: b.ret, full: b.label }))}
-          series={[{ key: 'ret', label: 'Delivered per $1', color: C1 }]}
-          max={1.4} format={v => v.toFixed(2)} reference={1} referenceLabel="break-even (1.0)"
-        />
-        <ul className="text-xs text-gray-400 mt-2 ml-[8.25rem] space-y-0.5">
-          {data.below_value.map(b => <li key={b.label}>n={b.n}: {b.label}</li>)}
-        </ul>
-      </Section>
-
-      <Section title="Your bench plays"
-               subtitle="Share of each roster slot's healthy games that count with daily lineups (slots ranked best to worst, 2026-27 schedule).">
+      <Section title="The four bench spots matter" subtitle="With daily lineups the bench plays: share of each roster slot's healthy games that count (2026-27 schedule).">
         <GroupedBars
           rows={data.bench_share.map((v, i) => ({ label: i < 6 ? `Player ${i + 1}` : `Bench ${i - 5}`, v }))}
           series={[{ key: 'v', label: 'Games that count', color: C1 }]}
           max={100} format={v => `${v}%`}
         />
         <p className="text-sm text-gray-300 mt-4">
-          Same core, four random $1 bench players: <b>{data.bench_gain.random}</b> categories a week.
-          The right four: <b className="text-nba-orange">{data.bench_gain.best}</b>.
+          Same core with four random $1 bench players: <b>{data.bench_gain.random}</b> categories a week. With the right four: <b className="text-nba-orange">{data.bench_gain.best}</b>.
         </p>
-        <h3 className="text-white font-medium mt-5 mb-2">Bench targets (likely $1-4)</h3>
+        <h3 className="text-white font-medium mt-5 mb-2">Bench targets for the last fifth (likely $1-4)</h3>
         <div className="grid sm:grid-cols-2 gap-2">
           {data.bench.map(b => (
             <div key={b.name} className="bg-gray-900 rounded px-3 py-2 text-sm">
@@ -244,36 +269,32 @@ function DraftDay() {
         </div>
       </Section>
 
-      <Section title={showAll ? 'Every player' : 'Best value at likely prices'}
-               subtitle="Likely = what this room paid for that rank in 2025, at our model's guess of his rank. Guesses miss by $13-16 on $20+ players, so use max bids, not likely prices.">
-        <button onClick={() => setShowAll(!showAll)} className="text-sm text-nba-orange hover:underline mb-3">
-          {showAll ? 'Show top value picks only' : `Show all ${data.players.length} players`}
-        </button>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-gray-400 text-left border-b border-gray-700">
-                <th className="py-2 pr-3">Player</th>
-                <th className="py-2 pr-3 text-right">App $</th>
-                <th className="py-2 pr-3 text-right">Likely</th>
-                <th className="py-2 pr-3 text-right">Max bid</th>
-                <th className="py-2 pr-3 text-right">Games</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableRows.map(p => (
-                <tr key={p.name} className="border-b border-gray-700/50">
-                  <td className="py-1.5 pr-3 text-white">{p.name}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums text-gray-300">{money(p.app)}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums text-gray-300">{money(p.likely)}</td>
-                  <td className={`py-1.5 pr-3 text-right tabular-nums font-semibold ${p.likely <= p.max ? 'text-green-400' : 'text-gray-400'}`}>{money(p.max)}</td>
-                  <td className={`py-1.5 pr-3 text-right tabular-nums ${p.gp < 60 ? 'text-yellow-400' : 'text-gray-300'}`}>{p.gp}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <Section title="Where the room loses money" subtitle="Value delivered per $1 paid, by price tier, in past auctions (1.0 = got what you paid for).">
+        <GroupedBars
+          rows={data.tiers}
+          series={[
+            { key: 'orig', label: "2025, that league's categories", color: C1 },
+            { key: 'w25', label: '2025, our 11 categories', color: C2 },
+            { key: 'w24', label: '2024, our 11 categories', color: C3 },
+          ]}
+          max={1.8} format={v => v.toFixed(2)} reference={1} referenceLabel="break-even (1.0)"
+        />
+        <p className="text-sm text-gray-400 mt-3">
+          $40-74 is the worst tier both years, and the overpay is early: these players sell in the first third of the draft.
+          Bought in the first 10% they went for 1.26x value; at 20-35% for 0.70x, returning 1.20 per $1. Your max for this tier is already 85% of value; cutting deeper tested worse.
+        </p>
+      </Section>
+
+      <Section title="What was tested" subtitle="Simulated auctions with budgets, calibrated on both past drafts; six kinds of room (calibrated, hot, star-heavy, and mixes of number-crunchers, Fantrax, ESPN, BasketballMonster and vibes bidders). Categories won a week vs tonight's rules.">
+        <div className="space-y-1.5">
+          {TESTED.map(([k, v, ok]) => (
+            <div key={k} className="flex justify-between gap-4 bg-gray-900 rounded px-3 py-1.5 text-sm">
+              <span className={ok ? 'text-white font-medium' : 'text-gray-300'}>{k}</span>
+              <span className={`tabular-nums whitespace-nowrap ${ok ? 'text-green-400' : 'text-gray-400'}`}>{v}</span>
+            </div>
+          ))}
         </div>
-        <p className="text-xs text-gray-500 mt-3">Updated {data.generated}. Green max = the room will likely let him go at or under it. Yellow games = under 60 projected.</p>
+        <p className="text-xs text-gray-500 mt-3">The simulations treat our projections as true, so read which rule wins, not the size. Updated {data.generated}.</p>
       </Section>
     </div>
   );

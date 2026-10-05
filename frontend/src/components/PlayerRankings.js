@@ -28,6 +28,8 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
     ...(picked.positions && { positions: picked.positions.filter(p => chips.includes(p)) }),
   }));
   const [searchTerm, setSearchTerm] = useState('');
+  // Phones: only search shows; the other levers fold into Filters (the badge counts the ones changed).
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const leagueExponent = config.league?.settings?.draft?.price_exponent ?? 1;
   const showPositionFilter = !draftMode || Boolean(caps.positions?.length);
 
@@ -39,38 +41,48 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
       && (!showPositionFilter || view.positions.some(chip => playsPosition(player, chip)))
       && (!view.healthy || !player.is_injured);
   });
+  const changed = [view.statType !== (config.default_stat_type || 'projected'), showPositionFilter && view.positions.length !== chips.length,
+    caps.auction && view.priceExponent != null, !view.available, !view.healthy].filter(Boolean).length;
+  const lever = filtersOpen ? 'flex' : 'hidden sm:flex';
   const togglePosition = (chip) => setView(v => ({
     positions: v.positions.includes(chip) ? v.positions.filter(p => p !== chip) : [...v.positions, chip],
   }));
 
   return (
     <div className="bg-gray-800 rounded-lg shadow-xl">
-      <div className="px-6 py-4 border-b border-gray-700 overflow-x-hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-4 overflow-x-hidden">
-          <div className="flex items-center space-x-2">
+      <div className="px-2 sm:px-6 py-2 sm:py-4 border-b border-gray-700 overflow-x-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3 sm:gap-4 overflow-x-hidden">
+          <div className={`${lever} items-center space-x-2`}>
             <span className="text-sm text-gray-300">Stats:</span>
             <select value={view.statType} onChange={(e) => setView({ statType: e.target.value })} className={selectClass}>
               {statOptions(config).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </div>
 
-          <div className="relative flex-1">
-            <input
-              type="text"
-              placeholder="Search players or teams..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent"
-            />
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+          <div className="flex gap-2 flex-1 order-first sm:order-none">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Search players or teams..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-1.5 sm:py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-nba-orange focus:border-transparent"
+              />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
             </div>
+            <button onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen}
+                    className={`sm:hidden flex items-center gap-1.5 px-3 rounded-md border text-sm ${filtersOpen ? 'bg-gray-600 border-gray-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-200'}`}>
+              Filters
+              {changed > 0 && <span className="min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-nba-orange text-onaccent text-[10px] font-bold flex items-center justify-center">{changed}</span>}
+            </button>
           </div>
 
           {showPositionFilter && (
-            <div className="flex items-center space-x-4">
+            <div className={`${lever} items-center space-x-4`}>
               <span className="text-sm text-gray-300">Position:</span>
               {chips.map(chip => (
                 <label key={chip} className="flex items-center">
@@ -83,7 +95,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
 
           {caps.auction && (
             <div
-              className="flex items-center space-x-2"
+              className={`${lever} items-center space-x-2`}
               title={`Auction $ follow each player's value above replacement, raised to this power. 1 splits money in proportion to value; higher pays stars more. This league's default: ${leagueExponent}`}
             >
               <span className="text-sm text-gray-300">Star premium:</span>
@@ -100,7 +112,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
             </div>
           )}
 
-          <div className="flex items-center space-x-4">
+          <div className={`${lever} items-center space-x-4`}>
             <label className="flex items-center">
               <input type="checkbox" checked={view.available} onChange={(e) => setView({ available: e.target.checked })} className={checkboxClass} />
               <span className="ml-2 text-sm text-gray-300">Available</span>

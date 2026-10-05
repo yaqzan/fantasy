@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fantasy - app icon backgrounds</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 24px 64px; background: #0C0D0F; color: #ECEEF1; font-family: Inter, system-ui, sans-serif; }
+  .page { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.lead { color: #949CA7; margin: 0 0 20px; font-size: 14px; line-height: 1.5; max-width: 820px; }
+  p.lead b { color: #ECEEF1; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+  .card { background: #15171B; border: 1px solid #262A30; border-radius: 10px; padding: 16px; }
+  .top { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
+  .card h3 { margin: 0 0 4px; font-size: 14px; }
+  .card h3 span { display: inline-block; background: #ECEEF1; color: #0C0D0F; border-radius: 4px; padding: 0 6px; font-size: 12px; margin-right: 6px; }
+  .card p { margin: 0 0 12px; color: #949CA7; font-size: 12.5px; line-height: 1.45; min-height: 36px; }
+  .tabs { display: flex; gap: 8px; }
+  .tab { flex: 1; display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 8px 8px 0 0; font-size: 11.5px; white-space: nowrap; overflow: hidden; }
+  .tab.dark { background: #2B2D31; color: #DADCE0; }
+  .tab.light { background: #D5D9DF; color: #2B2D31; }
+  .home { display: flex; gap: 14px; margin-top: 12px; padding: 12px; border-radius: 8px; background: linear-gradient(135deg, #24384f, #3b2a4a); }
+  .home div { text-align: center; font-size: 10px; color: #fff; }
+  .home svg { display: block; margin: 0 auto 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>App icon: ten backgrounds behind the navy and gold banner</h1>
+  <p class="lead">Each card shows the icon large, as a round icon, at favicon size, in a dark and a light browser tab, and on a phone home screen. Answer with a letter. The banner itself is unchanged except on <b>F</b> and <b>G</b>, where its outline turns navy so it doesn't vanish into the background.</p>
+  <div class="cards" id="cards"></div>
+</div>
+
+<script>
+let uid = 0;
+const mark = (stroke) => `
+  <path d="M6 7h52" stroke="${stroke}" stroke-width="4" stroke-linecap="round"/>
+  <path d="M11 9h42v38L32 59 11 47z" fill="#12284D" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="32" cy="28" r="12" fill="#F08A24"/>
+  <g fill="none" stroke="#0B1A33" stroke-width="2" stroke-linecap="round">
+    <path d="M32 16V40"/><path d="M20 28H44"/>
+    <path d="M23.6 19.6C28.6 23.2,28.6 32.8,23.6 36.4"/><path d="M40.4 19.6C35.4 23.2,35.4 32.8,40.4 36.4"/></g>
+  <path d="M32 44l1.6 3.2 3.5.5-2.5 2.5.6 3.5-3.2-1.7-3.2 1.7.6-3.5-2.5-2.5 3.5-.5z" fill="#E9B949"/>`;
+
+const GOLD = '#E9B949';
+// [letter, name, note, background(id) -> svg drawn inside the clipped 64x64 tile, banner outline colour]
+const options = [
+  ['A', 'Ink', 'Near-black, the Podium page colour. The banner does all the talking.',
+    () => `<rect width="64" height="64" fill="#0C0D0F"/>`, GOLD],
+  ['B', 'Charcoal', 'A step lighter, so the tile shows up against a dark tab bar or wallpaper.',
+    () => `<rect width="64" height="64" fill="#22262C"/>`, GOLD],
+  ['C', 'Midnight', 'Deep navy, darker than the banner. One colour family, very calm.',
+    () => `<rect width="64" height="64" fill="#081020"/>`, GOLD],
+  ['D', 'Spotlight', 'Navy glow behind the banner fading to black, like an arena light on the rafters.',
+    (id) => `<defs><radialGradient id="${id}" cx="50%" cy="42%" r="62%"><stop offset="0" stop-color="#2A4A85"/><stop offset=".55" stop-color="#101C36"/><stop offset="1" stop-color="#05080F"/></radialGradient></defs><rect width="64" height="64" fill="url(#${id})"/>`, GOLD],
+  ['E', 'Hardwood', 'Court floor: warm brown planks. Ties the icon back to basketball.',
+    (id) => `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4A3018"/><stop offset="1" stop-color="#24160A"/></linearGradient></defs><rect width="64" height="64" fill="url(#${id})"/>
+      <g stroke="#1A0F06" stroke-width=".8" opacity=".55"><path d="M0 13h64M0 26h64M0 39h64M0 52h64"/><path d="M20 0v13M44 13v13M14 26v13M38 39v13M24 52v12M52 26v13"/></g>`, GOLD],
+  ['F', 'Ball orange', 'Loudest option, stands out in a row of dark tabs. Banner outline goes navy.',
+    () => `<rect width="64" height="64" fill="#F08A24"/>`, '#0B1A33'],
+  ['G', 'Gold', 'Trophy gold tile, navy outline. Bright, reads as an award.',
+    () => `<rect width="64" height="64" fill="#E9B949"/>`, '#0B1A33'],
+  ['H', 'Crimson', 'Deep red behind navy and gold: a varsity look.',
+    () => `<rect width="64" height="64" fill="#6E1423"/>`, GOLD],
+  ['I', 'Forest', 'Dark green, the old-school team-colour pairing with gold.',
+    () => `<rect width="64" height="64" fill="#123A29"/>`, GOLD],
+  ['J', 'Gold trim', 'Black-to-navy diagonal with a thin gold border, like a framed badge.',
+    (id) => `<defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0C0D0F"/><stop offset="1" stop-color="#1A2F58"/></linearGradient></defs><rect width="64" height="64" fill="url(#${id})"/>`, GOLD, true],
+];
+
+// shape: 'square' (rounded tile) or 'circle'
+const icon = ([, , , bg, stroke, trim], px, shape = 'square') => {
+  const clip = `c${uid++}`, grad = `g${uid++}`;
+  const outline = shape === 'circle' ? `<circle cx="32" cy="32" r="32"/>` : `<rect width="64" height="64" rx="14"/>`;
+  const border = !trim ? '' : shape === 'circle'
+    ? `<circle cx="32" cy="32" r="30.5" fill="none" stroke="${GOLD}" stroke-width="2"/>`
+    : `<rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="${GOLD}" stroke-width="2"/>`;
+  const scale = shape === 'circle' ? 0.66 : 0.76;
+  const off = (64 - 64 * scale) / 2;
+  return `<svg viewBox="0 0 64 64" width="${px}" height="${px}">
+    <defs><clipPath id="${clip}">${outline}</clipPath></defs>
+    <g clip-path="url(#${clip})">${bg(grad)}</g>${border}
+    <g transform="translate(${off} ${off + 0.5}) scale(${scale})">${mark(stroke)}</g></svg>`;
+};
+
+document.getElementById('cards').innerHTML = options.map(o => `
+  <div class="card">
+    <div class="top">${icon(o, 104)}${icon(o, 64, 'circle')}${icon(o, 32)}${icon(o, 16)}</div>
+    <h3><span>${o[0]}</span>${o[1]}</h3><p>${o[2]}</p>
+    <div class="tabs">
+      <div class="tab dark">${icon(o, 16)} NBA Fantasy Dashboard</div>
+      <div class="tab light">${icon(o, 16)} NBA Fantasy Dashboard</div>
+    </div>
+    <div class="home"><div>${icon(o, 52)}Fantasy</div><div>${icon(o, 52, 'circle')}Fantasy</div></div>
+  </div>`).join('');
+</script>
+</body>
+</html>

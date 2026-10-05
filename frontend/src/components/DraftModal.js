@@ -48,8 +48,8 @@ const DraftModal = ({ player, teams, onClose, onDraft, onUndraft, onUpdatePlayer
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3">
+      <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md max-h-full overflow-y-auto">
         <h3 className="text-lg font-semibold text-white mb-4">
           Edit {player.name}
         </h3>

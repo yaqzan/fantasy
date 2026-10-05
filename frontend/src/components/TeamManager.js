@@ -21,6 +21,8 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
   const [editTeamName, setEditTeamName] = useState('');
   const [editTeamAbbrev, setEditTeamAbbrev] = useState('');
   const [teamBlockWidth, setTeamBlockWidth] = useState('calc(8% - 0.25rem)');
+  // Folded by default on phones, where 16 rosters would push the tabs off the first screen.
+  const [expanded, setExpanded] = useState(() => !window.matchMedia?.('(max-width: 639px)').matches);
   const containerRef = useRef(null);
 
   // Calculate optimal team block width
@@ -200,18 +202,25 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
   
 
   return (
-    <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Fantasy Teams</h3>
-        <button onClick={() => setShowModal(true)} className="btn-secondary text-sm">Add team</button>
+    <div className="bg-gray-800 rounded-lg shadow-lg p-3 sm:p-6">
+      <div className={`flex items-center justify-between ${expanded ? 'mb-3 sm:mb-4' : ''}`}>
+        <button onClick={() => setExpanded(!expanded)} aria-expanded={expanded}
+          className="flex items-center gap-2 text-base sm:text-lg font-semibold text-white">
+          <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          Fantasy Teams
+          {!expanded && teams.length > 0 && <span className="text-xs font-normal text-gray-400">{teams.length}</span>}
+        </button>
+        <button onClick={() => setShowModal(true)} className="btn-secondary text-sm py-1.5 sm:py-2">Add team</button>
       </div>
-      
-      {teams.length === 0 ? (
+
+      {!expanded ? null : teams.length === 0 ? (
         <p className="text-gray-400 text-center py-4">No fantasy teams created yet.</p>
       ) : (
-        <div ref={containerRef} className="flex flex-nowrap gap-1 overflow-x-auto">
+        <div ref={containerRef} className="flex flex-nowrap gap-1 overflow-x-auto thin-scrollbar">
           {sortedTeams.map((team) => (
-            <div key={team.id} className={`bg-gray-700 rounded p-0.5 group hover:bg-gray-600 transition-colors flex-shrink-0 min-h-64 ${team.eliminated_stage ? 'opacity-40' : ''}`} style={{width: teamBlockWidth}}>
+            <div key={team.id} className={`bg-gray-700 rounded p-0.5 group hover:bg-gray-600 transition-colors flex-shrink-0 min-h-64 min-w-[8.5rem] sm:min-w-0 ${team.eliminated_stage ? 'opacity-40' : ''}`} style={{width: teamBlockWidth}}>
               <div className="text-center mb-1 relative">
                 <h4 className="font-medium text-white text-xs truncate leading-tight">{team.name}</h4>
                 {team.abbreviation && (
@@ -222,7 +231,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
                     Out S{team.eliminated_stage}
                   </div>
                 ) : (
-                  <div className="team-badge bg-nba-blue text-white text-xs mt-0.5 px-1">
+                  <div className="team-badge bg-th text-onth text-xs mt-0.5 px-1">
                     {getTeamAverageScore(team.id)}
                   </div>
                 )}
@@ -241,7 +250,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
                 {/* Edit icon - only visible on hover */}
                 <button
                   onClick={() => handleEditTeam(team)}
-                  className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-500 rounded"
+                  className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity p-0.5 hover:bg-gray-500 rounded"
                 >
                   <svg className="w-2.5 h-2.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -271,7 +280,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
                         </span>
                         <button
                           onClick={() => handleUndraftPlayer(player.player_name)}
-                          className="opacity-0 group-hover/item:opacity-100 transition-opacity ml-0.5 hover:bg-red-600 rounded p-0.5"
+                          className="opacity-0 group-hover/item:opacity-100 [@media(hover:none)]:opacity-60 transition-opacity ml-0.5 hover:bg-red-600 rounded p-0.5"
                         >
                           <svg className="w-2 h-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -296,8 +305,8 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
 
       {/* Edit Team Modal */}
       {editingTeam && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3">
+          <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md max-h-full overflow-y-auto">
             <h3 className="text-lg font-semibold text-white mb-4">Edit Team</h3>
             
             <form onSubmit={handleSaveEdit}>
@@ -329,7 +338,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
                 />
               </div>
               
-              <div className="flex justify-end space-x-3">
+              <div className="flex flex-wrap justify-end gap-3">
                 <button
                   type="button"
                   onClick={handleDeleteTeam}
@@ -371,8 +380,8 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
 
       {/* Create Team Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3">
+          <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md max-h-full overflow-y-auto">
             <h3 className="text-lg font-semibold text-white mb-4">Create New Team</h3>
             
             <form onSubmit={handleCreateTeam}>
@@ -404,7 +413,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
                 />
               </div>
               
-              <div className="flex justify-end space-x-3">
+              <div className="flex flex-wrap justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
