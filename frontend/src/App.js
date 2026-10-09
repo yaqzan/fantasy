@@ -17,8 +17,8 @@ import {
 // Tabs: [key, label, in-season only (hidden in draft mode)]. Each tab keeps its own view state per
 // league (useLeagueViewState) and follows the league's capabilities, never its platform or id.
 const ALL_TABS = [
-  ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true], ['pickups', 'Weekly Pickups', true],
-  ['projections', 'Projections'], ['daily', 'Daily Leaders', true], ['standings', 'Team Standings', true],
+  ['players', 'Player Rankings'], ['daily', 'Daily Leaders', true], ['lineup', 'Lineup Optimizer', true],
+  ['pickups', 'Weekly Pickups', true], ['projections', 'Projections'], ['standings', 'Team Standings', true],
   ['draft', 'Draft Day'],
 ];
 

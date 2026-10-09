@@ -23,9 +23,9 @@ const GameChip = ({ game }) => {
     </span>
   );
   return (
-    <div className="shrink-0 bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs min-w-[5.5rem]">
+    <div className="shrink-0 bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-[11px] leading-tight min-w-[4.5rem] sm:text-xs sm:px-2 sm:py-1 sm:min-w-[5.5rem]">
       {side(away)}{side(home)}
-      <div className={`mt-0.5 ${game.state === 'in' ? 'text-red-400' : 'text-gray-400'}`}>
+      <div className={`mt-0.5 truncate ${game.state === 'in' ? 'text-red-400' : 'text-gray-400'}`}>
         {game.state === 'pre' ? clock(game.start) : game.detail}
       </div>
     </div>
@@ -74,57 +74,63 @@ const DailyLeaders = ({ config }) => {
   const rows = (data?.players || []).filter(p => keepRow(ownerFilter, p));
   const counts = (data?.players || []).reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }), {});
 
+  const signed = (v) => (points ? v.toFixed(1) : `${v > 0 ? '+' : ''}${v.toFixed(1)}`);
+  const status = data && (
+    <span className="text-gray-400 text-[11px] sm:text-xs flex items-center gap-1.5 whitespace-nowrap">
+      {data.live && <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+      {data.next_refresh_at
+        ? <>{clock(data.fetched_at)}<span className="hidden sm:inline"> · next {clock(data.next_refresh_at)}</span></>
+        : data.games.length ? 'Final' : 'No games'}
+      {data.next_refresh_at && (
+        <button onClick={() => load(true)} disabled={refreshing} aria-label="Refresh"
+                className="text-nba-orange disabled:opacity-50 px-1" title="Refetch now (at most every 2 minutes)">
+          {refreshing ? '…' : '↻'}
+        </button>
+      )}
+    </span>
+  );
+
+  // Phones: one pinned column carries rank, name, team, minutes and owner; the score is pinned
+  // next to it, so the category cells scroll under both. Dimming is on the cell contents: an
+  // opacity on the row would let scrolled cells show through the pinned ones.
+  const PLAYER_W = 'w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
+  const VALUE_LEFT = 'left-[9.5rem] sm:left-60';
   return (
     <div className="py-2 sm:p-6">
-      <div className="flex flex-wrap items-center gap-3 mb-3">
-        <h2 className="text-xl sm:text-2xl font-bold text-white mr-auto">Daily Leaders</h2>
-        <div className="flex items-center bg-gray-700 border border-gray-600 rounded-md">
+      <div className="flex items-center gap-2 mb-2 sm:mb-3">
+        <h2 className="hidden sm:block text-2xl font-bold text-white mr-4">Daily Leaders</h2>
+        <div className="flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
           <button onClick={() => shown && setDay(shiftDate(shown, -1))}
-                  className="px-3 py-2 text-gray-300 hover:text-white hover:bg-gray-600 rounded-l-md" title="Previous day">←</button>
-          <span className="px-3 py-2 text-white font-medium min-w-[8.5rem] text-center">
+                  className="px-2.5 py-1.5 text-gray-300 hover:text-white rounded-l-md" aria-label="Previous day">‹</button>
+          <span className="py-1.5 text-white font-medium min-w-[6.5rem] text-center">
             {shown ? new Date(`${shown}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '…'}
           </span>
           <button onClick={() => shown && setDay(shiftDate(shown, 1))}
-                  className="px-3 py-2 text-gray-300 hover:text-white hover:bg-gray-600 rounded-r-md" title="Next day">→</button>
+                  className="px-2.5 py-1.5 text-gray-300 hover:text-white rounded-r-md" aria-label="Next day">›</button>
         </div>
         {data && shown !== data.today && (
-          <button onClick={() => setDay(data.today)} className="btn-secondary py-2">Today</button>
+          <button onClick={() => setDay(data.today)} className="text-xs text-nba-orange px-1">Today</button>
         )}
+        <span className="ml-auto">{status}</span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3 text-sm">
-        <div className="flex gap-1">
-          {OWNER_FILTERS.map(([key, label]) => (
-            <button key={key} onClick={() => setView({ owner: key })}
-                    className={`px-3 py-1 rounded-full border text-xs font-medium ${ownerFilter === key
-                      ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-600 text-gray-300 hover:text-white'}`}>
-              {label}{key !== 'all' && counts[key] ? ` ${counts[key]}` : ''}
-            </button>
-          ))}
-        </div>
-        {data && (
-          <span className="text-gray-400 text-xs flex items-center gap-2">
-            {data.live && <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
-            {data.next_refresh_at
-              ? <>Updated {clock(data.fetched_at)} · next {clock(data.next_refresh_at)}</>
-              : data.games.length ? 'All games final' : 'No games'}
-            {data.next_refresh_at && (
-              <button onClick={() => load(true)} disabled={refreshing}
-                      className="text-nba-orange hover:underline disabled:opacity-50" title="Refetch now (at most every 2 minutes)">
-                {refreshing ? 'Refreshing…' : 'Refresh'}
-              </button>
-            )}
-          </span>
-        )}
+      <div className="flex gap-1 mb-2 sm:mb-3">
+        {OWNER_FILTERS.map(([key, label]) => (
+          <button key={key} onClick={() => setView({ owner: key })}
+                  className={`px-2.5 py-1 rounded-full border text-xs font-medium ${ownerFilter === key
+                    ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-600 text-gray-300 hover:text-white'}`}>
+            {label}{key !== 'all' && counts[key] ? <span className="opacity-70"> {counts[key]}</span> : ''}
+          </button>
+        ))}
       </div>
 
       {data?.games?.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2 sm:mb-3">
           {data.games.map(g => <GameChip key={g.id} game={g} />)}
         </div>
       )}
 
-      {error && <div className="text-red-400 text-sm mb-3">{error}</div>}
+      {error && <div className="text-red-400 text-sm mb-2">{error}</div>}
 
       {loading && !data ? (
         <div className="flex justify-center py-8">
@@ -138,48 +144,51 @@ const DailyLeaders = ({ config }) => {
         </div>
       ) : (
         <div className={`overflow-x-auto bg-gray-800 rounded-lg shadow-xl ${loading ? 'opacity-60' : ''}`}>
-          <table className="min-w-full">
+          <table className="min-w-full text-xs sm:text-sm">
             <thead>
               <tr>
-                <th className="table-header text-center w-10">#</th>
-                <th className="table-header sticky left-0 z-10">Player</th>
-                <th className="table-header text-center">Owner</th>
-                <th className="table-header text-center">MIN</th>
-                {columns.map(c => <th key={c.key} className="table-header text-center">{c.label}</th>)}
-                <th className="table-header text-center" title={points ? "This league's fantasy points"
-                  : 'Summed category z: how far this game moved a week\'s matchup, category by category'}>
-                  {points ? 'FPTS' : 'Value'}
+                <th className={`table-header sticky left-0 z-20 px-2 ${PLAYER_W}`}>Player</th>
+                <th className={`table-header sticky z-20 text-center px-1.5 border-r border-gray-700 ${VALUE_LEFT}`}
+                    title={points ? "This league's fantasy points"
+                      : "Summed category z: how far this game moved a week's matchup, category by category"}>
+                  {points ? 'FPTS' : 'Val'}
                 </th>
+                {columns.map(c => <th key={c.key} className="table-header text-center whitespace-nowrap px-1.5 sm:px-2">{c.label}</th>)}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700">
+            <tbody>
               {rows.map(p => {
                 const mine = p.owner === 'mine';
+                const fade = p.owner === 'taken' ? 'opacity-40' : '';
+                const bg = mine ? 'bg-row-mine' : 'bg-gray-800 group-hover:bg-row-hover';
                 return (
-                  <tr key={p.espn_id}
-                      className={`${mine ? 'bg-row-mine' : 'hover:bg-gray-700'} ${p.owner === 'taken' ? 'opacity-40' : ''}`}>
-                    <td className="table-cell text-center text-gray-400 tabular-nums">{p.rank}</td>
-                    <td className={`table-cell sticky left-0 ${mine ? 'bg-row-mine border-l-2 border-nba-orange' : 'bg-gray-800'}`}>
-                      <div className={`font-medium ${mine ? 'text-nba-orange' : 'text-white'}`}>{p.name}</div>
-                      <div className="text-xs text-gray-400 flex items-center gap-1">
-                        {p.game_state === 'in' && <span className="w-1.5 h-1.5 rounded-full bg-red-500" title="Playing now" />}
-                        {p.team} vs {p.opp}
+                  <tr key={p.espn_id} className="group border-t border-gray-700">
+                    <td className={`sticky left-0 z-10 px-2 py-1.5 ${PLAYER_W} ${bg} ${mine ? 'shadow-[inset_3px_0_0_rgb(var(--accent))]' : ''}`}>
+                      <div className={`flex items-baseline gap-1.5 ${fade}`}>
+                        <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right">{p.rank}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className={`font-medium truncate ${mine ? 'text-nba-orange' : 'text-white'}`} title={p.name}>{p.name}</div>
+                          <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap">
+                            {p.game_state === 'in' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" title="Playing now" />}
+                            <span>{p.team}<span className="hidden sm:inline"> vs {p.opp}</span> · {p.MIN}m</span>
+                            {p.owner !== 'free' && (
+                              <span className={`ml-auto px-1 rounded text-[10px] font-semibold truncate ${mine ? 'bg-nba-orange text-onaccent' : 'bg-gray-700 text-gray-300'}`}
+                                    title={p.owner_name}>{p.owner_abv}</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </td>
-                    <td className="table-cell text-center text-xs" title={p.owner_name || 'Free agent'}>
-                      {p.owner === 'free' ? <span className="text-gray-500">FA</span>
-                        : <span className={mine ? 'text-nba-orange font-semibold' : 'text-gray-300'}>{p.owner_abv}</span>}
+                    <td className={`sticky z-10 text-center px-1.5 font-semibold text-white tabular-nums border-r border-gray-700 ${VALUE_LEFT} ${bg}`}>
+                      <span className={fade}>{signed(p.value)}</span>
                     </td>
-                    <td className="table-cell text-center tabular-nums">{p.MIN}</td>
                     {columns.map(c => (
-                      <td key={c.key} className={`table-cell text-center tabular-nums ${points ? '' : zTint(p.z?.[c.key])}`}
+                      <td key={c.key}
+                          className={`text-center tabular-nums whitespace-nowrap px-1.5 sm:px-2 text-gray-200 ${points || fade ? '' : zTint(p.z?.[c.key])} ${mine ? 'bg-row-mine' : ''}`}
                           title={!points && p.z?.[c.key] != null ? `z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : undefined}>
-                        {cellText(c.key, p)}
+                        <span className={fade}>{cellText(c.key, p)}</span>
                       </td>
                     ))}
-                    <td className="table-cell text-center font-semibold text-white tabular-nums">
-                      {points ? p.value.toFixed(1) : `${p.value > 0 ? '+' : ''}${p.value.toFixed(1)}`}
-                    </td>
                   </tr>
                 );
               })}

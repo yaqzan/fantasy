@@ -56,6 +56,9 @@ must keep its `sm:` twin.
   folded by default otherwise; team columns get an 8.5rem floor on phones only.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
+- Daily Leaders: one pinned column holds rank, name, team, minutes and owner chip; Val is pinned next
+  to it and category cells scroll under both (5 columns fit at 390px). Taken rows fade their cell
+  contents, not the row: an opacity on the row lets scrolled cells show through the pinned ones.
 - Draft board: the key/legend is off on phones; the room strip is one line (top bid, spot bar, aim %,
   room factor once picks have prices, pace only when it warns) with team chips behind "Teams".
 - The board's scroll box fills the rest of the screen on phones (measured in `DraftBoard`), so the
