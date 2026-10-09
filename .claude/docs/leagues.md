@@ -18,7 +18,11 @@ stats) is shared by all leagues.
   run by default; a team with no id links by its current name, else set the id by hand). Match
   rosters/schedules by id, never by name.
 - **Platform importers** (dry run unless `--apply`; `settings.platform` + `platform_league_id` pick
-  the league). `pull_fantrax.py` (saved browser cookie): team names by id, projections, techs.
+  the league). `pull_fantrax.py` (saved browser cookie; a rejected login is re-read from Firefox once): team names by
+  id, projections, techs, and `rosters`: prints new transactions (claims/drops and trades are separate
+  Fantrax views; seen ids in gitignored `.cache/fantrax_transactions_seen.json`), then makes each team's roster
+  exactly Fantrax's by team id (a player moving between teams keeps his draft price; an empty answer never wipes
+  a roster). Hourly task, see ops.md.
   `pull_yahoo.py` (Yahoo OAuth: the owner's app keys in `.env`, `auth` once, refresh token in
   gitignored `yahoo_token.json`; XML API, `nba.l.<number>` = the current season's league): teams
   linked by Yahoo team id (first sync by name), each roster made exactly Yahoo's, every rostered or

@@ -11,7 +11,10 @@
 - **Watchdog** task "Fantasy Watchdog", every 5 min, `ops/windows/watchdog.ps1` via the bundled
   `hidden_run.vbs`. With `-Controller` it calls `server.ps1 start -Service fantasy-api|fantasy-tunnel`;
   without, it starts `python backend\app.py` / cloudflared itself. Logs in `ops/windows/logs/`.
-- **No cron jobs for data.** The API process runs a poller thread (`daily_leaders.start_poller`,
+- **Fantrax rosters task** "Fantasy Fantrax Rosters", hourly, current user (`ops/windows/install-fantrax-task.ps1`):
+  `pull_fantrax.py rosters --apply` for every Fantrax league with a `platform_league_id`, log
+  `ops/windows/logs/fantrax.log`. Needs Firefox logged in to fantrax.com (the login is re-read from it).
+- **No other cron jobs for data.** The API process runs a poller thread (`daily_leaders.start_poller`,
   started in `backend/app.py`; sleeps until the next thing is due, see leagues.md "Daily Leaders"):
   ESPN every 5 min while games are on; **ESPN fold**: when ESPN calls a regular-season game final, its
   lines go into `game_lines` and those players' season / last-5 / last-10 totals are recomputed at

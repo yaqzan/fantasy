@@ -13,9 +13,17 @@
   change, ids don't). Teams without an id are linked by their current name. Dry run unless --apply.
 
     python pull_fantrax.py teams --league <fantrax league id> [--apply]
-Read-only: only Fantrax's player-stats listing and standings are requested.
+- rosters: print Fantrax transactions not seen before, then make each team's roster exactly
+  Fantrax's (teams by Fantrax team id; a kept or traded player keeps his draft price). No --league
+  = every Fantrax league with a platform_league_id. The "Fantasy Fantrax Rosters" task runs it
+  hourly with --apply (ops/windows/install-fantrax-task.ps1).
+
+    python pull_fantrax.py rosters [--league <fantrax league id>] [--apply] [--log FILE]
+Read-only on Fantrax. If Fantrax rejects the saved login, it is re-read from Firefox once
+(browser_cookie3; log in to fantrax.com in Firefox if that fails too).
 """
 import argparse
+import json
 import os
 import pickle
 import time
@@ -44,6 +52,33 @@ def session():
     for c in pickle.load(open(COOKIE, 'rb')):
         s.cookies.set(c['name'], c['value'], domain=c.get('domain'), path=c.get('path', '/'))
     return s
+
+
+def refresh_cookie():
+    """Re-save the Fantrax login from Firefox's cookie store (the browser that is logged in)."""
+    import browser_cookie3
+    jar = browser_cookie3.firefox(domain_name='fantrax.com')
+    cookies = [{'name': c.name, 'value': c.value, 'domain': c.domain, 'path': c.path} for c in jar]
+    if not cookies:
+        raise SystemExit('Firefox has no fantrax.com cookies; log in to fantrax.com in Firefox')
+    with open(COOKIE, 'wb') as f:
+        pickle.dump(cookies, f)
+    return session()
+
+
+def call(s, league_id, method, **data):
+    """One Fantrax request; its response data. A page error (usually an expired login) re-reads
+    the login from Firefox once and retries; the session's cookies are replaced in place."""
+    for attempt in (1, 2):
+        reply = s.post(URL, params={'leagueId': league_id}, timeout=60,
+                       json={'msgs': [{'method': method, 'data': {'leagueId': league_id, **data}}]})
+        reply.raise_for_status()
+        response = reply.json()['responses'][0]
+        if not response.get('pageError'):
+            return response['data']
+        if attempt == 1:
+            s.cookies = refresh_cookie().cookies
+    raise SystemExit(f"Fantrax {method}: {response['pageError']} (if it's the login: log in to fantrax.com in Firefox)")
 
 
 def player_table(s, league_id, season_or_projection, group):
@@ -261,16 +296,123 @@ def sync_schedule(fantrax_league_id, apply):
     print(f'{len(schedule)} weeks' + ('' if apply else ' (dry run; pass --apply)'))
 
 
+TX_SEEN = os.path.join(ROOT, '.cache', 'fantrax_transactions_seen.json')
+
+
+def transactions(s, fantrax_league_id):
+    """Fantrax's transaction log, oldest first: [{id, date, text}]. Claims/drops and trades are
+    separate views. A set's first row carries the date (and a claim's team); its other rows only
+    their player. Trade rows each name the player's from and to team."""
+    from datetime import datetime
+    sets = {}
+    for view in (None, 'TRADE'):
+        extra = {'view': view} if view else {}
+        data = call(s, fantrax_league_id, 'getTransactionDetailsHistory', maxResultsPerPage='200', **extra)
+        for row in data['table']['rows']:
+            if row.get('executed') is False or row.get('deleted'):
+                continue
+            cells = {c.get('key'): c.get('content') for c in row.get('cells', [])}
+            tx = sets.setdefault(row['txSetId'], {'id': row['txSetId'], 'date': None, 'team': None, 'moves': []})
+            tx['date'] = tx['date'] or cells.get('date')
+            tx['team'] = tx['team'] or cells.get('team')
+            name = row['scorer']['name']
+            tx['moves'].append(f"{name} {cells['from']} -> {cells['to']}" if view
+                               else {'CLAIM': '+', 'DROP': '-'}.get(row.get('transactionCode'), f"{row.get('transactionCode')} ") + name)
+    for tx in sets.values():
+        tx['text'] = (f"{tx['team']}: " if tx['team'] else 'trade: ') + ', '.join(tx['moves'])
+    when = lambda tx: datetime.strptime(tx['date'], '%a %b %d, %Y, %I:%M%p') if tx['date'] else datetime.min
+    return sorted(sets.values(), key=when)
+
+
+def sync_rosters(fantrax_league_id, apply):
+    """Print transactions not seen before, then make every team's roster exactly Fantrax's."""
+    league = next((lg for lg in list_leagues() if lg.platform == 'fantrax' and lg.platform_league_id == fantrax_league_id), None)
+    if league is None:
+        raise SystemExit(f'no Fantrax league here has platform_league_id {fantrax_league_id}')
+    s = session()
+    seen = json.load(open(TX_SEEN)) if os.path.exists(TX_SEEN) else {}
+    log = transactions(s, fantrax_league_id)
+    new = [tx for tx in log if tx['id'] not in set(seen.get(fantrax_league_id, []))]
+    print(f"{time.strftime('%Y-%m-%d %H:%M')} {league.name}: {len(log)} transactions, {len(new)} new")
+    for tx in new:
+        print(f"  {tx['date']}  {tx['text']}")
+
+    teams = list(FantasyTeam.select().where(FantasyTeam.league == league.id))
+    team_ids = [t.id for t in teams]
+    index = name_index()
+    players = {p.id: p for p in Player.select(Player.id, Player.name)}
+    held = {f.player_id_id: f for f in FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id.in_(team_ids))}
+    unmatched, changes = set(), 0
+    for team in teams:
+        if not team.platform_team_id:
+            print(f'  {team.abv}: no Fantrax team id, skipped (pull_fantrax.py teams links it)')
+            continue
+        data = call(s, fantrax_league_id, 'getTeamRosterInfo', teamId=team.platform_team_id)
+        want = {}
+        for table in data['tables']:
+            for row in table['rows']:
+                if row.get('scorer'):       # empty slots have none
+                    pid = index.get(norm_name(row['scorer']['name']))
+                    if pid in players:
+                        want[pid] = players[pid]
+                    else:
+                        unmatched.add(row['scorer']['name'])
+        if not want:        # an empty answer never wipes a roster
+            print(f'  {team.abv}: Fantrax returned no players, skipped')
+            continue
+        have = {pid for pid, f in held.items() if f.fantasy_team_id_id == team.id}
+        adds = [want[pid] for pid in want if pid not in have]
+        drops = [players[pid] for pid in have - set(want) if pid in players]
+        if not adds and not drops:
+            continue
+        changes += len(adds) + len(drops)
+        print(f'  {team.abv} ({team.name}): '
+              + ', '.join([f'+{p.name}' + (f' (from {held[p.id].fantasy_team_name})' if p.id in held else '') for p in adds]
+                          + [f'-{p.name}' for p in drops]))
+        if apply:
+            with DB.atomic():
+                FantasyTeamPlayer.delete().where((FantasyTeamPlayer.fantasy_team_id == team.id)
+                                                 & FantasyTeamPlayer.player_id.in_([p.id for p in drops] or [0])).execute()
+                for p in adds:      # off any other team in this league first; a traded player keeps his price
+                    price = held[p.id].price if p.id in held else None
+                    FantasyTeamPlayer.delete().where((FantasyTeamPlayer.player_id == p.id)
+                                                     & FantasyTeamPlayer.fantasy_team_id.in_(team_ids)).execute()
+                    FantasyTeamPlayer.create(player_id=p.id, fantasy_team_id=team, player_name=p.name,
+                                             fantasy_team_name=team.name, price=price)
+    if unmatched:
+        print(f"  no NBA player here for: {', '.join(sorted(unmatched))}")
+    if apply:
+        seen[fantrax_league_id] = [tx['id'] for tx in log]
+        os.makedirs(os.path.dirname(TX_SEEN), exist_ok=True)
+        with open(TX_SEEN, 'w') as f:
+            json.dump(seen, f)
+    print(f'  {changes} roster change(s)' + ('' if apply else ' (dry run; pass --apply)'))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Fantrax projections and technical-foul history.')
-    parser.add_argument('what', choices=['projections', 'techs', 'teams', 'draft', 'schedule'])
-    parser.add_argument('--league', required=True, help='a Fantrax NBA league id (projections: this season\'s)')
+    parser.add_argument('what', choices=['projections', 'techs', 'teams', 'draft', 'schedule', 'rosters'])
+    parser.add_argument('--league', help="a Fantrax NBA league id (projections: this season's; rosters: default all)")
     parser.add_argument('--season', default=season_label())
-    parser.add_argument('--apply', action='store_true', help='teams, draft, schedule: write the changes')
+    parser.add_argument('--apply', action='store_true', help='teams, draft, schedule, rosters: write the changes')
+    parser.add_argument('--log', metavar='FILE', help='append all output to FILE (scheduled runs)')
     parser.add_argument('--watch', type=int, metavar='SECONDS', help='draft: repeat every N seconds until Ctrl+C')
     parser.add_argument('--seasons', nargs='+', default=['2023-24', '2024-25', '2025-26'])
     args = parser.parse_args()
-    if args.what == 'draft':
+    if args.log:
+        import sys
+        sys.stdout = sys.stderr = open(args.log, 'a', encoding='utf-8', buffering=1)
+    if not args.league and args.what != 'rosters':
+        parser.error('--league is required')
+    if args.what == 'rosters':
+        ids = [args.league] if args.league else [lg.platform_league_id for lg in list_leagues()
+                                                 if lg.platform == 'fantrax' and lg.platform_league_id]
+        for league_id in ids:
+            try:
+                sync_rosters(league_id, args.apply)
+            except requests.RequestException as e:
+                print(f"{time.strftime('%Y-%m-%d %H:%M')} {league_id}: Fantrax unreachable: {e}")
+    elif args.what == 'draft':
         while True:
             try:
                 sync_draft(args.league, args.apply)
