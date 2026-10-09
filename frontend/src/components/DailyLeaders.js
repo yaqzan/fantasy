@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
-import { BOX_COLUMNS, OWNER_FILTERS, cellText, zTint, keepRow } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, cellText, zTint, keepRow, isPickup, sortRows } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -71,8 +71,9 @@ const DailyLeaders = ({ config }) => {
 
   const shown = data?.date || day;
   const columns = points ? BOX_COLUMNS : (data?.categories || config?.categories || []).map(c => ({ key: c.key, label: c.label }));
-  const rows = (data?.players || []).filter(p => keepRow(ownerFilter, p));
-  const counts = (data?.players || []).reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }), {});
+  const rows = sortRows(ownerFilter, (data?.players || []).filter(p => keepRow(ownerFilter, p)));
+  const counts = (data?.players || []).reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }),
+                                              { pickups: (data?.players || []).filter(isPickup).length });
 
   const signed = (v) => (points ? v.toFixed(1) : `${v > 0 ? '+' : ''}${v.toFixed(1)}`);
   const status = data && (
@@ -114,10 +115,10 @@ const DailyLeaders = ({ config }) => {
         <span className="ml-auto">{status}</span>
       </div>
 
-      <div className="flex gap-1 mb-2 sm:mb-3">
+      <div className="flex gap-1 mb-2 sm:mb-3 overflow-x-auto">
         {OWNER_FILTERS.map(([key, label]) => (
           <button key={key} onClick={() => setView({ owner: key })}
-                  className={`px-2.5 py-1 rounded-full border text-xs font-medium ${ownerFilter === key
+                  className={`shrink-0 px-2.5 py-1 rounded-full border text-xs font-medium ${ownerFilter === key
                     ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-600 text-gray-300 hover:text-white'}`}>
             {label}{key !== 'all' && counts[key] ? <span className="opacity-70"> {counts[key]}</span> : ''}
           </button>
@@ -167,10 +168,15 @@ const DailyLeaders = ({ config }) => {
                       <div className={`flex items-baseline gap-1.5 ${fade}`}>
                         <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right">{p.rank}</span>
                         <div className="min-w-0 flex-1">
-                          <div className={`font-medium truncate ${mine ? 'text-nba-orange' : 'text-white'}`} title={p.name}>{p.name}</div>
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span className={`font-medium truncate ${mine ? 'text-nba-orange' : 'text-white'}`} title={p.name}>{p.name}</span>
+                            {p.streak && <span className="shrink-0 text-[11px]" title={p.streak === 'hot' ? 'Last 10 games well above his season' : 'Last 10 games well below his season'}>{p.streak === 'hot' ? '🔥' : '🧊'}</span>}
+                          </div>
                           <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap">
                             {p.game_state === 'in' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" title="Playing now" />}
-                            <span>{p.team}<span className="hidden sm:inline"> vs {p.opp}</span> · {p.MIN}m</span>
+                            <span>{p.team}<span className="hidden sm:inline"> vs {p.opp}</span> · </span>
+                            <span className={p.minutes_up ? 'text-green-400 font-semibold' : ''}
+                                  title={p.min_usual ? `Usual ${p.min_usual} min` : undefined}>{p.MIN}m</span>
                             {p.owner !== 'free' && (
                               <span className={`ml-auto px-1 rounded text-[10px] font-semibold truncate ${mine ? 'bg-nba-orange text-onaccent' : 'bg-gray-700 text-gray-300'}`}
                                     title={p.owner_name}>{p.owner_abv}</span>
@@ -180,7 +186,15 @@ const DailyLeaders = ({ config }) => {
                       </div>
                     </td>
                     <td className={`sticky z-10 text-center px-1.5 font-semibold text-white tabular-nums border-r border-gray-700 ${VALUE_LEFT} ${bg}`}>
-                      <span className={fade}>{signed(p.value)}</span>
+                      <span className={fade}>
+                        {signed(p.value)}
+                        {p.pace_signal && (
+                          <span className={`ml-0.5 text-[10px] ${p.pace_signal === 'up' ? 'text-green-400' : 'text-red-400'}`}
+                                title={`${p.pace > 0 ? '+' : ''}${p.pace} SD against his per-minute norm`}>
+                            {p.pace_signal === 'up' ? '▲' : '▼'}
+                          </span>
+                        )}
+                      </span>
                     </td>
                     {columns.map(c => (
                       <td key={c.key}

@@ -17,7 +17,7 @@ import {
 // Tabs: [key, label, in-season only (hidden in draft mode)]. Each tab keeps its own view state per
 // league (useLeagueViewState) and follows the league's capabilities, never its platform or id.
 const ALL_TABS = [
-  ['players', 'Player Rankings'], ['daily', 'Daily Leaders', true], ['lineup', 'Lineup Optimizer', true],
+  ['daily', 'Daily Leaders', true], ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true],
   ['pickups', 'Weekly Pickups', true], ['projections', 'Projections'], ['standings', 'Team Standings', true],
   ['draft', 'Draft Day'],
 ];
@@ -29,7 +29,7 @@ function App() {
   const [config, setConfig] = useState({});
   // /draft opens the Draft Day tab directly (Flask serves index.html for every non-API path).
   const [activeTab, setActiveTabState] = useState(
-    window.location.pathname.replace(/\/+$/, '') === '/draft' ? 'draft' : 'players');
+    window.location.pathname.replace(/\/+$/, '') === '/draft' ? 'draft' : 'daily');
   const setActiveTab = (tab) => {
     setActiveTabState(tab);
     const path = tab === 'draft' ? '/draft' : '/';
@@ -43,18 +43,13 @@ function App() {
   const currentLeague = leaguesData.leagues.find(l => l.id === leagueId) || null;
   const caps = config.capabilities || {};
 
-  // Draft mode shows only what matters for drafting. On by default until the draft: until 6 hours
-  // past its date, or, with no date (offline drafts), while nobody in the league has players.
-  // The header toggle overrides it per league (localStorage).
+  // Draft mode shows only what matters for drafting. Off unless switched on with the header
+  // toggle, which is remembered per league (localStorage).
   const [draftModeOverride, setDraftModeOverride] = useState({});
-  const draftDate = currentLeague?.settings?.draft?.date ? new Date(currentLeague.settings.draft.date) : null;
-  const draftAhead = draftDate && !isNaN(draftDate)
-    ? Date.now() < draftDate.getTime() + 6 * 3600 * 1000
-    : config.rostered === 0;
   const storedDraftMode = (() => {
     try { return leagueId ? localStorage.getItem(`fantasy.draftMode.${leagueId}`) : null; } catch (e) { return null; }
   })();
-  const draftMode = (draftModeOverride[leagueId] ?? storedDraftMode ?? (draftAhead ? 'on' : 'off')) === 'on';
+  const draftMode = (draftModeOverride[leagueId] ?? storedDraftMode ?? 'off') === 'on';
   const toggleDraftMode = () => {
     const next = draftMode ? 'off' : 'on';
     setDraftModeOverride(prev => ({ ...prev, [leagueId]: next }));

@@ -349,8 +349,8 @@ The app's draft-night cheat sheet (rebuilt 2026-10-03): the plan by phase of the
 `.horizon/wsop-auction-2026/draft_day.py`; without the file the tab shows the 404 message. The page
 is public (owner's choice, 2026-09-30); the player data stays out of git.
 
-**Draft mode** (header toggle, per league in localStorage): on by default for an auction league until
-6 hours past `draft.date`. It hides the in-season tabs (lineups, pickups, daily stats, standings),
+**Draft mode** (header toggle, per league in localStorage): off unless switched on (owner's call,
+2026-10-09; it used to switch itself on until 6 h past `draft.date`). It hides the in-season tabs (daily leaders, lineups, pickups, standings),
 the trend and fantasy-points columns, the games-this-week line under each name, and the position filter when the league has no position
 minimums. Player Rankings renders `frontend/src/components/DraftBoard.js` instead of `PlayerTable.js` (rank,
 score and $ come from the shared `usePlayerValues.js`): 40px rows that fit a 1650px pane without

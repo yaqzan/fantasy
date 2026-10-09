@@ -246,6 +246,12 @@ def game_value(cat, line):
     return line.get(cat)
 
 
+def league_stats(league):
+    """league_player_stats, cached SCALE_SECONDS per league and its settings."""
+    from player_stats import league_player_stats
+    return _cached(('stats', league.id, str(league.settings)), lambda: league_player_stats(league))
+
+
 def league_scale(league):
     """{category: (mean, sd, pool rate)} for scoring one game in a category league.
 
@@ -255,10 +261,10 @@ def league_scale(league):
     season averages: a game's z then says how far it moved a week's matchup in that category, and
     one double-double or one technical doesn't read as a 3-SD season.
     Uses this season's stats once a pool has qualified, else the projection."""
-    from player_stats import league_player_stats, SCALING_POOL_FACTOR
+    from player_stats import SCALING_POOL_FACTOR
 
     def build():
-        stats = league_player_stats(league)
+        stats = league_stats(league)
         n = '' if any(s.get('ELIGIBLE') for s in stats.values()) else '_proj'
         size = round(league.num_teams * league.roster_size * SCALING_POOL_FACTOR)
         pool = sorted((s for s in stats.values() if s.get(f'ELIGIBLE{n}')),
@@ -307,6 +313,84 @@ def score_line(line, league, scale):
     return round(sum(z for z in zs.values() if z is not None), 2), zs
 
 
+# ---------------------------------------------------------------- signals
+
+PACE_MIN_MINUTES = 6        # no pace call on a shorter stint
+PACE_THRESHOLD = 1.5        # |pace| for an arrow (see pace)
+MINUTES_UP_RATIO, MINUTES_UP_MIN = 1.25, 5   # minutes flag: 25% and 5 minutes over his usual
+STREAK_GAMES = 10
+STREAK_POINTS = 8           # last-10 OVR vs season OVR (0-100 display scale, 10 = 1 SD of value)
+PACE_SKIP = {'WIN%', 'DD2', 'TD3', 'PLUS_MINUS'}  # team results and thresholds don't pro-rate
+
+
+def _by_name(league):
+    from projections import norm_name
+    return _cached(('by_name', league.id, str(league.settings)),
+                   lambda: {norm_name(name): st for name, st in league_stats(league).items()})
+
+
+def pace(line, base, league, scale):
+    """How far ahead of his own per-minute norm a player is tonight, in SDs, or None.
+
+    Expected so far = his projected per-game line x (minutes tonight / projected minutes), so a
+    hot first quarter counts as hot. Each category is (tonight - expected) / the single-game noise
+    for that many minutes (variance grows with minutes, so a short stint needs a bigger surge);
+    categories are capped at +/-3 and summed / sqrt(count), about N(0,1) for an ordinary night.
+    Points leagues: the same on fantasy points. Baseline: the projection (`_proj`, the only
+    timeframe with minutes)."""
+    usual = base.get('MIN_proj') or 0
+    if line['MIN'] < PACE_MIN_MINUTES or usual < 1:
+        return None
+    f = line['MIN'] / usual
+    get = lambda stat: abs(base.get(f'{stat}_proj') or 0)
+    if league.is_points:
+        expected = fantasy_points({k: base.get(f'{k}_proj') or 0 for k in league.point_weights}, league.point_weights)
+        coef = CATEGORY_CATALOG['FPTS']['noise'][0][1]
+        var = coef * abs(expected) * f
+        return round((fantasy_points(line, league.point_weights) - expected * f) / var ** 0.5, 2) if var > 0 else None
+    inverse = set(league.inverse_categories)
+    zs = []
+    for cat in league.categories:
+        if cat in PACE_SKIP:
+            continue
+        spec = CATEGORY_CATALOG[cat]
+        if spec['kind'] == 'ratio':
+            pool_rate = scale[cat][2]
+            rate, att = _ratio(cat, line)
+            got = att * (rate - pool_rate) if att else 0.0
+            att_usual = sum(c * get(st) for st, c in spec['attempts'])
+            exp = f * att_usual * ((base.get(f'{cat}_proj') or pool_rate) - pool_rate)
+            var = f * att_usual * spec['attempt_sd'] ** 2
+        else:
+            got = game_value(cat, line)
+            exp = f * (base.get(f'{cat}_proj') or 0)
+            var = f * sum(c * (1.0 if st is None else get(st)) for st, c in spec['noise'])
+        if got is None or var <= 0:
+            continue
+        sign = -1.0 if cat in inverse else 1.0
+        zs.append(max(-3.0, min(3.0, sign * (got - exp) / var ** 0.5)))
+    return round(sum(zs) / len(zs) ** 0.5, 2) if zs else None
+
+
+def signals(line, base, league, scale, streaks_on):
+    """{pace, pace_signal, min_usual, minutes_up, streak} for one stat line; base = his stats row."""
+    if not base:
+        return {'pace': None, 'pace_signal': None, 'min_usual': None, 'minutes_up': False, 'streak': None}
+    p = pace(line, base, league, scale)
+    usual = base.get('MIN_proj') or 0
+    streak = None
+    if streaks_on and (base.get('GP') or 0) >= STREAK_GAMES:
+        diff = (base.get('SCORE_10') or 0) - (base.get('SCORE') or 0)
+        streak = 'hot' if diff >= STREAK_POINTS else 'cold' if diff <= -STREAK_POINTS else None
+    return {
+        'pace': p,
+        'pace_signal': None if p is None else 'up' if p >= PACE_THRESHOLD else 'down' if p <= -PACE_THRESHOLD else None,
+        'min_usual': round(usual, 1) if usual else None,
+        'minutes_up': bool(usual) and line['MIN'] >= usual * MINUTES_UP_RATIO and line['MIN'] - usual >= MINUTES_UP_MIN,
+        'streak': streak,
+    }
+
+
 # ---------------------------------------------------------------- the page
 
 def _name_index():
@@ -326,8 +410,10 @@ def daily_leaders(league, day=None, force=False):
     from projections import norm_name
     day = day or default_day()
     s = slate(day, force=force)
+    from player_stats import is_preseason
     scale = None if league.is_points else league_scale(league)
-    names, owned = _name_index(), owners(league)
+    names, owned, bases = _name_index(), owners(league), _by_name(league)
+    streaks_on = not is_preseason()
     states = {t['abbr']: g for g in s['scoreboard'] for t in g['teams']}
     players = []
     for lines in s['games'].values():
@@ -341,6 +427,7 @@ def daily_leaders(league, day=None, force=False):
                 'owner': ('mine' if team[0] == league.my_team else 'taken') if team else 'free',
                 'owner_abv': team[0] if team else None, 'owner_name': team[1] if team else None,
                 'game_state': game['state'] if game else None,
+                **signals(line, bases.get(norm_name(line['name'])), league, scale, streaks_on),
             })
     players.sort(key=lambda p: p['value'], reverse=True)
     for rank, p in enumerate(players, start=1):

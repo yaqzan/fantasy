@@ -35,6 +35,16 @@ export const zTint = (z) => {
   return a >= 2 ? 'bg-red-500/40 text-white' : a >= 1 ? 'bg-red-500/25' : 'bg-red-500/10';
 };
 
-export const OWNER_FILTERS = [['all', 'All'], ['free', 'Available'], ['mine', 'My team']];
+export const OWNER_FILTERS = [['all', 'All'], ['pickups', 'Pickups'], ['free', 'Available'], ['mine', 'My team']];
 
-export const keepRow = (filter, p) => filter === 'all' || p.owner === filter;
+// A free agent with a positive signal: ahead of his per-minute pace, well over his usual minutes
+// while at least half an SD ahead of pace (extra minutes alone flagged a quarter of preseason
+// free agents), or on a hot last-10 streak.
+export const isPickup = (p) => p.owner === 'free'
+  && (p.pace_signal === 'up' || (p.minutes_up && (p.pace ?? 0) >= 0.5) || p.streak === 'hot');
+
+export const keepRow = (filter, p) => filter === 'all' || (filter === 'pickups' ? isPickup(p) : p.owner === filter);
+
+// Pickups read best by pace; every other view by tonight's value (the server's order).
+export const sortRows = (filter, rows) => (filter === 'pickups'
+  ? [...rows].sort((a, b) => (b.pace ?? -99) - (a.pace ?? -99)) : rows);

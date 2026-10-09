@@ -47,8 +47,8 @@ stats) is shared by all leagues.
   values the league no longer has (a category, a week, a position chip). `<main key={leagueId}>`
   remounts every tab on a switch, so each reads its own league's state (test:
   `frontend/src/useLeagueViewState.test.js`, `CI=true npx react-scripts test --watchAll=false`). Draft mode is per league
-  too (`fantasy.draftMode.<league>`); by default on until 6 h past the draft date, or with no date
-  while nobody in the league has players (`config.rostered`).
+  too (`fantasy.draftMode.<league>`); off unless toggled on. Daily Leaders is the first tab and
+  the one the app opens on (falls back to Player Rankings in draft mode).
 - **Scoring mode.** `settings.scoring`: `{type: 'categories'|'points', points: {stat: weight}}`. A points
   league's only category is `FPTS`: `player_stats.add_fantasy_points` folds the league's weights
   (`POINT_STATS` keys) into a per-game `FPTS{n}` for every timeframe, then z-scores, totals, weekly
@@ -188,6 +188,18 @@ stats) is shared by all leagues.
   -3, an efficient 10-shot night +3 TS%. Measured on 2026-10-08 (WSOP): 1.84 capped cells per
   player vs 0.09, and a 12-3-0 line (2 stl, 2 blk, a win) ranked first over a 22-10-3-blk line.
   The two orders still agree broadly (Spearman 0.94, 8 of the top 10 shared, both leagues).
+  **Signals** (`daily_leaders.signals`): *pace* (▲/▼ by Val) = tonight vs his own per-minute norm:
+  expected = projected per-game line x (minutes tonight / projected minutes; `_proj` is the only
+  timeframe with minutes, so real season minutes are a later pull), per category (tonight -
+  expected) / single-game noise for that many minutes, capped +/-3, summed / sqrt(count); W, DD,
+  TD, +/- skipped. So a hot first quarter shows, and a short stint needs a bigger surge; 6-minute
+  floor; arrow at |pace| >= 1.5. 2026-10-06..08: SD 1.07-1.15 in category leagues (≈N(0,1)), ~10%
+  up / 5% down; the points league runs narrower (SD 0.75, ~4% flagged: its 6.0x FPTS noise looks
+  high for preseason minutes, recheck in season). *Minutes* (green `27m`): >= 1.25x and +5 over
+  projected minutes (15-18% of preseason lines; rotations). *Streak* (🔥/🧊): last-10 SCORE vs
+  season SCORE, +/-8 (0.8 SD of value), off in preseason and under 10 games. *Pickups* chip: free
+  agents with pace up, or minutes up at pace >= 0.5, or hot; sorted by pace (9-23 a night; minutes
+  alone made it 28-46).
   `daily_player_stats` (old per-player nba_api scrape) is no longer written or read.
 - **Team Manager** (`/api/team-rosters`, one request for every team): rosters best first, each
   healthy starter's slot (BN = bench) and the starters' average OVR from `best_starters`, and
