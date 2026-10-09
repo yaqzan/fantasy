@@ -52,8 +52,9 @@ must keep its `sm:` twin.
 - **Phones keep only what drafting needs on screen; levers are one tap away.**
 - Header: one row, logo + league picker + a menu button (colours, Settings, New league, guillotine stage).
 - Tabs scroll sideways in one row; the draft-mode pill sits outside the scrolling strip.
-- Fantasy Teams panel: hidden on phones in draft mode (the room strip has every team's $ and spots),
-  folded by default otherwise; team columns get an 8.5rem floor on phones only.
+- Fantasy Teams panel: phones get it as the last tab, **Teams** (`TeamManager asTab`, `useIsPhone` in
+  App.js): rosters in a 2-column grid, no fold, no Add team (teams come from the platform syncs; the
+  edit pencil stays). Wider screens keep the panel above the tabs.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
 - Daily Leaders: one pinned column (8rem: rank, name, team, minutes, owner chip on other teams'

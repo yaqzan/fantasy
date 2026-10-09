@@ -19,14 +19,29 @@ import {
 const ALL_TABS = [
   ['daily', 'Daily Leaders', true], ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true],
   ['pickups', 'Weekly Pickups', true], ['projections', 'Projections'], ['standings', 'Team Standings', true],
-  ['draft', 'Draft Day'],
+  ['draft', 'Draft Day'], ['teams', 'Teams'],
 ];
+
+// Phones fold the Fantasy Teams panel into the Teams tab; wider screens keep it above the tabs.
+const PHONE = '(max-width: 639px)';
+const useIsPhone = () => {
+  const [isPhone, setIsPhone] = useState(() => Boolean(window.matchMedia?.(PHONE).matches));
+  useEffect(() => {
+    const mq = window.matchMedia?.(PHONE);
+    if (!mq) return undefined;
+    const onChange = () => setIsPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isPhone;
+};
 
 function App() {
   const [players, setPlayers] = useState([]);
   const [fantasyTeams, setFantasyTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState({});
+  const isPhone = useIsPhone();
   // /draft opens the Draft Day tab directly (Flask serves index.html for every non-API path).
   // Otherwise the server picks (null until it answers): Daily Leaders from the first tip-off until
   // 8 am Eastern the next morning, Player Rankings the rest of the time. A click always wins.
@@ -69,11 +84,11 @@ function App() {
   // The Draft Day plan is built for one league (capability draft_plan).
   const draftPlan = draftMode && caps.draft_plan && draftPlanData?.league === leagueId ? draftPlanData : null;
 
-  const TABS = ALL_TABS.filter(([key, , inSeason]) => !(draftMode && inSeason) && (key !== 'draft' || caps.draft_plan));
+  const TABS = ALL_TABS.filter(([key, , inSeason]) => !(draftMode && inSeason) && (key !== 'draft' || caps.draft_plan) && (key !== 'teams' || isPhone));
   useEffect(() => {
     if (!loading && activeTab !== null && !TABS.some(([key]) => key === activeTab)) setActiveTab('players');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftMode, caps.draft_plan, loading, activeTab === null]);
+  }, [draftMode, caps.draft_plan, isPhone, loading, activeTab === null]);
 
   useEffect(() => {
     loadLeagues();
@@ -223,10 +238,11 @@ function App() {
         {loadError && (
           <div className="mb-4 p-3 rounded bg-red-900/40 border border-red-700 text-red-200 text-sm">{loadError}</div>
         )}
-        {/* Phones in draft mode: the board's room strip already shows every team's money and spots */}
-        <div className={`mb-4 sm:mb-8 ${draftMode ? 'hidden sm:block' : ''}`}>
-          <TeamManager teams={fantasyTeams} onTeamUpdate={refreshData} refreshTrigger={players.length} config={config} />
-        </div>
+        {!isPhone && (
+          <div className="mb-8">
+            <TeamManager teams={fantasyTeams} onTeamUpdate={refreshData} refreshTrigger={players.length} config={config} />
+          </div>
+        )}
 
         {/* Tab Navigation */}
         {/* Phones: the tabs scroll sideways in one row; the draft-mode pill stays put */}
@@ -277,6 +293,9 @@ function App() {
         {activeTab === 'daily' && <DailyLeaders config={config} />}
         {activeTab === 'standings' && <TeamStandings config={config} />}
         {activeTab === 'draft' && <DraftDay />}
+        {activeTab === 'teams' && isPhone && (
+          <TeamManager teams={fantasyTeams} onTeamUpdate={refreshData} refreshTrigger={players.length} config={config} asTab />
+        )}
       </main>
     </div>
   );

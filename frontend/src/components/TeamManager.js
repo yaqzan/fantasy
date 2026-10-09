@@ -5,8 +5,8 @@ import {
 } from '../services/api';
 
 // The league's teams and rosters. Roster size and slots follow the league; Eliminate/Restore only
-// show in guillotine leagues.
-const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
+// show in guillotine leagues. asTab: the phone Teams tab (no fold, no Add team, rosters in a grid).
+const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config, asTab = false }) => {
   const rosterSize = config?.league?.settings?.roster?.size || 13;
   const guillotine = Boolean(config?.capabilities?.guillotine);
   const hasSlots = Boolean(config?.capabilities?.positions?.length);
@@ -21,8 +21,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
   const [editTeamName, setEditTeamName] = useState('');
   const [editTeamAbbrev, setEditTeamAbbrev] = useState('');
   const [teamBlockWidth, setTeamBlockWidth] = useState('calc(8% - 0.25rem)');
-  // Folded by default on phones, where 16 rosters would push the tabs off the first screen.
-  const [expanded, setExpanded] = useState(() => !window.matchMedia?.('(max-width: 639px)').matches);
+  const [expanded, setExpanded] = useState(true);
   const containerRef = useRef(null);
 
   // Calculate optimal team block width
@@ -202,8 +201,8 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
   
 
   return (
-    <div className="bg-gray-800 rounded-lg shadow-lg p-3 sm:p-6">
-      <div className={`flex items-center justify-between ${expanded ? 'mb-3 sm:mb-4' : ''}`}>
+    <div className={asTab ? '' : 'bg-gray-800 rounded-lg shadow-lg p-3 sm:p-6'}>
+      {!asTab && <div className={`flex items-center justify-between ${expanded ? 'mb-3 sm:mb-4' : ''}`}>
         <button onClick={() => setExpanded(!expanded)} aria-expanded={expanded}
           className="flex items-center gap-2 text-base sm:text-lg font-semibold text-white">
           <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -213,14 +212,14 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config }) => {
           {!expanded && teams.length > 0 && <span className="text-xs font-normal text-gray-400">{teams.length}</span>}
         </button>
         <button onClick={() => setShowModal(true)} className="btn-secondary text-sm py-1.5 sm:py-2">Add team</button>
-      </div>
+      </div>}
 
       {!expanded ? null : teams.length === 0 ? (
         <p className="text-gray-400 text-center py-4">No fantasy teams created yet.</p>
       ) : (
-        <div ref={containerRef} className="flex flex-nowrap gap-1 overflow-x-auto thin-scrollbar">
+        <div ref={containerRef} className={asTab ? 'grid grid-cols-2 gap-1' : 'flex flex-nowrap gap-1 overflow-x-auto thin-scrollbar'}>
           {sortedTeams.map((team) => (
-            <div key={team.id} className={`bg-gray-700 rounded p-0.5 group hover:bg-gray-600 transition-colors flex-shrink-0 min-h-64 min-w-[8.5rem] sm:min-w-0 ${team.eliminated_stage ? 'opacity-40' : ''}`} style={{width: teamBlockWidth}}>
+            <div key={team.id} className={`bg-gray-700 rounded p-0.5 group hover:bg-gray-600 transition-colors min-w-0 ${asTab ? 'pb-1' : 'flex-shrink-0 min-h-64'} ${team.eliminated_stage ? 'opacity-40' : ''}`} style={asTab ? undefined : {width: teamBlockWidth}}>
               <div className="text-center mb-1 relative">
                 <h4 className="font-medium text-white text-xs truncate leading-tight">{team.name}</h4>
                 {team.abbreviation && (
