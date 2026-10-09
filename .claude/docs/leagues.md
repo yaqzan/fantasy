@@ -200,6 +200,12 @@ stats) is shared by all leagues.
   season SCORE, +/-8 (0.8 SD of value), off in preseason and under 10 games. *Pickups* chip: free
   agents with pace up, or minutes up at pace >= 0.5, or hot; sorted by pace (9-23 a night; minutes
   alone made it 28-46).
+  **Preseason** is per game, from ESPN's season type (1 pre, 2 regular, 3 playoffs, 5 play-in);
+  the stored schedule agrees (`season_first_game`: 2026-10-20). Starters sit second halves, so
+  minutes are rotations and raw Val favours reserves: no minutes flag, arrows hollow (△▽), default
+  sort Pace (a Val/Pace toggle, remembered per league once picked), Pickups = pace up among
+  rotation players only (projected 15+ min: 2-12 a night on 10-06..08 vs 7-17 without), and a note
+  naming opening night. Regular-season games switch all of it back on their own.
   `daily_player_stats` (old per-player nba_api scrape) is no longer written or read.
 - **Team Manager** (`/api/team-rosters`, one request for every team): rosters best first, each
   healthy starter's slot (BN = bench) and the starters' average OVR from `best_starters`, and

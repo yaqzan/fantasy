@@ -35,16 +35,24 @@ export const zTint = (z) => {
   return a >= 2 ? 'bg-red-500/40 text-white' : a >= 1 ? 'bg-red-500/25' : 'bg-red-500/10';
 };
 
-export const OWNER_FILTERS = [['all', 'All'], ['pickups', 'Pickups'], ['free', 'Available'], ['mine', 'My team']];
+// [key, label, phone label]
+export const OWNER_FILTERS = [['all', 'All', 'All'], ['pickups', 'Pickups', 'Pickups'], ['free', 'Available', 'Free'], ['mine', 'My team', 'Mine']];
 
 // A free agent with a positive signal: ahead of his per-minute pace, well over his usual minutes
 // while at least half an SD ahead of pace (extra minutes alone flagged a quarter of preseason
-// free agents), or on a hot last-10 streak.
-export const isPickup = (p) => p.owner === 'free'
-  && (p.pace_signal === 'up' || (p.minutes_up && (p.pace ?? 0) >= 0.5) || p.streak === 'hot');
+// free agents), or on a hot last-10 streak. Preseason: pace only, and only for rotation players
+// (projected 15+ minutes); a deep reserve beating other reserves in the fourth quarter isn't one.
+export const PRESEASON_ROTATION_MIN = 15;
+export const isPickup = (p) => p.owner === 'free' && (p.preseason
+  ? p.pace_signal === 'up' && (p.min_usual ?? 0) >= PRESEASON_ROTATION_MIN
+  : p.pace_signal === 'up' || (p.minutes_up && (p.pace ?? 0) >= 0.5) || p.streak === 'hot');
 
 export const keepRow = (filter, p) => filter === 'all' || (filter === 'pickups' ? isPickup(p) : p.owner === filter);
 
-// Pickups read best by pace; every other view by tonight's value (the server's order).
-export const sortRows = (filter, rows) => (filter === 'pickups'
+// Sort by tonight's value (the server's order) or by pace. Pickups always read by pace.
+export const sortRows = (filter, rows, sort = 'val') => (filter === 'pickups' || sort === 'pace'
   ? [...rows].sort((a, b) => (b.pace ?? -99) - (a.pace ?? -99)) : rows);
+
+// Preseason starters sit the second half, so raw value favours reserves: sort by pace then,
+// unless the user picked a sort.
+export const defaultSort = (preseason) => (preseason ? 'pace' : 'val');

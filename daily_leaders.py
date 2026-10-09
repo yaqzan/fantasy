@@ -77,6 +77,8 @@ def _scoreboard(day):
         games.append({
             'id': event['id'],
             'state': status['state'],          # pre | in | post
+            # ESPN season type: 1 preseason, 2 regular season, 3 playoffs, 5 play-in
+            'preseason': (event.get('season') or {}).get('type') == 1,
             'detail': status.get('shortDetail') or status.get('detail'),
             'start': event.get('date'),
             'teams': [{'abbr': c['team']['abbreviation'], 'score': int(c['score']) if c.get('score') else None,
@@ -372,7 +374,7 @@ def pace(line, base, league, scale):
     return round(sum(zs) / len(zs) ** 0.5, 2) if zs else None
 
 
-def signals(line, base, league, scale, streaks_on):
+def signals(line, base, league, scale, streaks_on, preseason=False):
     """{pace, pace_signal, min_usual, minutes_up, streak} for one stat line; base = his stats row."""
     if not base:
         return {'pace': None, 'pace_signal': None, 'min_usual': None, 'minutes_up': False, 'streak': None}
@@ -386,7 +388,9 @@ def signals(line, base, league, scale, streaks_on):
         'pace': p,
         'pace_signal': None if p is None else 'up' if p >= PACE_THRESHOLD else 'down' if p <= -PACE_THRESHOLD else None,
         'min_usual': round(usual, 1) if usual else None,
-        'minutes_up': bool(usual) and line['MIN'] >= usual * MINUTES_UP_RATIO and line['MIN'] - usual >= MINUTES_UP_MIN,
+        # Preseason minutes are rotations (starters sit second halves), not roles: no minutes flag.
+        'minutes_up': (not preseason and bool(usual) and line['MIN'] >= usual * MINUTES_UP_RATIO
+                       and line['MIN'] - usual >= MINUTES_UP_MIN),
         'streak': streak,
     }
 
@@ -410,7 +414,7 @@ def daily_leaders(league, day=None, force=False):
     from projections import norm_name
     day = day or default_day()
     s = slate(day, force=force)
-    from player_stats import is_preseason
+    from player_stats import is_preseason, season_first_game
     scale = None if league.is_points else league_scale(league)
     names, owned, bases = _name_index(), owners(league), _by_name(league)
     streaks_on = not is_preseason()
@@ -427,7 +431,9 @@ def daily_leaders(league, day=None, force=False):
                 'owner': ('mine' if team[0] == league.my_team else 'taken') if team else 'free',
                 'owner_abv': team[0] if team else None, 'owner_name': team[1] if team else None,
                 'game_state': game['state'] if game else None,
-                **signals(line, bases.get(norm_name(line['name'])), league, scale, streaks_on),
+                'preseason': bool(game and game.get('preseason')),
+                **signals(line, bases.get(norm_name(line['name'])), league, scale, streaks_on,
+                          preseason=bool(game and game.get('preseason'))),
             })
     players.sort(key=lambda p: p['value'], reverse=True)
     for rank, p in enumerate(players, start=1):
@@ -442,4 +448,6 @@ def daily_leaders(league, day=None, force=False):
         'refresh_seconds': REFRESH_SECONDS, 'live': live,
         'games': s['scoreboard'], 'players': players,
         'scoring': 'points' if league.is_points else 'categories',
+        'preseason': any(g.get('preseason') for g in s['scoreboard']),
+        'season_start': (lambda d: d.isoformat() if d else None)(season_first_game()),
     }

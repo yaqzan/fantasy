@@ -1,4 +1,4 @@
-import { cellText, zTint, keepRow, sortRows } from './dailyLeaders';
+import { cellText, zTint, keepRow, sortRows, isPickup } from './dailyLeaders';
 
 const line = { PTS: 22, FGM: 6, FGA: 17, FG3M: 3, FTM: 7, FTA: 8, AST: 2, TOV: 0, PLUS_MINUS: 5, W: 1 };
 
@@ -40,4 +40,16 @@ test('pickups: free agents with a positive signal, best pace first', () => {
   ];
   const kept = sortRows('pickups', rows.filter(p => keepRow('pickups', p)));
   expect(kept.map(p => p.pace)).toEqual([1.6, 0.7, null]);
+});
+
+test('preseason pickups: pace only, rotation players only', () => {
+  expect(isPickup({ owner: 'free', preseason: true, pace_signal: 'up', min_usual: 20 })).toBe(true);
+  expect(isPickup({ owner: 'free', preseason: true, pace_signal: 'up', min_usual: 8 })).toBe(false);
+  expect(isPickup({ owner: 'free', preseason: true, minutes_up: true, pace: 1, min_usual: 20 })).toBe(false);
+});
+
+test('pace sort', () => {
+  const rows = [{ pace: 0.1 }, { pace: 2 }, { pace: null }];
+  expect(sortRows('all', rows, 'pace').map(r => r.pace)).toEqual([2, 0.1, null]);
+  expect(sortRows('all', rows, 'val')).toBe(rows);
 });

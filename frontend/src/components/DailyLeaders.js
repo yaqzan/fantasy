@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
-import { BOX_COLUMNS, OWNER_FILTERS, cellText, zTint, keepRow, isPickup, sortRows } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, cellText, zTint, keepRow, isPickup, sortRows, defaultSort } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -34,7 +34,7 @@ const GameChip = ({ game }) => {
 
 const DailyLeaders = ({ config }) => {
   const points = config?.capabilities?.scoring === 'points';
-  const [{ owner: ownerFilter }, setView] = useLeagueViewState(config?.league?.id, 'daily', { owner: 'all' });
+  const [{ owner: ownerFilter, sort: pickedSort }, setView] = useLeagueViewState(config?.league?.id, 'daily', { owner: 'all' });
   const [day, setDay] = useState(null);      // null = the server's default (today once games tip)
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -71,7 +71,8 @@ const DailyLeaders = ({ config }) => {
 
   const shown = data?.date || day;
   const columns = points ? BOX_COLUMNS : (data?.categories || config?.categories || []).map(c => ({ key: c.key, label: c.label }));
-  const rows = sortRows(ownerFilter, (data?.players || []).filter(p => keepRow(ownerFilter, p)));
+  const sort = pickedSort || defaultSort(data?.preseason);
+  const rows = sortRows(ownerFilter, (data?.players || []).filter(p => keepRow(ownerFilter, p)), sort);
   const counts = (data?.players || []).reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }),
                                               { pickups: (data?.players || []).filter(isPickup).length });
 
@@ -116,14 +117,28 @@ const DailyLeaders = ({ config }) => {
       </div>
 
       <div className="flex gap-1 mb-2 sm:mb-3 overflow-x-auto">
-        {OWNER_FILTERS.map(([key, label]) => (
+        {OWNER_FILTERS.map(([key, label, short]) => (
           <button key={key} onClick={() => setView({ owner: key })}
-                  className={`shrink-0 px-2.5 py-1 rounded-full border text-xs font-medium ${ownerFilter === key
+                  className={`shrink-0 px-2 sm:px-2.5 py-1 rounded-full border text-xs font-medium ${ownerFilter === key
                     ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-600 text-gray-300 hover:text-white'}`}>
-            {label}{key !== 'all' && counts[key] ? <span className="opacity-70"> {counts[key]}</span> : ''}
+            <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="opacity-70"> {counts[key]}</span> : ''}
           </button>
         ))}
+        <div className="ml-auto shrink-0 flex rounded-full border border-gray-600 text-xs overflow-hidden"
+             title="Val: what he put up tonight. Pace: how far ahead of his own per-minute norm.">
+          {[['val', points ? 'FPTS' : 'Val'], ['pace', 'Pace']].map(([key, label]) => (
+            <button key={key} onClick={() => setView({ sort: key })}
+                    className={`px-2.5 py-1 ${sort === key ? 'bg-gray-600 text-white' : 'text-gray-400'}`}>{label}</button>
+          ))}
+        </div>
       </div>
+
+      {data?.preseason && (
+        <div className="text-[11px] sm:text-xs text-amber-300/90 mb-2">
+          Preseason: starters sit second halves, so raw value favours reserves. Sorted by pace; no minutes flags
+          {data.season_start && <> · regular season {new Date(`${data.season_start}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</>}
+        </div>
+      )}
 
       {data?.games?.length > 0 && (
         <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2 sm:mb-3">
@@ -191,7 +206,7 @@ const DailyLeaders = ({ config }) => {
                         {p.pace_signal && (
                           <span className={`ml-0.5 text-[10px] ${p.pace_signal === 'up' ? 'text-green-400' : 'text-red-400'}`}
                                 title={`${p.pace > 0 ? '+' : ''}${p.pace} SD against his per-minute norm`}>
-                            {p.pace_signal === 'up' ? '▲' : '▼'}
+                            {p.pace_signal === 'up' ? (p.preseason ? '△' : '▲') : (p.preseason ? '▽' : '▼')}
                           </span>
                         )}
                       </span>
