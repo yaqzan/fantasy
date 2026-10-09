@@ -89,6 +89,15 @@ def tick(day, cur, on_done=None):
         log.close()
 
 
+def next_check(day):
+    """Epoch the poller should look at this night's refresh again, or None: every 2 minutes while
+    the pull runs (to catch its exit), else the retry time."""
+    run = _runs.get(day)
+    if run is None or run['done']:
+        return None
+    return time.time() + 120 if run['proc'] is not None else run['next']
+
+
 def status():
     """{date: last outcome} for the API (what the page can show about season stats)."""
     return {d.isoformat(): {'done': r['done'], 'running': r['proc'] is not None, 'tries': r['tries'], 'last': r['last']}

@@ -6,7 +6,7 @@ import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, cellTex
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
 // highlighted, other teams' dimmed, free agents plain. The server refetches ESPN at most every
-// 10 minutes (a background poller, page open or not); the page re-asks when new data can exist.
+// 5 minutes while games are on (a background poller, page open or not); the page re-asks when new data can exist.
 const shiftDate = (iso, days) => {
   const d = new Date(`${iso}T12:00:00`);
   d.setDate(d.getDate() + days);

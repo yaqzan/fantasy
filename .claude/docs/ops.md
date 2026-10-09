@@ -12,8 +12,8 @@
   `hidden_run.vbs`. With `-Controller` it calls `server.ps1 start -Service fantasy-api|fantasy-tunnel`;
   without, it starts `python backend\app.py` / cloudflared itself. Logs in `ops/windows/logs/`.
 - **No cron jobs for data.** The API process runs a poller thread (`daily_leaders.start_poller`,
-  started in `backend/app.py`, ticks every 60 s, no network call unless something is due): ESPN
-  every 10 min while games are on; **ESPN fold**: when ESPN calls a regular-season game final, its
+  started in `backend/app.py`; sleeps until the next thing is due, see leagues.md "Daily Leaders"):
+  ESPN every 5 min while games are on; **ESPN fold**: when ESPN calls a regular-season game final, its
   lines go into `game_lines` and those players' season / last-5 / last-10 totals are recomputed at
   once (`game_log.py`; same `apply_game_stats` as the NBA pull. 2026-04-10 sandbox: 321 folded
   players equal the official totals, times blocked excepted, which is approximate between pulls).

@@ -22,9 +22,9 @@ import requests
 from leagues import CATEGORY_CATALOG, fantasy_points
 
 ESPN = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba'
-REFRESH_SECONDS = 10 * 60   # a live slate is refetched at most this often (~300 ESPN calls on a 15-game night)
+REFRESH_SECONDS = 5 * 60    # a live slate is refetched this often (~0.9 s CPU per 5 games; ~550 ESPN calls on a 15-game night)
 IDLE_REFRESH_SECONDS = 3 * 3600  # a slate with nothing started yet (tip-off times can move)
-POLL_TICK_SECONDS = 60
+MIN_SLEEP, MAX_SLEEP = 30, 3 * 3600  # the poller sleeps until the next thing is due, within these
 FORCE_FLOOR_SECONDS = 120   # the Refresh button can't go faster than this
 SCALE_SECONDS = 60 * 60     # league pools and the name index change slowly
 NBA_TZ = ZoneInfo('America/New_York')  # an NBA "day" is an Eastern-time date
@@ -154,24 +154,52 @@ def _started(cur):
                for g in cur['scoreboard'])
 
 
+def _all_final(cur):
+    return bool(cur['scoreboard']) and all(g['state'] == 'post' and g['id'] in cur['final'] for g in cur['scoreboard'])
+
+
 def _due(cur, floor):
     """Should a cached day be refetched? Never once every game is stored final."""
     if cur is None:
         return True
-    if cur['scoreboard'] and all(g['state'] == 'post' and g['id'] in cur['final'] for g in cur['scoreboard']):
+    if _all_final(cur):
         return False
     return time.time() - cur['fetched'] >= floor
 
 
+def due_at(cur):
+    """Epoch when the poller next refetches a day, or None once every game is final: while a game
+    is on, REFRESH_SECONDS after the last fetch; before tip-off, the first tip (or the idle
+    recheck, if sooner)."""
+    if cur is None:
+        return 0.0
+    if _all_final(cur):
+        return None
+    if _started(cur):
+        return cur['fetched'] + REFRESH_SECONDS
+    tips = [datetime.fromisoformat(g['start'].replace('Z', '+00:00')).timestamp()
+            for g in cur['scoreboard'] if g['state'] == 'pre' and g.get('start')]
+    return min([cur['fetched'] + IDLE_REFRESH_SECONDS] + tips)
+
+
+def _polled_days():
+    today = nba_today()
+    return (today - timedelta(days=1), today)
+
+
 def slate(day, force=False, poll=False):
-    """The date's games and stat lines, refetched when due: a page request after REFRESH_SECONDS
-    (FORCE_FLOOR_SECONDS with force); the poller the same while games are on, else every
-    IDLE_REFRESH_SECONDS."""
+    """The date's games and stat lines. The poller owns today and yesterday (refetched at due_at);
+    a page request only fetches a day nobody has cached, another day after REFRESH_SECONDS while it
+    has unfinished games, or anything with force (FORCE_FLOOR_SECONDS)."""
     with _lock:
         cur = _days.get(day)
-        floor = (FORCE_FLOOR_SECONDS if force else
-                 IDLE_REFRESH_SECONDS if poll and cur and not _started(cur) else REFRESH_SECONDS)
-        if _due(cur, floor):
+        if poll:
+            stale = cur is None or (due_at(cur) is not None and time.time() >= due_at(cur))
+        elif force:
+            stale = _due(cur, FORCE_FLOOR_SECONDS)
+        else:
+            stale = cur is None or (day not in _polled_days() and _due(cur, REFRESH_SECONDS))
+        if stale:
             games = dict(cur['games']) if cur else {}
             finished = set(cur['final']) if cur else set()
             board = _scoreboard(day)
@@ -192,16 +220,24 @@ def slate(day, force=False, poll=False):
 
 
 def poll_once():
-    """One poller pass: today, and yesterday until its late games are final."""
-    today = nba_today()
+    """One poller pass: today, and yesterday until its late games are final. Returns the epoch the
+    next pass is due: the soonest day refetch, stats-refresh check, or Eastern midnight (a new day
+    to watch)."""
     import nightly_stats
-    for day in (today - timedelta(days=1), today):
+    wake = []
+    for day in _polled_days():
         try:
-            nightly_stats.tick(day, slate(day, poll=True), on_done=_forget_stats)
-        except Exception as e:  # ESPN down or slow: try again next tick
+            cur = slate(day, poll=True)
+            nightly_stats.tick(day, cur, on_done=_forget_stats)
+            wake += [due_at(cur), nightly_stats.next_check(day)]
+        except Exception as e:  # ESPN down or slow: try again soon
             print(f'daily leaders poll {day}: {e}')
+            wake.append(time.time() + REFRESH_SECONDS)
+    today = nba_today()
     for day in [d for d in _days if d < today - timedelta(days=7)]:
         _days.pop(day, None)  # browsed old dates don't pile up
+    midnight = datetime.combine(today + timedelta(days=1), datetime.min.time(), NBA_TZ).timestamp() + 60
+    return min([w for w in wake if w is not None] + [midnight])
 
 
 def _forget_stats():
@@ -214,15 +250,20 @@ _poller = None
 
 
 def start_poller():
-    """Run poll_once every POLL_TICK_SECONDS in a daemon thread (once per process). Cheap when
-    nothing is due: no network call."""
+    """Run poll_once in a daemon thread (once per process), sleeping until the next thing is due
+    (MIN_SLEEP..MAX_SLEEP): a 5-minute rhythm only while games are on, one wake at tip-off,
+    otherwise a few a day."""
     global _poller
     if _poller is not None:
         return
     def loop():
         while True:
-            poll_once()
-            time.sleep(POLL_TICK_SECONDS)
+            try:
+                wake = poll_once()
+            except Exception as e:
+                print(f'daily leaders poller: {e}')
+                wake = time.time() + REFRESH_SECONDS
+            time.sleep(max(MIN_SLEEP, min(MAX_SLEEP, wake - time.time())))
     _poller = threading.Thread(target=loop, name='daily-leaders-poller', daemon=True)
     _poller.start()
 
@@ -477,7 +518,8 @@ def daily_leaders(league, day=None, force=False):
     return {
         'date': day.isoformat(), 'today': nba_today().isoformat(),
         'fetched_at': fetched.isoformat(),
-        'next_refresh_at': (fetched + timedelta(seconds=REFRESH_SECONDS)).isoformat() if pending else None,
+        'next_refresh_at': (lambda t: datetime.fromtimestamp(max(t, time.time())).astimezone().isoformat() if t is not None else None)(
+            due_at(s) if day in _polled_days() else (s['fetched'] + REFRESH_SECONDS if pending else None)),
         'refresh_seconds': REFRESH_SECONDS, 'live': live,
         'games': s['scoreboard'], 'players': players,
         'scoring': 'points' if league.is_points else 'categories',

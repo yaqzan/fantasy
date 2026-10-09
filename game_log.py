@@ -4,7 +4,7 @@ Two writers, one calculation:
 - The NBA pull (pull_api_data.update_all_player_stats) stores every game of the official game log
   (source 'nba') and recomputes each player.
 - ESPN, the moment it calls a regular-season game final (daily_leaders.slate), folds that game's
-  lines in (source 'espn') and recomputes those players, so averages are fresh within ~10 minutes
+  lines in (source 'espn') and recomputes those players, so averages are fresh within ~5 minutes
   of the buzzer instead of waiting for stats.nba.com. Checked 2026-04-10: all 325 ESPN lines equal
   the NBA log on every box stat and W.
 The NBA's rows replace ESPN's (same player and date) and an ESPN row older than the NBA log's

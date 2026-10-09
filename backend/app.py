@@ -749,7 +749,7 @@ def pickups():
 @fantasy_api.route('/daily-leaders', methods=['GET'])
 def get_daily_leaders():
     """Every stat line of a date (default: today once a game has tipped, else yesterday), scored by
-    the league and marked mine / taken / free. ESPN is refetched at most every 10 minutes while
+    the league and marked mine / taken / free. ESPN is refetched every 5 minutes while
     games are unfinished (a background poller does it unasked); ?refresh=1 lowers that to 2 minutes (daily_leaders.py)."""
     from daily_leaders import daily_leaders
     date_str = request.args.get('date')
