@@ -749,8 +749,8 @@ def pickups():
 @fantasy_api.route('/daily-leaders', methods=['GET'])
 def get_daily_leaders():
     """Every stat line of a date (default: today once a game has tipped, else yesterday), scored by
-    the league and marked mine / taken / free. ESPN is refetched at most every 15 minutes while
-    games are unfinished; ?refresh=1 lowers that to 2 minutes (daily_leaders.py)."""
+    the league and marked mine / taken / free. ESPN is refetched at most every 10 minutes while
+    games are unfinished (a background poller does it unasked); ?refresh=1 lowers that to 2 minutes (daily_leaders.py)."""
     from daily_leaders import daily_leaders
     date_str = request.args.get('date')
     try:
@@ -791,6 +791,11 @@ def favicon():
 
 # The API lives under /api; everything else is the React app (one origin, like the other apps).
 app.register_blueprint(fantasy_api, url_prefix='/api')
+
+# Keep today's Daily Leaders current in the background (not under pytest: no network in tests).
+if 'pytest' not in sys.modules:
+    from daily_leaders import start_poller
+    start_poller()
 
 # Serve the built React app (npm --prefix frontend run build). Unknown paths get index.html.
 FRONTEND_BUILD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'frontend', 'build')

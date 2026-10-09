@@ -5,8 +5,9 @@ this host (403) and stats.nba.com box scores stay empty until well after a game 
 can be live. ESPN's play-by-play gives what its box score lacks: times blocked (a block play's
 first participant is the shooter) and technical fouls.
 
-Fetching is lazy and throttled: a date is refetched at most every REFRESH_SECONDS, only for games
-not yet final; a finished game is kept for the life of the process. Nobody looking = no calls.
+Throttled: a date is refetched at most every REFRESH_SECONDS, only its unfinished games; a finished
+game is kept for the life of the process. A background poller (start_poller) keeps today and last
+night's late games current whether or not anyone has the page open, so it is ready when opened.
 """
 import re
 import threading
@@ -20,7 +21,9 @@ import requests
 from leagues import CATEGORY_CATALOG, fantasy_points
 
 ESPN = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba'
-REFRESH_SECONDS = 15 * 60   # a live slate is refetched at most this often
+REFRESH_SECONDS = 10 * 60   # a live slate is refetched at most this often (~300 ESPN calls on a 15-game night)
+IDLE_REFRESH_SECONDS = 3 * 3600  # a slate with nothing started yet (tip-off times can move)
+POLL_TICK_SECONDS = 60
 FORCE_FLOOR_SECONDS = 120   # the Refresh button can't go faster than this
 SCALE_SECONDS = 60 * 60     # league pools and the name index change slowly
 NBA_TZ = ZoneInfo('America/New_York')  # an NBA "day" is an Eastern-time date
@@ -45,8 +48,22 @@ def nba_today():
 
 # ---------------------------------------------------------------- ESPN
 
+def _session():
+    """One kept-alive connection, retried with backoff: ESPN drops a TLS handshake now and then
+    (SSL EOF on 2 of 6 calls, 2026-10-09)."""
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    session = requests.Session()
+    retry = Retry(total=3, backoff_factor=1.0, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=('GET',))
+    session.mount('https://', HTTPAdapter(max_retries=retry))
+    return session
+
+
+_http = _session()
+
+
 def _get(path, **params):
-    resp = requests.get(f'{ESPN}/{path}', params=params, timeout=15)
+    resp = _http.get(f'{ESPN}/{path}', params=params, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
@@ -125,27 +142,77 @@ def _summary(game):
     return lines
 
 
-def slate(day, force=False):
-    """The date's games and stat lines, refetched when older than REFRESH_SECONDS (or
-    FORCE_FLOOR_SECONDS with force) and not every game is final."""
+def _started(cur):
+    """A game is on or has just ended and isn't stored as final yet."""
+    now = datetime.now().astimezone()
+    return any(g['state'] == 'in' or (g['state'] == 'post' and g['id'] not in cur['final'])
+               or (g['state'] == 'pre' and g['start'] and datetime.fromisoformat(g['start'].replace('Z', '+00:00')) <= now)
+               for g in cur['scoreboard'])
+
+
+def _due(cur, floor):
+    """Should a cached day be refetched? Never once every game is stored final."""
+    if cur is None:
+        return True
+    if cur['scoreboard'] and all(g['state'] == 'post' and g['id'] in cur['final'] for g in cur['scoreboard']):
+        return False
+    return time.time() - cur['fetched'] >= floor
+
+
+def slate(day, force=False, poll=False):
+    """The date's games and stat lines, refetched when due: a page request after REFRESH_SECONDS
+    (FORCE_FLOOR_SECONDS with force); the poller the same while games are on, else every
+    IDLE_REFRESH_SECONDS."""
     with _lock:
         cur = _days.get(day)
-        age = time.time() - cur['fetched'] if cur else None
-        done = cur and cur['scoreboard'] and all(g['state'] == 'post' and g['id'] in cur['games']
-                                                 for g in cur['scoreboard'])
-        if cur is None or (not done and age >= (FORCE_FLOOR_SECONDS if force else REFRESH_SECONDS)):
+        floor = (FORCE_FLOOR_SECONDS if force else
+                 IDLE_REFRESH_SECONDS if poll and cur and not _started(cur) else REFRESH_SECONDS)
+        if _due(cur, floor):
             games = dict(cur['games']) if cur else {}
             finished = set(cur['final']) if cur else set()
             board = _scoreboard(day)
             for g in board:
                 if g['state'] == 'pre' or g['id'] in finished:
                     continue
-                games[g['id']] = _summary(g)
+                try:
+                    games[g['id']] = _summary(g)
+                except requests.RequestException as e:  # keep its last lines; not final, so retried
+                    print(f'daily leaders: game {g["id"]}: {e}')
+                    continue
                 if g['state'] == 'post':
                     finished.add(g['id'])
             cur = {'fetched': time.time(), 'scoreboard': board, 'games': games, 'final': finished}
             _days[day] = cur
         return cur
+
+
+def poll_once():
+    """One poller pass: today, and yesterday until its late games are final."""
+    today = nba_today()
+    for day in (today - timedelta(days=1), today):
+        try:
+            slate(day, poll=True)
+        except Exception as e:  # ESPN down or slow: try again next tick
+            print(f'daily leaders poll {day}: {e}')
+    for day in [d for d in _days if d < today - timedelta(days=7)]:
+        _days.pop(day, None)  # browsed old dates don't pile up
+
+
+_poller = None
+
+
+def start_poller():
+    """Run poll_once every POLL_TICK_SECONDS in a daemon thread (once per process). Cheap when
+    nothing is due: no network call."""
+    global _poller
+    if _poller is not None:
+        return
+    def loop():
+        while True:
+            poll_once()
+            time.sleep(POLL_TICK_SECONDS)
+    _poller = threading.Thread(target=loop, name='daily-leaders-poller', daemon=True)
+    _poller.start()
 
 
 def default_day():

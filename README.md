@@ -18,7 +18,7 @@ a switcher in the header moves between them. Mine runs at [fantasy.yaqzan.dev](h
 - Daily-lineup leagues (best N active players each day count) and weekly-lineup leagues
 - Team standings: a power ranking from category totals, per game (roster strength) or this
   week (from the NBA schedule)
-- Daily Leaders: every stat line of the day, live from ESPN (refetched at most every 15 min), ranked by the league's scoring, your players highlighted
+- Daily Leaders: every stat line of the day, live from ESPN (refetched every 10 min while games are on, page open or not), ranked by the league's scoring, your players highlighted
 - Fantrax league sync via `fantrax_client.py`
 - Serves the built React frontend at `/` and `/fantasy/*`
 - Frontend and API on one origin; `FANTASY_CORS_ORIGINS` only for a split setup
@@ -182,7 +182,7 @@ it), else the active league.
 - `GET /api/pickups`: free agents ranked by expected categories gained in a week, with the best drop
 - `GET/PUT /api/projections/teams`, `GET /api/projections/players`, `PUT /api/projections/players/<id>`:
   projected team wins and player lines by source, and the owner's adjustments
-- `GET /api/daily-leaders?date=&refresh=1`: a day's stat lines scored by the league (live, cached 15 min)
+- `GET /api/daily-leaders?date=&refresh=1`: a day's stat lines scored by the league (live; a background poller refetches every 10 min while games are on)
 
 ### Misc
 - `GET /health`: liveness probe

@@ -171,15 +171,24 @@ stats) is shared by all leagues.
   (checked 2026-10-09), so neither can be live. ESPN's box lacks times blocked and techs; both
   come from its play-by-play (a block play's first participant is the shooter; "technical foul"
   minus defensive 3-seconds, never "technical free throw"). Players match NBA ids by
-  `projections.norm_name` (185/185 on 2026-10-08). **Throttle:** fetched only when someone asks;
-  a day is refetched at most every 15 min (`REFRESH_SECONDS`; Refresh button: 2 min), only its
-  unfinished games; final games are kept in memory until restart. The page re-asks after the
-  server's `next_refresh_at`. Default day: today (Eastern) once a game has tipped, else
-  yesterday. Category leagues rank by summed z per category: (game value - scaling pool's
-  per-game mean) / the SINGLE-GAME noise SD from the matchup model (`noise`, `attempt_sd`, wins a
-  coin flip), capped at +/-3, ratios as impact. Season-average SDs would make one double-double
-  or one tech a 3-SD event. Wins count once final. `daily_player_stats` (old per-player
-  nba_api scrape) is no longer written or read.
+  `projections.norm_name` (185/185 on 2026-10-08). **Refresh:** a background poller thread
+  (`start_poller`, started by `backend/app.py` outside pytest) refetches today, and yesterday until
+  its late games are final, every 10 min while a game is on (`REFRESH_SECONDS`), every 3 h before
+  tip-off, never once all games are stored final. The page is ready when opened; page requests and
+  the Refresh button (2-min floor) use the same cache. Only unfinished games are refetched; one
+  failed game keeps its last lines and retries next pass. ESPN publishes no limit (hobbyist docs
+  guess ~2,500 calls/day); a 15-game night at 10 min is ~300. It does drop TLS handshakes now and
+  then (SSL EOF on 2 of 6 calls, 2026-10-09), hence the kept-alive session with backoff retries.
+  Default day: today (Eastern) once a game has tipped, else yesterday.
+  Category leagues rank by summed z per category: (game value - scaling pool's per-game mean) /
+  the SINGLE-GAME noise SD from the matchup model (`noise`, `attempt_sd`, wins a coin flip),
+  capped at +/-3, ratios as impact. Wins count once final. **Don't switch to the OVR scale**
+  (between-player SD of season averages): single-game noise is 1.1-1.2x that SD for PTS/REB but
+  3-6x for STL, TECH, WIN%, TS%, FG%, FT%, so on the OVR scale every winner gets +3 W, one tech
+  -3, an efficient 10-shot night +3 TS%. Measured on 2026-10-08 (WSOP): 1.84 capped cells per
+  player vs 0.09, and a 12-3-0 line (2 stl, 2 blk, a win) ranked first over a 22-10-3-blk line.
+  The two orders still agree broadly (Spearman 0.94, 8 of the top 10 shared, both leagues).
+  `daily_player_stats` (old per-player nba_api scrape) is no longer written or read.
 - **Team Manager** (`/api/team-rosters`, one request for every team): rosters best first, each
   healthy starter's slot (BN = bench) and the starters' average OVR from `best_starters`, and
   spots used against `roster.size`.
