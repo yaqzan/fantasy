@@ -1,4 +1,4 @@
-import { cellText, zTint, keepRow, sortRows, isPickup } from './dailyLeaders';
+import { cellText, zTint, keepRow, sortRows, isPickup, orderColumns } from './dailyLeaders';
 
 const line = { PTS: 22, FGM: 6, FGA: 17, FG3M: 3, FTM: 7, FTA: 8, AST: 2, TOV: 0, PLUS_MINUS: 5, W: 1 };
 
@@ -52,4 +52,12 @@ test('pace sort', () => {
   const rows = [{ pace: 0.1 }, { pace: 2 }, { pace: null }];
   expect(sortRows('all', rows, 'pace').map(r => r.pace)).toEqual([2, 0.1, null]);
   expect(sortRows('all', rows, 'val')).toBe(rows);
+});
+
+test('phone-first column order', () => {
+  const keys = (ks) => orderColumns(ks.map(key => ({ key }))).map(c => c.key);
+  expect(keys(['AST-TOV', 'REB', 'BLK', 'STL', 'NFT', 'FG3M', 'TECH', 'TS%', 'PTS']))
+    .toEqual(['PTS', 'REB', 'AST-TOV', 'STL', 'BLK', 'NFT', 'FG3M', 'TECH', 'TS%']);
+  expect(keys(['FG%', 'FT%', 'FG3M', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TOV']))
+    .toEqual(['PTS', 'REB', 'AST', 'STL', 'BLK', 'FG%', 'FT%', 'FG3M', 'TOV']);
 });

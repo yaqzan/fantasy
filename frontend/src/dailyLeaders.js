@@ -8,6 +8,14 @@ export const BOX_COLUMNS = [
   { key: 'FG', label: 'FG' }, { key: 'FT', label: 'FT' }, { key: 'TOV', label: 'TO' },
 ];
 
+// The columns a phone shows without scrolling, in this order; a league without A-TO gets AST in
+// its place. Every other column follows in the league's own order.
+const FIRST_COLUMNS = ['PTS', 'REB', 'AST-TOV', 'AST', 'STL', 'BLK'];
+export const orderColumns = (columns) => {
+  const rank = (c) => { const i = FIRST_COLUMNS.indexOf(c.key); return i < 0 ? FIRST_COLUMNS.length : i; };
+  return columns.map((c, i) => [c, i]).sort(([a, i], [b, j]) => rank(a) - rank(b) || i - j).map(([c]) => c);
+};
+
 const pct = (made, att) => (att ? (made / att).toFixed(3).replace(/^0/, '') : '-');
 
 // The text a stat line shows under one column (a category key or a BOX_COLUMNS key).

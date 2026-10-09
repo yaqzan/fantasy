@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
-import { BOX_COLUMNS, OWNER_FILTERS, cellText, zTint, keepRow, isPickup, sortRows, defaultSort } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, cellText, zTint, keepRow, isPickup, sortRows, defaultSort } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -70,7 +70,7 @@ const DailyLeaders = ({ config }) => {
   }, [data, load]);
 
   const shown = data?.date || day;
-  const columns = points ? BOX_COLUMNS : (data?.categories || config?.categories || []).map(c => ({ key: c.key, label: c.label }));
+  const columns = orderColumns(points ? BOX_COLUMNS : (data?.categories || config?.categories || []).map(c => ({ key: c.key, label: c.label })));
   const sort = pickedSort || defaultSort(data?.preseason);
   const rows = sortRows(ownerFilter, (data?.players || []).filter(p => keepRow(ownerFilter, p)), sort);
   const counts = (data?.players || []).reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }),
@@ -95,8 +95,10 @@ const DailyLeaders = ({ config }) => {
   // Phones: one pinned column carries rank, name, team, minutes and owner; the score is pinned
   // next to it, so the category cells scroll under both. Dimming is on the cell contents: an
   // opacity on the row would let scrolled cells show through the pinned ones.
-  const PLAYER_W = 'w-[9.5rem] min-w-[9.5rem] max-w-[9.5rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
-  const VALUE_LEFT = 'left-[9.5rem] sm:left-60';
+  // Phone widths fit player + Val + five stat columns (PTS REB A-TO STL BLK) in 390px.
+  const PLAYER_W = 'w-32 min-w-[8rem] max-w-[8rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
+  const VALUE_W = 'w-11 min-w-[2.75rem] max-w-[2.75rem] sm:w-16 sm:min-w-[4rem] sm:max-w-none left-32 sm:left-60';
+  const STAT_W = 'min-w-[2.25rem] px-0.5 sm:min-w-0 sm:px-2';
   return (
     <div className="py-2 sm:p-6">
       <div className="flex items-center gap-2 mb-2 sm:mb-3">
@@ -164,12 +166,12 @@ const DailyLeaders = ({ config }) => {
             <thead>
               <tr>
                 <th className={`table-header sticky left-0 z-20 px-2 ${PLAYER_W}`}>Player</th>
-                <th className={`table-header sticky z-20 text-center px-1.5 border-r border-gray-700 ${VALUE_LEFT}`}
+                <th className={`table-header sticky z-20 text-center px-0.5 tracking-normal sm:tracking-wider border-r border-gray-700 ${VALUE_W}`}
                     title={points ? "This league's fantasy points"
                       : "Summed category z: how far this game moved a week's matchup, category by category"}>
                   {points ? 'FPTS' : 'Val'}
                 </th>
-                {columns.map(c => <th key={c.key} className="table-header text-center whitespace-nowrap px-1.5 sm:px-2">{c.label}</th>)}
+                {columns.map(c => <th key={c.key} className={`table-header text-center whitespace-nowrap tracking-normal sm:tracking-wider ${STAT_W}`}>{c.label}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -200,11 +202,11 @@ const DailyLeaders = ({ config }) => {
                         </div>
                       </div>
                     </td>
-                    <td className={`sticky z-10 text-center px-1.5 font-semibold text-white tabular-nums border-r border-gray-700 ${VALUE_LEFT} ${bg}`}>
+                    <td className={`sticky z-10 text-center px-0.5 text-[11px] sm:text-sm font-semibold text-white tabular-nums whitespace-nowrap border-r border-gray-700 ${VALUE_W} ${bg}`}>
                       <span className={fade}>
                         {signed(p.value)}
                         {p.pace_signal && (
-                          <span className={`ml-0.5 text-[10px] ${p.pace_signal === 'up' ? 'text-green-400' : 'text-red-400'}`}
+                          <span className={`text-[9px] sm:text-[10px] sm:ml-0.5 ${p.pace_signal === 'up' ? 'text-green-400' : 'text-red-400'}`}
                                 title={`${p.pace > 0 ? '+' : ''}${p.pace} SD against his per-minute norm`}>
                             {p.pace_signal === 'up' ? (p.preseason ? '△' : '▲') : (p.preseason ? '▽' : '▼')}
                           </span>
@@ -213,7 +215,7 @@ const DailyLeaders = ({ config }) => {
                     </td>
                     {columns.map(c => (
                       <td key={c.key}
-                          className={`text-center tabular-nums whitespace-nowrap px-1.5 sm:px-2 text-gray-200 ${points || fade ? '' : zTint(p.z?.[c.key])} ${mine ? 'bg-row-mine' : ''}`}
+                          className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 ${points || fade ? '' : zTint(p.z?.[c.key])} ${mine ? 'bg-row-mine' : ''}`}
                           title={!points && p.z?.[c.key] != null ? `z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : undefined}>
                         <span className={fade}>{cellText(c.key, p)}</span>
                       </td>
