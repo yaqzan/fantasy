@@ -101,9 +101,10 @@ const DailyLeaders = ({ config }) => {
   // Phones: one pinned column carries rank, name, team, minutes and owner; the score is pinned
   // next to it, so the category cells scroll under both. Dimming is on the cell contents: an
   // opacity on the row would let scrolled cells show through the pinned ones.
-  // Phone widths fill 390px with player + Val + five stat columns (PTS REB A-TO STL BLK); the rest scroll.
-  const PLAYER_W = 'w-[10.25rem] min-w-[10.25rem] max-w-[10.25rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
-  const VALUE_W = 'w-11 min-w-[2.75rem] max-w-[2.75rem] sm:w-16 sm:min-w-[4rem] sm:max-w-none left-[10.25rem] sm:left-60';
+  // Phone widths fill a 400px screen with player + Val + five stat columns (PTS REB A-TO STL BLK); the
+  // rest scroll. Val fits only the number: the pace arrow sits in the cell's corner on phones.
+  const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
+  const VALUE_W = 'w-[2.375rem] min-w-[2.375rem] max-w-[2.375rem] sm:w-16 sm:min-w-[4rem] sm:max-w-none left-[10.375rem] sm:left-60';
   const STAT_W = 'min-w-[2.25rem] px-0.5 sm:min-w-0 sm:px-2';
   return (
     <div className="py-2 sm:p-6">
@@ -219,7 +220,7 @@ const DailyLeaders = ({ config }) => {
                         {signed(p.value)}
                         {(() => {
                           const mark = paceMark(p, points);
-                          return mark && <span className={`text-[9px] sm:text-[10px] sm:ml-0.5 ${mark.cls}`} title={mark.title}>{mark.glyph}</span>;
+                          return mark && <span className={`absolute top-1 right-0.5 leading-none text-[9px] sm:static sm:text-[10px] sm:ml-0.5 ${mark.cls}`} title={mark.title}>{mark.glyph}</span>;
                         })()}
                       </span>
                     </td>

@@ -57,9 +57,9 @@ must keep its `sm:` twin.
   edit pencil stays). Wider screens keep the panel above the tabs.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
-- Daily Leaders: one pinned column (10.25rem, sized so the sixth stat column starts off-screen: rank, name, team, minutes, owner chip on other teams'
+- Daily Leaders: one pinned column (10.375rem, sized so the sixth stat column starts off-screen on a 400px phone: rank, name, team, minutes, owner chip on other teams'
   players only; mine are the highlighted rows), Val pinned next to
-  it (2.75rem), then stat columns at 2.25rem. Columns run PTS, REB, A-TO (AST where a league has
+  it (2.375rem: the number only, the pace arrow sits absolute in its top-right corner on phones), then stat columns at 2.25rem. Columns run PTS, REB, A-TO (AST where a league has
   none), STL, BLK, then the league's other categories (`orderColumns`): those five fit at 390px in
   every league, the rest scroll under the pinned pair. Tapping a scoreboard chip filters the list to that game (orange
   ring, other chips fade; tap again to clear, another to move; owner chips count within it). Taken rows fade their cell
