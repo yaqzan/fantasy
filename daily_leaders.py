@@ -24,6 +24,8 @@ from leagues import CATEGORY_CATALOG, fantasy_points
 ESPN = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba'
 REFRESH_SECONDS = 5 * 60    # a live slate is refetched this often (~0.9 s CPU per 5 games; ~550 ESPN calls on a 15-game night)
 IDLE_REFRESH_SECONDS = 3 * 3600  # a slate with nothing started yet (tip-off times can move)
+NEAR_TIP_REFRESH_SECONDS = 3600  # ... hourly once the first tip is less than that away
+OVERDUE_SECONDS = 2 * 60    # a page request fetches itself when the poller is this late (stalled, machine slept)
 MIN_SLEEP, MAX_SLEEP = 30, 3 * 3600  # the poller sleeps until the next thing is due, within these
 FORCE_FLOOR_SECONDS = 120   # the Refresh button can't go faster than this
 SCALE_SECONDS = 60 * 60     # league pools and the name index change slowly
@@ -179,7 +181,9 @@ def due_at(cur):
         return cur['fetched'] + REFRESH_SECONDS
     tips = [datetime.fromisoformat(g['start'].replace('Z', '+00:00')).timestamp()
             for g in cur['scoreboard'] if g['state'] == 'pre' and g.get('start')]
-    return min([cur['fetched'] + IDLE_REFRESH_SECONDS] + tips)
+    # Within IDLE_REFRESH_SECONDS of tip-off, recheck hourly: a game moved earlier shows up within the hour.
+    near = tips and min(tips) - time.time() < IDLE_REFRESH_SECONDS
+    return min([cur['fetched'] + (NEAR_TIP_REFRESH_SECONDS if near else IDLE_REFRESH_SECONDS)] + tips)
 
 
 def _polled_days():
@@ -190,7 +194,9 @@ def _polled_days():
 def slate(day, force=False, poll=False):
     """The date's games and stat lines. The poller owns today and yesterday (refetched at due_at);
     a page request only fetches a day nobody has cached, another day after REFRESH_SECONDS while it
-    has unfinished games, or anything with force (FORCE_FLOOR_SECONDS)."""
+    has unfinished games, today/yesterday when the poller is OVERDUE_SECONDS late (a stalled
+    thread or a slept machine can't leave a halftime check empty), or anything with force
+    (FORCE_FLOOR_SECONDS)."""
     with _lock:
         cur = _days.get(day)
         if poll:
@@ -198,7 +204,9 @@ def slate(day, force=False, poll=False):
         elif force:
             stale = _due(cur, FORCE_FLOOR_SECONDS)
         else:
-            stale = cur is None or (day not in _polled_days() and _due(cur, REFRESH_SECONDS))
+            due = due_at(cur) if cur is not None else 0.0
+            stale = (cur is None or (day not in _polled_days() and _due(cur, REFRESH_SECONDS))
+                     or (day in _polled_days() and due is not None and time.time() > due + OVERDUE_SECONDS))
         if stale:
             games = dict(cur['games']) if cur else {}
             finished = set(cur['final']) if cur else set()

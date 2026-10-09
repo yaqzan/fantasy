@@ -173,8 +173,11 @@ stats) is shared by all leagues.
   minus defensive 3-seconds, never "technical free throw"). Players match NBA ids by
   `projections.norm_name` (185/185 on 2026-10-08). **Refresh:** a background poller thread
   (`start_poller`, started by `backend/app.py` outside pytest) refetches today, and yesterday until
-  its late games are final, every 5 min while a game is on (`REFRESH_SECONDS`), at the first
-  tip-off, every 3 h before it, never once all games are stored final. It sleeps until the next
+  its late games are final, every 5 min while a game is on (`REFRESH_SECONDS`; a game counts as
+  on once its start time passes, whatever ESPN says), at the first tip-off, every 3 h before it
+  (hourly in the last 3 h, so a game moved earlier shows up within the hour), never once all games
+  are stored final. The 3-h check can't swallow a game: the tip time always cuts it short. If the
+  poller is 2 min overdue (stalled thread, slept machine), a page request fetches itself. It sleeps until the next
   of those is due (`due_at`; 30 s..3 h), not on a fixed tick: a simulated 8-game day wakes 79 times
   (a 60-s tick: 1,440), 7 pm-1 am every 5 min, otherwise every 3 h. A refetch costs ~0.9 s CPU
   per 5 games (play-by-play parsing). The page is ready when opened; page requests read the cache
