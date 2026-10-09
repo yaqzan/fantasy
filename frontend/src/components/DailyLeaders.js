@@ -142,12 +142,12 @@ const DailyLeaders = ({ config }) => {
         </div>
       )}
 
-      {data?.stats_refresh && (
+      {(data?.espn_folded?.folded > 0 || data?.stats_refresh) && (
         <div className="text-[11px] sm:text-xs text-gray-400 mb-2">
-          Season averages: {data.stats_refresh.done
-            ? (data.stats_refresh.last === 'refreshed' || data.stats_refresh.last === 'already refreshed'
-              ? 'updated with this night' : data.stats_refresh.last)
-            : data.stats_refresh.running ? 'updating…' : `waiting on NBA stats (try ${data.stats_refresh.tries})`}
+          Season averages: {data.espn_folded?.folded > 0 ? 'include tonight (ESPN)' : 'not updated yet'}
+          {data.stats_refresh && <> · official NBA {data.stats_refresh.done
+            ? (['refreshed', 'already refreshed'].includes(data.stats_refresh.last) ? 'confirmed' : data.stats_refresh.last)
+            : data.stats_refresh.running ? 'updating…' : 'pending'}</>}
         </div>
       )}
 

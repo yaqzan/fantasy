@@ -14,7 +14,7 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 - `C:\Development\server.ps1 start|status|logs -Service fantasy` - api + tunnel (`fantasy-api`, `fantasy-tunnel`)
 - `npm --prefix frontend run build` - deploy a frontend change (Flask serves `frontend/build`, live on reload; the site is down while it builds, no-downtime swap in `.claude/docs/frontend.md`)
 - `python init_db.py` - create/upgrade the database + tables (safe to re-run, additive only)
-- `python pull_api_data.py [--season 2025-26 --force]` - schedule, standings, rosters, stats, techs (in season it runs itself after each night's last game: `nightly_stats.py`, ops.md)
+- `python pull_api_data.py [--season 2025-26 --force]` - schedule, standings, rosters, stats, techs (in season it runs itself after each night; ESPN folds each final game in first: ops.md)
 - `python pull_technical_fouls.py` - play-by-play tech scan alone (~3s per new game)
 - `python pull_api_data.py --rosters --season 2026-27` - teams from next season's rosters, stats untouched
 - `python pull_history.py` then `python pull_projections.py` - history, then our model + ESPN projections

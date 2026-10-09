@@ -209,8 +209,9 @@ stats) is shared by all leagues.
   sort Pace (a Val/Pace toggle, remembered per league once picked), Pickups = pace up among
   rotation players only (projected 15+ min: 2-12 a night on 10-06..08 vs 7-17 without), and a note
   naming opening night. Regular-season games switch all of it back on their own.
-  Season averages refresh after each night's last game (`nightly_stats.py`, ops.md); the page's
-  pools and baselines rebuild when it lands. `daily_player_stats` (old per-player nba_api scrape) is no longer written or read.
+  Season averages take each game as ESPN calls it final, and the official NBA pull confirms them
+  after the night (`game_log.py`, `nightly_stats.py`, ops.md); the page's pools and baselines
+  rebuild on each. `daily_player_stats` (old per-player nba_api scrape) is no longer written or read.
 - **Team Manager** (`/api/team-rosters`, one request for every team): rosters best first, each
   healthy starter's slot (BN = bench) and the starters' average OVR from `best_starters`, and
   spots used against `roster.size`.

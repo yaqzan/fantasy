@@ -88,6 +88,10 @@ class Player(BaseModel):
     injured_return = CharField(max_length=16, null=True)  # month he is expected back ('Jan'), 'season', or null = no timetable
     undroppable = IntegerField(null=True)  # legacy, pre-leagues; now per league in league_player_flags
     api_updated_at = DateTimeField(null=True)
+    stats_season = CharField(max_length=7, null=True)  # season the totals above are from (game_log.py)
+    blka_nba = IntegerField(null=True)     # NBA's times blocked (season / last 5 / last 10) at the last NBA
+    blka_nba_5 = IntegerField(null=True)   # pull; ESPN-folded games add theirs on top (game_log.py)
+    blka_nba_10 = IntegerField(null=True)
 
     class Meta:
         table_name = 'players'
@@ -299,6 +303,31 @@ class ProjectionAdjustment(BaseModel):
         primary_key = CompositeKey('season', 'player_id')
 
 
+class GameLine(BaseModel):
+    """One player's line in one regular-season game: the history season / last-5 / last-10 totals
+    are computed from (game_log.py). source 'nba' (the official game log, written by every NBA pull)
+    or 'espn' (folded in when ESPN calls the game final, replaced once the NBA has it)."""
+    player_id = IntegerField()
+    game_date = DateField()
+    season = CharField(max_length=7)
+    source = CharField(max_length=4)
+    game_id = CharField(max_length=16)        # the source's own game id
+    team = CharField(max_length=8, null=True)
+    w = IntegerField(null=True)
+    min = IntegerField(null=True)
+    fga = IntegerField(); fgm = IntegerField(); fta = IntegerField(); ftm = IntegerField()
+    fg3m = IntegerField(); pts = IntegerField(); ast = IntegerField(); reb = IntegerField()
+    stl = IntegerField(); blk = IntegerField(); tov = IntegerField(); pf = IntegerField()
+    plus_minus = IntegerField(null=True)
+    blka = IntegerField(null=True)            # ESPN rows only; NBA's comes as totals (Player.blka_nba)
+    tech = IntegerField(null=True)            # ESPN rows only; NBA's is the technical_fouls scan
+
+    class Meta:
+        table_name = 'game_lines'
+        primary_key = CompositeKey('player_id', 'game_date')
+        indexes = ((('season', 'game_date'), False),)
+
+
 class TeamProjection(BaseModel):
     """One source's projected regular-season wins for a team. source 'owner' holds the owner's
     adjustment in wins (added to the index), not a projection."""
@@ -315,4 +344,5 @@ class TeamProjection(BaseModel):
 
 
 ALL_MODELS = [Team, Player, Game, League, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag, TechnicalFoul,
-              ScannedGame, DailyPlayerStats, PlayerSeason, PlayerProjection, ProjectionAdjustment, TeamProjection]
+              ScannedGame, DailyPlayerStats, PlayerSeason, PlayerProjection, ProjectionAdjustment, TeamProjection,
+              GameLine]

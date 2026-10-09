@@ -80,6 +80,7 @@ def _scoreboard(day):
             'state': status['state'],          # pre | in | post
             # ESPN season type: 1 preseason, 2 regular season, 3 playoffs, 5 play-in
             'preseason': (event.get('season') or {}).get('type') == 1,
+            'season_type': (event.get('season') or {}).get('type'),
             'detail': status.get('shortDetail') or status.get('detail'),
             'start': event.get('date'),
             'teams': [{'abbr': c['team']['abbreviation'], 'score': int(c['score']) if c.get('score') else None,
@@ -184,6 +185,7 @@ def slate(day, force=False, poll=False):
                     continue
                 if g['state'] == 'post':
                     finished.add(g['id'])
+                    _fold(day, g, games[g['id']])
             cur = {'fetched': time.time(), 'scoreboard': board, 'games': games, 'final': finished}
             _days[day] = cur
         return cur
@@ -223,6 +225,29 @@ def start_poller():
             time.sleep(POLL_TICK_SECONDS)
     _poller = threading.Thread(target=loop, name='daily-leaders-poller', daemon=True)
     _poller.start()
+
+
+_folds = {}  # NBA date -> {'folded': n, 'skipped': n} from ESPN folds this process
+
+
+def _fold(day, game, lines):
+    """A regular-season game just went final: fold its lines into season totals now (game_log.py),
+    so averages don't wait for stats.nba.com. Never raises into the poller."""
+    if game.get('season_type') != 2 or not str(game.get('detail') or '').startswith('Final'):
+        return
+    try:
+        from game_log import fold_espn
+        from projections import norm_name
+        names = _name_index()
+        folded, skipped = fold_espn(day, [(names.get(norm_name(l['name'])), {**l, 'game_id': game['id']})
+                                          for l in lines.values()])
+        tally = _folds.setdefault(day, {'folded': 0, 'skipped': 0})
+        tally['folded'] += folded
+        tally['skipped'] += skipped
+        if folded:
+            _forget_stats()
+    except Exception as e:
+        print(f'daily leaders: fold {game["id"]}: {e}')
 
 
 def default_day():
@@ -459,4 +484,5 @@ def daily_leaders(league, day=None, force=False):
         'preseason': any(g.get('preseason') for g in s['scoreboard']),
         'season_start': (lambda d: d.isoformat() if d else None)(season_first_game()),
         'stats_refresh': __import__('nightly_stats').status().get(day.isoformat()),
+        'espn_folded': _folds.get(day),
     }

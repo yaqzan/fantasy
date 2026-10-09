@@ -32,9 +32,11 @@ def upgrade_schema(DB):
     migrator = MySQLMigrator(DB)
     ops = []
     player_cols = {c.name for c in DB.get_columns('players')}
-    for col in ('tech', 'tech_5', 'tech_10', 'w', 'w_5', 'w_10'):
+    for col in ('tech', 'tech_5', 'tech_10', 'w', 'w_5', 'w_10', 'blka_nba', 'blka_nba_5', 'blka_nba_10'):
         if col not in player_cols:
             ops.append(migrator.add_column('players', col, IntegerField(null=True)))
+    if 'stats_season' not in player_cols:
+        ops.append(migrator.add_column('players', 'stats_season', CharField(max_length=7, null=True)))
     if 'player_seasons' in DB.get_tables() and 'tech' not in {c.name for c in DB.get_columns('player_seasons')}:
         ops.append(migrator.add_column('player_seasons', 'tech', IntegerField(null=True)))
     if 'record_season' not in {c.name for c in DB.get_columns('teams')}:

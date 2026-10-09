@@ -230,7 +230,6 @@ def update_single_player_stats(player_name, season=SEASON):
 def update_all_player_stats(rostered_players=None, retry_rounds=3, season=SEASON, force=False):
     """Pull all player stats via a single bulk LeagueGameLog call instead of per-player requests.
     force: ignore the off-season gate and the once-a-day skip (backfills, a past season)."""
-    from pull_technical_fouls import technicals_by_player
     if is_off_season() and not force: return
 
     if rostered_players is None:
@@ -268,19 +267,17 @@ def update_all_player_stats(rostered_players=None, retry_rounds=3, season=SEASON
         print(Fore.RED + "Failed to fetch league game log after all attempts")
         return
 
+    from game_log import store_nba, recompute
     times_blocked = pull_times_blocked(season)
-    techs = technicals_by_player(all_games['GAME_ID'].unique())
+    store_nba(all_games, season)  # the official log replaces any ESPN-folded game (game_log.py)
     print(f"Fetched {len(all_games)} game log entries, processing {len(remaining)} players...")
     remaining_db = {p.id: p for p in Player.select().where(Player.name.in_(remaining))}
     now = datetime.now()
 
     for pid, player in tqdm(remaining_db.items(), desc='Updating player stats...'):
-        player_games = all_games[all_games['PLAYER_ID'] == pid]
-        if len(player_games) == 0:
-            player.gp = 0
-        else:
-            blka = tuple(times_blocked.get(pid, (0, 0, 0))) if times_blocked is not None else None
-            apply_game_stats(player, player_games, techs.get(pid, {}), blka)
+        if times_blocked is not None:  # else keep the stored NBA totals
+            player.blka_nba, player.blka_nba_5, player.blka_nba_10 = times_blocked.get(pid, (0, 0, 0))
+        recompute(player, season)  # same totals as before, from game_lines (+ ESPN games the NBA lacks)
         player.api_updated_at = now
         player.save()
 
