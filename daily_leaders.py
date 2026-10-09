@@ -7,7 +7,8 @@ first participant is the shooter) and technical fouls.
 
 Throttled: a date is refetched at most every REFRESH_SECONDS, only its unfinished games; a finished
 game is kept for the life of the process. A background poller (start_poller) keeps today and last
-night's late games current whether or not anyone has the page open, so it is ready when opened.
+night's late games current whether or not anyone has the page open, so it is ready when opened,
+and starts the nightly season-stats refresh once a night is final (nightly_stats.py).
 """
 import re
 import threading
@@ -191,13 +192,20 @@ def slate(day, force=False, poll=False):
 def poll_once():
     """One poller pass: today, and yesterday until its late games are final."""
     today = nba_today()
+    import nightly_stats
     for day in (today - timedelta(days=1), today):
         try:
-            slate(day, poll=True)
+            nightly_stats.tick(day, slate(day, poll=True), on_done=_forget_stats)
         except Exception as e:  # ESPN down or slow: try again next tick
             print(f'daily leaders poll {day}: {e}')
     for day in [d for d in _days if d < today - timedelta(days=7)]:
         _days.pop(day, None)  # browsed old dates don't pile up
+
+
+def _forget_stats():
+    """Season stats just changed (nightly_stats): rebuild pools, baselines and scales on next use."""
+    for key in [k for k in _cache if k[0] in ('stats', 'by_name', 'scale', 'names')]:
+        _cache.pop(key, None)
 
 
 _poller = None
@@ -450,4 +458,5 @@ def daily_leaders(league, day=None, force=False):
         'scoring': 'points' if league.is_points else 'categories',
         'preseason': any(g.get('preseason') for g in s['scoreboard']),
         'season_start': (lambda d: d.isoformat() if d else None)(season_first_game()),
+        'stats_refresh': __import__('nightly_stats').status().get(day.isoformat()),
     }

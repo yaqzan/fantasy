@@ -142,6 +142,15 @@ const DailyLeaders = ({ config }) => {
         </div>
       )}
 
+      {data?.stats_refresh && (
+        <div className="text-[11px] sm:text-xs text-gray-400 mb-2">
+          Season averages: {data.stats_refresh.done
+            ? (data.stats_refresh.last === 'refreshed' || data.stats_refresh.last === 'already refreshed'
+              ? 'updated with this night' : data.stats_refresh.last)
+            : data.stats_refresh.running ? 'updating…' : `waiting on NBA stats (try ${data.stats_refresh.tries})`}
+        </div>
+      )}
+
       {data?.games?.length > 0 && (
         <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2 sm:mb-3">
           {data.games.map(g => <GameChip key={g.id} game={g} />)}

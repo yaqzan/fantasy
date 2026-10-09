@@ -11,6 +11,15 @@
 - **Watchdog** task "Fantasy Watchdog", every 5 min, `ops/windows/watchdog.ps1` via the bundled
   `hidden_run.vbs`. With `-Controller` it calls `server.ps1 start -Service fantasy-api|fantasy-tunnel`;
   without, it starts `python backend\app.py` / cloudflared itself. Logs in `ops/windows/logs/`.
+- **No cron jobs for data.** The API process runs a poller thread (`daily_leaders.start_poller`,
+  started in `backend/app.py`, ticks every 60 s, no network call unless something is due): ESPN
+  every 10 min while games are on, and the **nightly stats refresh** (`nightly_stats.py`): once a
+  night's regular-season games are all final it runs `pull_api_data.py --after-games <date>
+  --games <n>` in its own process, which exits 75 until stats.nba.com's game log has all n games
+  (it lags the buzzer), then does the full pull. Retried every 30 min, given up after 12 h (then
+  run it by hand); a restarted server skips a night already pulled (newest `api_updated_at` after
+  last tip + 3 h). Log: `stats_refresh.log` (gitignored). Preseason nights never run. Edge: a
+  night ESPN counts but the NBA's regular-season log doesn't (the NBA Cup final) retries 12 h.
 - **History:** until 2026-09-24 the frontend was a Cloudflare Pages project (`fantasy`, built from
   the repo now called `fantasy-archive`) and the API rode the dashboard-managed `trading-api`
   tunnel as `fantasy-api.yaqzan.dev`. That tunnel may still list a stale `fantasy-api` ingress

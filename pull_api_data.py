@@ -298,6 +298,21 @@ def pull_all_data(season=SEASON, force=False, skip_techs=False):
         scan_technical_fouls(season)
     update_all_player_stats(rostered_players, season=season, force=force)
 
+NOT_YET = 75  # exit code for --after-games: stats.nba.com doesn't have the whole night yet; try later
+
+
+def night_is_in(day, expected_games, season=SEASON):
+    """True once stats.nba.com's game log holds `expected_games` games on `day` (it lags the final
+    buzzer; box scores stay empty while a game is on)."""
+    stamp = day.strftime('%m/%d/%Y')
+    resp = nba_api_call(leaguegamelog.LeagueGameLog, season=season, player_or_team_abbreviation='T',
+                        season_type_all_star='Regular Season', date_from_nullable=stamp, date_to_nullable=stamp,
+                        retries=3)
+    found = resp.get_data_frames()[0]['GAME_ID'].nunique() if resp is not None else 0
+    print(f'{day}: {found} of {expected_games} games in the NBA game log')
+    return found >= expected_games
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Pull NBA schedule, standings, rosters and player stats.')
@@ -308,8 +323,17 @@ if __name__ == '__main__':
     parser.add_argument('--rosters', action='store_true',
                         help="only set every player's team from --season's rosters (e.g. the next season's, "
                              'before Oct 1); stats untouched')
+    parser.add_argument('--after-games', metavar='YYYY-MM-DD',
+                        help='the nightly refresh (daily_leaders poller): exit 75 unless the NBA game log has '
+                             '--games games on this date, else a full pull (forced past the once-a-day skip)')
+    parser.add_argument('--games', type=int, default=1, help='games expected on --after-games')
     args = parser.parse_args()
-    if args.rosters:
+    if args.after_games:
+        import sys
+        if not night_is_in(datetime.strptime(args.after_games, '%Y-%m-%d').date(), args.games, args.season):
+            sys.exit(NOT_YET)
+        pull_all_data(args.season, force=True, skip_techs=args.skip_techs)
+    elif args.rosters:
         print(f'{len(update_team_rosters(args.season))} rostered players ({args.season} rosters)')
     elif args.player:
         update_single_player_stats(' '.join(args.player), args.season)
