@@ -1,4 +1,4 @@
-import { cellText, zTint, keepRow, sortRows, isPickup, orderColumns, paceMark, valueClass } from './dailyLeaders';
+import { cellText, zTint, keepRow, sortRows, isPickup, orderColumns, paceMark, valueClass, inGame, toggleGame } from './dailyLeaders';
 
 const line = { PTS: 22, FGM: 6, FGA: 17, FG3M: 3, FTM: 7, FTA: 8, AST: 2, TOV: 0, PLUS_MINUS: 5, W: 1 };
 
@@ -81,4 +81,14 @@ test('value colour and pickups skip nights that hurt', () => {
   expect(valueClass(-1.5, false)).toBe('text-red-400');
   expect(valueClass(-9, true)).toBe('text-white');
   expect(isPickup({ owner: 'free', preseason: true, pace_signal: 'up', min_usual: 20, value: -5, z: { PTS: -1 } })).toBe(false);
+});
+
+test('game filter: its two teams; tap toggles on, moves, and off', () => {
+  const game = { id: 'g1', teams: [{ abbr: 'BOS' }, { abbr: 'CLE' }] };
+  expect(inGame(game, { team: 'CLE' })).toBe(true);
+  expect(inGame(game, { team: 'MIA' })).toBe(false);
+  expect(inGame(null, { team: 'MIA' })).toBe(true);
+  expect(toggleGame(null, 'g1')).toBe('g1');
+  expect(toggleGame('g1', 'g2')).toBe('g2');
+  expect(toggleGame('g2', 'g2')).toBeNull();
 });

@@ -95,3 +95,8 @@ export const paceMark = (p, points) => {
     title: disagrees ? `${pace}, but a ${up ? 'weak' : 'good'} night for your league` : pace,
   };
 };
+
+// Tapping a game's scoreboard narrows the list to its two teams; tapping it again (or another
+// game) clears or moves the filter.
+export const inGame = (game, p) => !game || game.teams.some(t => t.abbr === p.team);
+export const toggleGame = (selected, id) => (selected === id ? null : id);

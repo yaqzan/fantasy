@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, cellText, zTint, keepRow, isPickup, sortRows, defaultSort } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, inGame, toggleGame, cellText, zTint, keepRow, isPickup, sortRows, defaultSort } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -14,7 +14,7 @@ const shiftDate = (iso, days) => {
 };
 const clock = (iso) => (iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
 
-const GameChip = ({ game }) => {
+const GameChip = ({ game, selected, dimmed, onToggle }) => {
   const [away, home] = [game.teams.find(t => !t.home), game.teams.find(t => t.home)];
   const scored = game.state !== 'pre';
   const side = (t) => (
@@ -23,12 +23,14 @@ const GameChip = ({ game }) => {
     </span>
   );
   return (
-    <div className="shrink-0 bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-[11px] leading-tight min-w-[4.5rem] sm:text-xs sm:px-2 sm:py-1 sm:min-w-[5.5rem]">
+    <button onClick={onToggle} aria-pressed={selected} title={selected ? 'Show every game' : 'Show only this game'}
+            className={`shrink-0 text-left rounded px-1.5 py-0.5 text-[11px] leading-tight min-w-[4.5rem] sm:text-xs sm:px-2 sm:py-1 sm:min-w-[5.5rem] border transition-opacity ${
+              selected ? 'bg-gray-700 border-nba-orange ring-1 ring-nba-orange' : 'bg-gray-800 border-gray-700'} ${dimmed ? 'opacity-50' : ''}`}>
       {side(away)}{side(home)}
       <div className={`mt-0.5 truncate ${game.state === 'in' ? 'text-red-400' : 'text-gray-400'}`}>
         {game.state === 'pre' ? clock(game.start) : game.detail}
       </div>
-    </div>
+    </button>
   );
 };
 
@@ -36,6 +38,7 @@ const DailyLeaders = ({ config }) => {
   const points = config?.capabilities?.scoring === 'points';
   const [{ owner: ownerFilter, sort: pickedSort }, setView] = useLeagueViewState(config?.league?.id, 'daily', { owner: 'all' });
   const [day, setDay] = useState(null);      // null = the server's default (today once games tip)
+  const [gameId, setGameId] = useState(null); // a tapped scoreboard: only its players
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,6 +59,7 @@ const DailyLeaders = ({ config }) => {
   }, [day]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setGameId(null); }, [day]);
 
   // While games are unfinished, ask again just after the server's next refetch (at least a
   // minute apart); skipped while the browser tab is hidden, caught up when it shows again.
@@ -72,9 +76,11 @@ const DailyLeaders = ({ config }) => {
   const shown = data?.date || day;
   const columns = orderColumns(points ? BOX_COLUMNS : (data?.categories || config?.categories || []).map(c => ({ key: c.key, label: c.label })));
   const sort = pickedSort || defaultSort(data?.preseason);
-  const rows = sortRows(ownerFilter, (data?.players || []).filter(p => keepRow(ownerFilter, p)), sort);
-  const counts = (data?.players || []).reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }),
-                                              { pickups: (data?.players || []).filter(isPickup).length });
+  const game = (data?.games || []).find(g => g.id === gameId) || null;
+  const pool = (data?.players || []).filter(p => inGame(game, p));
+  const rows = sortRows(ownerFilter, pool.filter(p => keepRow(ownerFilter, p)), sort);
+  const counts = pool.reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }),
+                             { pickups: pool.filter(isPickup).length });
 
   const signed = (v) => (points ? v.toFixed(1) : `${v > 0 ? '+' : ''}${v.toFixed(1)}`);
   const status = data && (
@@ -135,12 +141,6 @@ const DailyLeaders = ({ config }) => {
         </div>
       </div>
 
-      {data?.preseason && (
-        <div className="text-[11px] sm:text-xs text-amber-300/90 mb-2">
-          Preseason: starters sit second halves, so raw value favours reserves. Sorted by pace; no minutes flags
-          {data.season_start && <> · regular season {new Date(`${data.season_start}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</>}
-        </div>
-      )}
 
       {(data?.espn_folded?.folded > 0 || data?.stats_refresh) && (
         <div className="text-[11px] sm:text-xs text-gray-400 mb-2">
@@ -153,7 +153,10 @@ const DailyLeaders = ({ config }) => {
 
       {data?.games?.length > 0 && (
         <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2 sm:mb-3">
-          {data.games.map(g => <GameChip key={g.id} game={g} />)}
+          {data.games.map(g => (
+            <GameChip key={g.id} game={g} selected={g.id === gameId} dimmed={gameId !== null && g.id !== gameId}
+                      onToggle={() => setGameId(id => toggleGame(id, g.id))} />
+          ))}
         </div>
       )}
 

@@ -215,8 +215,8 @@ stats) is shared by all leagues.
   the stored schedule agrees (`season_first_game`: 2026-10-20). Starters sit second halves, so
   minutes are rotations and raw Val favours reserves: no minutes flag, arrows hollow (△▽), default
   sort Pace (a Val/Pace toggle, remembered per league once picked), Pickups = pace up among
-  rotation players only (projected 15+ min: 2-12 a night on 10-06..08 vs 7-17 without), and a note
-  naming opening night. Regular-season games switch all of it back on their own.
+  rotation players only (projected 15+ min: 2-12 a night on 10-06..08 vs 7-17 without). No
+  on-page note (owner removed it 2026-10-09). Regular-season games switch all of it back on their own.
   Season averages take each game as ESPN calls it final, and the official NBA pull confirms them
   after the night (`game_log.py`, `nightly_stats.py`, ops.md); the page's pools and baselines
   rebuild on each. `daily_player_stats` (old per-player nba_api scrape) is no longer written or read.

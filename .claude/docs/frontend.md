@@ -60,7 +60,8 @@ must keep its `sm:` twin.
   players only; mine are the highlighted rows), Val pinned next to
   it (2.75rem), then stat columns at 2.25rem. Columns run PTS, REB, A-TO (AST where a league has
   none), STL, BLK, then the league's other categories (`orderColumns`): those five fit at 390px in
-  every league, the rest scroll under the pinned pair. Taken rows fade their cell
+  every league, the rest scroll under the pinned pair. Tapping a scoreboard chip filters the list to that game (orange
+  ring, other chips fade; tap again to clear, another to move; owner chips count within it). Taken rows fade their cell
   contents, not the row: an opacity on the row lets scrolled cells show through the pinned ones.
 - Draft board: the key/legend is off on phones; the room strip is one line (top bid, spot bar, aim %,
   room factor once picks have prices, pace only when it warns) with team chips behind "Teams".
