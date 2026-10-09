@@ -51,7 +51,8 @@ export const OWNER_FILTERS = [['all', 'All', 'All'], ['pickups', 'Pickups', 'Pic
 // free agents), or on a hot last-10 streak. Preseason: pace only, and only for rotation players
 // (projected 15+ minutes); a deep reserve beating other reserves in the fourth quarter isn't one.
 export const PRESEASON_ROTATION_MIN = 15;
-export const isPickup = (p) => p.owner === 'free' && (p.preseason
+// Never a night that hurt you (negative value; points leagues have no zero line).
+export const isPickup = (p) => p.owner === 'free' && !(p.value < 0 && p.z && Object.keys(p.z).length) && (p.preseason
   ? p.pace_signal === 'up' && (p.min_usual ?? 0) >= PRESEASON_ROTATION_MIN
   : p.pace_signal === 'up' || (p.minutes_up && (p.pace ?? 0) >= 0.5) || p.streak === 'hot');
 
@@ -64,3 +65,33 @@ export const sortRows = (filter, rows, sort = 'val') => (filter === 'pickups' ||
 // Preseason starters sit the second half, so raw value favours reserves: sort by pace then,
 // unless the user picked a sort.
 export const defaultSort = (preseason) => (preseason ? 'pace' : 'val');
+
+// Val's colour is how good the night was for the league (summed category z; points leagues have no
+// zero line, so FPTS stays plain).
+export const valueClass = (value, points) => {
+  if (points) return 'text-white';
+  if (value >= 3) return 'text-green-300';
+  if (value >= 1) return 'text-green-400';
+  if (value <= -3) return 'text-red-300';
+  if (value <= -1) return 'text-red-400';
+  return 'text-white';
+};
+
+// The pace mark: how far ahead of (or behind) his own per-minute norm he is. Its own colours (sky up,
+// amber down) so it never reads as the night's quality, which is Val's job; strength in three steps
+// (faint, full, doubled); grey when it disagrees with the night (ahead of a low norm on a night
+// that still hurt you). Preseason marks are hollow. null = no mark.
+export const paceMark = (p, points) => {
+  if (!p.pace_signal) return null;
+  const up = p.pace_signal === 'up';
+  const a = Math.abs(p.pace ?? 0);
+  const one = up ? (p.preseason ? '△' : '▲') : (p.preseason ? '▽' : '▼');
+  const disagrees = !points && (up ? p.value < 0 : p.value > 0);
+  const colour = disagrees ? 'text-gray-500' : up ? 'text-sky-400' : 'text-amber-400';
+  const pace = `${p.pace > 0 ? '+' : ''}${p.pace} SD ${up ? 'ahead of' : 'behind'} his per-minute norm`;
+  return {
+    glyph: a >= 3.5 ? one + one : one,
+    cls: `${colour} ${a < 2.5 ? 'opacity-60' : ''}`,
+    title: disagrees ? `${pace}, but a ${up ? 'weak' : 'good'} night for your league` : pace,
+  };
+};

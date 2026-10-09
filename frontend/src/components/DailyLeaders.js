@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, cellText, zTint, keepRow, isPickup, sortRows, defaultSort } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, cellText, zTint, keepRow, isPickup, sortRows, defaultSort } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -202,15 +202,13 @@ const DailyLeaders = ({ config }) => {
                         </div>
                       </div>
                     </td>
-                    <td className={`sticky z-10 text-center px-0.5 text-[11px] sm:text-sm font-semibold text-white tabular-nums whitespace-nowrap border-r border-gray-700 ${VALUE_W} ${bg}`}>
-                      <span className={fade}>
+                    <td className={`sticky z-10 text-center px-0.5 text-[11px] sm:text-sm font-semibold tabular-nums whitespace-nowrap border-r border-gray-700 ${VALUE_W} ${bg}`}>
+                      <span className={`${fade} ${valueClass(p.value, points)}`}>
                         {signed(p.value)}
-                        {p.pace_signal && (
-                          <span className={`text-[9px] sm:text-[10px] sm:ml-0.5 ${p.pace_signal === 'up' ? 'text-green-400' : 'text-red-400'}`}
-                                title={`${p.pace > 0 ? '+' : ''}${p.pace} SD against his per-minute norm`}>
-                            {p.pace_signal === 'up' ? (p.preseason ? '△' : '▲') : (p.preseason ? '▽' : '▼')}
-                          </span>
-                        )}
+                        {(() => {
+                          const mark = paceMark(p, points);
+                          return mark && <span className={`text-[9px] sm:text-[10px] sm:ml-0.5 ${mark.cls}`} title={mark.title}>{mark.glyph}</span>;
+                        })()}
                       </span>
                     </td>
                     {columns.map(c => (

@@ -1,4 +1,4 @@
-import { cellText, zTint, keepRow, sortRows, isPickup, orderColumns } from './dailyLeaders';
+import { cellText, zTint, keepRow, sortRows, isPickup, orderColumns, paceMark, valueClass } from './dailyLeaders';
 
 const line = { PTS: 22, FGM: 6, FGA: 17, FG3M: 3, FTM: 7, FTA: 8, AST: 2, TOV: 0, PLUS_MINUS: 5, W: 1 };
 
@@ -60,4 +60,25 @@ test('phone-first column order', () => {
     .toEqual(['PTS', 'REB', 'AST-TOV', 'STL', 'BLK', 'NFT', 'FG3M', 'TECH', 'TS%']);
   expect(keys(['FG%', 'FT%', 'FG3M', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TOV']))
     .toEqual(['PTS', 'REB', 'AST', 'STL', 'BLK', 'FG%', 'FT%', 'FG3M', 'TOV']);
+});
+
+test('pace mark: own colours, strength steps, grey when it disagrees with the night', () => {
+  expect(paceMark({ pace_signal: null }, false)).toBeNull();
+  const faint = paceMark({ pace_signal: 'up', pace: 1.8, value: 4 }, false);
+  expect(faint.glyph).toBe('▲');
+  expect(faint.cls).toContain('sky');
+  expect(faint.cls).toContain('opacity-60');
+  expect(paceMark({ pace_signal: 'up', pace: 3.8, value: 4 }, false).glyph).toBe('▲▲');
+  const weakNight = paceMark({ pace_signal: 'up', pace: 2.6, value: -5.3, preseason: true }, false);
+  expect(weakNight.glyph).toBe('△');
+  expect(weakNight.cls).toContain('gray');
+  expect(paceMark({ pace_signal: 'down', pace: -2, value: -1 }, false).cls).toContain('amber');
+  expect(paceMark({ pace_signal: 'up', pace: 2, value: 12 }, true).cls).toContain('sky');  // points: no zero line
+});
+
+test('value colour and pickups skip nights that hurt', () => {
+  expect(valueClass(4, false)).toBe('text-green-300');
+  expect(valueClass(-1.5, false)).toBe('text-red-400');
+  expect(valueClass(-9, true)).toBe('text-white');
+  expect(isPickup({ owner: 'free', preseason: true, pace_signal: 'up', min_usual: 20, value: -5, z: { PTS: -1 } })).toBe(false);
 });

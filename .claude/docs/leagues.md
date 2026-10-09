@@ -193,12 +193,15 @@ stats) is shared by all leagues.
   timeframe with minutes, so real season minutes are a later pull), per category (tonight -
   expected) / single-game noise for that many minutes, capped +/-3, summed / sqrt(count); W, DD,
   TD, +/- skipped. So a hot first quarter shows, and a short stint needs a bigger surge; 6-minute
-  floor; arrow at |pace| >= 1.5. 2026-10-06..08: SD 1.07-1.15 in category leagues (≈N(0,1)), ~10%
+  floor; arrow at |pace| >= 1.5. Look (`frontend/src/dailyLeaders.js`): Val's colour is the
+  night's quality (green/red at +/-1 and +/-3; FPTS plain), the pace mark has its own colours (sky
+  up, amber down) and three steps (faint < 2.5, full, doubled >= 3.5), grey when it disagrees with
+  Val (ahead of a low norm on a night that still hurt): a green arrow on -5.3 read as a good night. 2026-10-06..08: SD 1.07-1.15 in category leagues (≈N(0,1)), ~10%
   up / 5% down; the points league runs narrower (SD 0.75, ~4% flagged: its 6.0x FPTS noise looks
   high for preseason minutes, recheck in season). *Minutes* (green `27m`): >= 1.25x and +5 over
   projected minutes (15-18% of preseason lines; rotations). *Streak* (🔥/🧊): last-10 SCORE vs
   season SCORE, +/-8 (0.8 SD of value), off in preseason and under 10 games. *Pickups* chip: free
-  agents with pace up, or minutes up at pace >= 0.5, or hot; sorted by pace (9-23 a night; minutes
+  agents (never a negative-Val night in category leagues) with pace up, or minutes up at pace >= 0.5, or hot; sorted by pace (9-23 a night; minutes
   alone made it 28-46).
   **Preseason** is per game, from ESPN's season type (1 pre, 2 regular, 3 playoffs, 5 play-in);
   the stored schedule agrees (`season_first_game`: 2026-10-20). Starters sit second halves, so
