@@ -184,6 +184,9 @@ export const getPickups = async (weekStart = null, timeframe = 'projected') => {
   return response.data;
 };
 
+// The tab the app opens on ('daily' around game nights, else 'players').
+export const getDefaultTab = async () => (await api.get('/default-tab')).data.tab;
+
 // Daily Leaders: date null = the server's default day; refresh asks for a refetch (floored at 2 min).
 export const getDailyLeaders = async (date, refresh = false) => {
   const params = {};

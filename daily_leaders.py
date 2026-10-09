@@ -299,6 +299,23 @@ def _fold(day, game, lines):
         print(f'daily leaders: fold {game["id"]}: {e}')
 
 
+MORNING_AFTER_HOUR = 8  # Eastern: the app opens on Daily Leaders until this hour after a game night
+
+
+def default_tab():
+    """'daily' from the day's first tip-off until MORNING_AFTER_HOUR the next morning (Eastern),
+    else 'players' (mornings, afternoons before tip-off, days without games). Reads the poller's
+    cached slates."""
+    now = datetime.now(NBA_TZ)
+    today = now.date()
+    if any(g['state'] != 'pre' for g in slate(today)['scoreboard']):
+        return 'daily'
+    yesterday = slate(today - timedelta(days=1))['scoreboard']
+    if yesterday and (now.hour < MORNING_AFTER_HOUR or any(g['state'] == 'in' for g in yesterday)):
+        return 'daily'
+    return 'players'
+
+
 def default_day():
     """Today (Eastern) once a game has tipped, else yesterday's results."""
     today = nba_today()

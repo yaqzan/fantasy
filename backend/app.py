@@ -746,6 +746,14 @@ def pickups():
 
 # ---------------------------------------------------------------- daily leaders (live)
 
+@fantasy_api.route('/default-tab', methods=['GET'])
+def get_default_tab():
+    """The tab the app opens on: Daily Leaders from first tip-off until 8 am Eastern the next
+    morning, else Player Rankings (daily_leaders.default_tab)."""
+    from daily_leaders import default_tab
+    return jsonify({'tab': default_tab()})
+
+
 @fantasy_api.route('/daily-leaders', methods=['GET'])
 def get_daily_leaders():
     """Every stat line of a date (default: today once a game has tipped, else yesterday), scored by

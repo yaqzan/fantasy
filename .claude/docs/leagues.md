@@ -47,8 +47,10 @@ stats) is shared by all leagues.
   values the league no longer has (a category, a week, a position chip). `<main key={leagueId}>`
   remounts every tab on a switch, so each reads its own league's state (test:
   `frontend/src/useLeagueViewState.test.js`, `CI=true npx react-scripts test --watchAll=false`). Draft mode is per league
-  too (`fantasy.draftMode.<league>`); off unless toggled on. Daily Leaders is the first tab and
-  the one the app opens on (falls back to Player Rankings in draft mode).
+  too (`fantasy.draftMode.<league>`); off unless toggled on. Daily Leaders is the first tab. The
+  app opens on it from the day's first tip-off until 8 am Eastern the next morning, else on Player
+  Rankings (`/api/default-tab`, `daily_leaders.default_tab`; a click wins; draft mode falls back
+  to Player Rankings).
 - **Scoring mode.** `settings.scoring`: `{type: 'categories'|'points', points: {stat: weight}}`. A points
   league's only category is `FPTS`: `player_stats.add_fantasy_points` folds the league's weights
   (`POINT_STATS` keys) into a per-game `FPTS{n}` for every timeframe, then z-scores, totals, weekly

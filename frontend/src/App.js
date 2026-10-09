@@ -11,7 +11,7 @@ import LeagueSettings from './components/LeagueSettings';
 import DraftDay from './components/DraftDay';
 import {
   getPlayers, getFantasyTeams, draftPlayer, undraftPlayer, updatePlayer,
-  getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage, getDraftDay
+  getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage, getDraftDay, getDefaultTab
 } from './services/api';
 
 // Tabs: [key, label, in-season only (hidden in draft mode)]. Each tab keeps its own view state per
@@ -28,8 +28,15 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState({});
   // /draft opens the Draft Day tab directly (Flask serves index.html for every non-API path).
+  // Otherwise the server picks (null until it answers): Daily Leaders from the first tip-off until
+  // 8 am Eastern the next morning, Player Rankings the rest of the time. A click always wins.
   const [activeTab, setActiveTabState] = useState(
-    window.location.pathname.replace(/\/+$/, '') === '/draft' ? 'draft' : 'daily');
+    window.location.pathname.replace(/\/+$/, '') === '/draft' ? 'draft' : null);
+  useEffect(() => {
+    if (activeTab !== null) return;
+    getDefaultTab().then(tab => setActiveTabState(prev => prev ?? tab)).catch(() => setActiveTabState(prev => prev ?? 'players'));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const setActiveTab = (tab) => {
     setActiveTabState(tab);
     const path = tab === 'draft' ? '/draft' : '/';
@@ -64,9 +71,9 @@ function App() {
 
   const TABS = ALL_TABS.filter(([key, , inSeason]) => !(draftMode && inSeason) && (key !== 'draft' || caps.draft_plan));
   useEffect(() => {
-    if (!loading && !TABS.some(([key]) => key === activeTab)) setActiveTab('players');
+    if (!loading && activeTab !== null && !TABS.some(([key]) => key === activeTab)) setActiveTab('players');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftMode, caps.draft_plan, loading]);
+  }, [draftMode, caps.draft_plan, loading, activeTab === null]);
 
   useEffect(() => {
     loadLeagues();
