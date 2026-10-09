@@ -56,7 +56,8 @@ must keep its `sm:` twin.
   folded by default otherwise; team columns get an 8.5rem floor on phones only.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
-- Daily Leaders: one pinned column (8rem: rank, name, team, minutes, owner chip), Val pinned next to
+- Daily Leaders: one pinned column (8rem: rank, name, team, minutes, owner chip on other teams'
+  players only; mine are the highlighted rows), Val pinned next to
   it (2.75rem), then stat columns at 2.25rem. Columns run PTS, REB, A-TO (AST where a league has
   none), STL, BLK, then the league's other categories (`orderColumns`): those five fit at 390px in
   every league, the rest scroll under the pinned pair. Taken rows fade their cell

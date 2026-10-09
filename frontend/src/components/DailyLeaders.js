@@ -203,8 +203,8 @@ const DailyLeaders = ({ config }) => {
                             <span>{p.team}<span className="hidden sm:inline"> vs {p.opp}</span> · </span>
                             <span className={p.minutes_up ? 'text-green-400 font-semibold' : ''}
                                   title={p.min_usual ? `Usual ${p.min_usual} min` : undefined}>{p.MIN}m</span>
-                            {p.owner !== 'free' && (
-                              <span className={`ml-auto px-1 rounded text-[10px] font-semibold truncate ${mine ? 'bg-nba-orange text-onaccent' : 'bg-gray-700 text-gray-300'}`}
+                            {p.owner === 'taken' && (  // mine needs no chip: the row highlight says it
+                              <span className="ml-auto px-1 rounded text-[10px] font-semibold truncate bg-gray-700 text-gray-300"
                                     title={p.owner_name}>{p.owner_abv}</span>
                             )}
                           </div>
