@@ -9,7 +9,7 @@ import json
 # Add parent directory to path to import our existing modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer, DailyPlayerStats,
+from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer,
                               PlayerProjection, ProjectionAdjustment)
 from projections import season_label
 from player_stats import (league_player_stats, calculate_auction_values, calculate_team_totals, week_schedule,
@@ -18,7 +18,7 @@ from player_stats import (league_player_stats, calculate_auction_values, calcula
 from fantasy_config import TEAMNAMES, FPOINTS_SCORING
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
                                  league_team_ids, get_undroppable_players, set_league_flags)
-from leagues import (POINT_STATS, fantasy_points, get_league, list_leagues, create_league, update_league, activate_league, delete_league,
+from leagues import (POINT_STATS, get_league, list_leagues, create_league, update_league, activate_league, delete_league,
                      generate_weeks, category_meta, CATEGORY_CATALOG, DEFAULT_SETTINGS, NotFound)
 from datetime import date, datetime
 
@@ -744,80 +744,23 @@ def pickups():
     return jsonify(result)
 
 
-# ---------------------------------------------------------------- daily stats (NBA-wide)
+# ---------------------------------------------------------------- daily leaders (live)
 
-@fantasy_api.route('/daily-stats', methods=['GET'])
-def get_daily_stats():
-    """Every stat line of a date. Points leagues: fantasy_points from the league's own weights,
-    best first; category leagues have no points (None), sorted by points scored."""
-    league = current_league()
+@fantasy_api.route('/daily-leaders', methods=['GET'])
+def get_daily_leaders():
+    """Every stat line of a date (default: today once a game has tipped, else yesterday), scored by
+    the league and marked mine / taken / free. ESPN is refetched at most every 15 minutes while
+    games are unfinished; ?refresh=1 lowers that to 2 minutes (daily_leaders.py)."""
+    from daily_leaders import daily_leaders
     date_str = request.args.get('date')
     try:
-        target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else None
     except ValueError:
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-
-    stats = DailyPlayerStats.select().where(DailyPlayerStats.game_date == target_date)
-
-    daily_stats = []
-    for stat in stats:
-        daily_stats.append({
-            'id': stat.id,
-            'player_id': stat.player_id.id,
-            'player_name': stat.player_name,
-            'team': stat.team,
-            'game_date': stat.game_date.strftime('%Y-%m-%d'),
-            'game_id': stat.game_id,
-            'matchup': stat.matchup,
-            'minutes': stat.minutes,
-            'fgm': stat.fgm,
-            'fga': stat.fga,
-            'fg_pct': stat.fg_pct,
-            'fg3m': stat.fg3m,
-            'fg3a': stat.fg3a,
-            'fg3_pct': stat.fg3_pct,
-            'ftm': stat.ftm,
-            'fta': stat.fta,
-            'ft_pct': stat.ft_pct,
-            'oreb': stat.oreb,
-            'dreb': stat.dreb,
-            'reb': stat.reb,
-            'ast': stat.ast,
-            'stl': stat.stl,
-            'blk': stat.blk,
-            'tov': stat.tov,
-            'pf': stat.pf,
-            'pts': stat.pts,
-            'plus_minus': stat.plus_minus,
-            'fantasy_points': fantasy_points({k.upper(): getattr(stat, k.lower(), None) for k in POINT_STATS},
-                                             league.point_weights) if league.is_points else None,
-            'created_at': stat.created_at.isoformat() if stat.created_at else None
-        })
-    daily_stats.sort(key=lambda s: s['fantasy_points'] if league.is_points else (s['pts'] or 0), reverse=True)
-
-    return jsonify({
-        'date': target_date.strftime('%Y-%m-%d'),
-        'stats': daily_stats,
-        'total': len(daily_stats)
-    })
-
-
-@fantasy_api.route('/daily-stats/update', methods=['POST'])
-def update_daily_stats():
-    """Update daily stats for a specific date"""
-    from update_daily_stats import update_daily_stats_efficient
-    data = request.get_json()
-    date_str = data.get('date') if data else None
-    try:
-        target_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
-    except ValueError:
-        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-
-    update_daily_stats_efficient(target_date)
-    return jsonify({
-        'message': f'Daily stats updated for {target_date.strftime("%Y-%m-%d")}',
-        'date': target_date.strftime('%Y-%m-%d')
-    })
+    league = current_league()
+    result = daily_leaders(league, target_date, force=request.args.get('refresh') == '1')
+    result['categories'] = category_meta(league.categories)
+    return jsonify(result)
 
 
 @app.route('/manifest.json')

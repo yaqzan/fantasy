@@ -1,7 +1,7 @@
 # NBA Fantasy Dashboard
 
 A React + Flask dashboard for Fantrax NBA fantasy basketball leagues: player rankings, a lineup
-optimizer, team standings, and daily stat tracking. Each league carries its own rules (scoring
+optimizer, team standings, and live daily leaders. Each league carries its own rules (scoring
 categories, roster and lineup rules, auction budget, waivers, matchup schedule) and its own teams;
 a switcher in the header moves between them. Mine runs at [fantasy.yaqzan.dev](https://fantasy.yaqzan.dev).
 
@@ -18,7 +18,7 @@ a switcher in the header moves between them. Mine runs at [fantasy.yaqzan.dev](h
 - Daily-lineup leagues (best N active players each day count) and weekly-lineup leagues
 - Team standings: a power ranking from category totals, per game (roster strength) or this
   week (from the NBA schedule)
-- Daily player stats tracking (`daily_player_stats` table) with fantasy points
+- Daily Leaders: every stat line of the day, live from ESPN (refetched at most every 15 min), ranked by the league's scoring, your players highlighted
 - Fantrax league sync via `fantrax_client.py`
 - Serves the built React frontend at `/` and `/fantasy/*`
 - Frontend and API on one origin; `FANTASY_CORS_ORIGINS` only for a split setup
@@ -61,8 +61,7 @@ MySQL:
 - `pull_history.py`: past seasons' player totals (one call a season), the model's history.
 - `pull_projections.py`: this season's projections: our model and ESPN's. Other sources load
   with `import_projections.py players <csv> --source <name>` (team wins: `teams <csv>`).
-- `update_daily_stats.py`: daily box scores, scoped to teams that played on a given date
-- `create_daily_stats_table.py`: one-time table setup
+- `daily_leaders.py`: live box scores from ESPN for the Daily Leaders tab, scored per league
 
 `stats.nba.com` rate-limits aggressively and occasionally goes fully unresponsive; the ingest
 scripts retry with backoff (`nba_api_call` in `pull_api_data.py`). Keep `nba_api` current
@@ -85,7 +84,7 @@ Fantasy/
 │   └── package.json
 ├── requirements.txt             # Dependencies for the data-ingest scripts (root level)
 ├── pull_api_data.py             # NBA API backfill (players, rosters, game logs)
-├── update_daily_stats.py        # Daily box scores (Daily Stats tab)
+├── daily_leaders.py             # Live box scores (Daily Leaders tab)
 ├── fantasy_database.py          # Peewee models: Player, Team, Game, FantasyTeam, DailyPlayerStats
 ├── pull_technical_fouls.py      # Technical fouls from play-by-play
 ├── leagues.py                   # League rules: category catalog, settings schema, CRUD
@@ -104,7 +103,7 @@ Fantasy/
 - `leagues`: each league's rules as JSON (`leagues.py` `DEFAULT_SETTINGS` lists every key)
 - `fantasy_teams`, `fantasy_team_players`: each league's teams and drafted players
 - `league_player_flags`: per-league player flags (undroppable)
-- `daily_player_stats`: per-day fantasy point tracking
+- `daily_player_stats`: legacy per-day box scores (no longer written)
 
 ## Setup Instructions
 
@@ -183,8 +182,7 @@ it), else the active league.
 - `GET /api/pickups`: free agents ranked by expected categories gained in a week, with the best drop
 - `GET/PUT /api/projections/teams`, `GET /api/projections/players`, `PUT /api/projections/players/<id>`:
   projected team wins and player lines by source, and the owner's adjustments
-- `GET /api/daily-stats`: daily fantasy point stats
-- `POST /api/daily-stats/update`: trigger a daily stats refresh
+- `GET /api/daily-leaders?date=&refresh=1`: a day's stat lines scored by the league (live, cached 15 min)
 
 ### Misc
 - `GET /health`: liveness probe

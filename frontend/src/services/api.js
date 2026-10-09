@@ -184,18 +184,12 @@ export const getPickups = async (weekStart = null, timeframe = 'projected') => {
   return response.data;
 };
 
-export const getDailyStats = async (date) => {
-  const response = await api.get('/daily-stats', {
-    params: { date }
-  });
-  return response.data;
-};
-
-export const updateDailyStats = async (date) => {
-  const response = await api.post('/daily-stats/update', {
-    date
-  });
-  return response.data;
+// Daily Leaders: date null = the server's default day; refresh asks for a refetch (floored at 2 min).
+export const getDailyLeaders = async (date, refresh = false) => {
+  const params = {};
+  if (date) params.date = date;
+  if (refresh) params.refresh = 1;
+  return (await api.get('/daily-leaders', { params })).data;
 };
 
 // view: 'per_game' (roster strength, schedule-free) or 'week' (this fantasy week's projection)

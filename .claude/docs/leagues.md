@@ -39,7 +39,7 @@ stats) is shared by all leagues.
   `auction`, `guillotine`, `faab`, `claims_per_week`, `team_wins`, `long_weeks`, `playoffs`. Tabs,
   columns and controls switch on these names, never on a platform or league id: $ vs draft round,
   punt boxes, position filter, Team wins projections, FAAB line, playoff cut line, Eliminate,
-  Daily Stats points, the Draft Day tab (`draft_plan`: `draft_day.json` was built for this league).
+  Daily Leaders' points vs category columns, the Draft Day tab (`draft_plan`: `draft_day.json` was built for this league).
 - **View state per league** (`frontend/src/useLeagueViewState.js`): each tab's picks (stats
   timeframe, week, punts, position chips, filters, star premium, standings view) live in
   localStorage `fantasy.view.<league>.<tab>`. Only what the user picked is stored, over defaults
@@ -59,9 +59,7 @@ stats) is shared by all leagues.
   coefficient grows roughly with the size of the weights, so a league with much bigger weights
   would need its own measurement.
   `fantasy_config.FPOINTS_SCORING` is the default weight table; Courtside Tamasha (Yahoo) uses it.
-  Daily Stats computes points at read time from the selected league's weights
-  (`leagues.fantasy_points`, the one formula; the stored `daily_player_stats.fantasy_points` uses
-  the default table) and shows no points column in category leagues. There's no separate FPts
+  Daily Leaders scores each game line with the same formula (`leagues.fantasy_points`). There's no separate FPts
   column in the player table: it was the same idea hard-coded for every league.
 - **Categories.** `CATEGORY_CATALOG` in `leagues.py`: key, label, `inverse` (lower wins), `kind`;
   ratios also carry `attempts` (per-game attempts formula) and `prior` (shrinkage strength in
@@ -166,6 +164,22 @@ stats) is shared by all leagues.
   matchup list runs past the real rounds (WSOP 2026-27: 4 listed, 2 played; its settings page is the truth). The NBA leaves the Cup knockout window (Dec 4-11
   in 2026) unscheduled until the group stage ends, so those days have no games until a later
   schedule pull.
+- **Daily Leaders** (`daily_leaders.py`, `/api/daily-leaders`, the "Daily Leaders" tab): every
+  stat line of a day, ranked by the selected league, rows marked mine (highlighted) / taken
+  (dimmed) / free. **Source is ESPN's public site API** (scoreboard + one `summary` per game):
+  cdn.nba.com answers this host 403 and stats.nba.com box scores are empty while a game is on
+  (checked 2026-10-09), so neither can be live. ESPN's box lacks times blocked and techs; both
+  come from its play-by-play (a block play's first participant is the shooter; "technical foul"
+  minus defensive 3-seconds, never "technical free throw"). Players match NBA ids by
+  `projections.norm_name` (185/185 on 2026-10-08). **Throttle:** fetched only when someone asks;
+  a day is refetched at most every 15 min (`REFRESH_SECONDS`; Refresh button: 2 min), only its
+  unfinished games; final games are kept in memory until restart. The page re-asks after the
+  server's `next_refresh_at`. Default day: today (Eastern) once a game has tipped, else
+  yesterday. Category leagues rank by summed z per category: (game value - scaling pool's
+  per-game mean) / the SINGLE-GAME noise SD from the matchup model (`noise`, `attempt_sd`, wins a
+  coin flip), capped at +/-3, ratios as impact. Season-average SDs would make one double-double
+  or one tech a 3-SD event. Wins count once final. `daily_player_stats` (old per-player
+  nba_api scrape) is no longer written or read.
 - **Team Manager** (`/api/team-rosters`, one request for every team): rosters best first, each
   healthy starter's slot (BN = bench) and the starters' average OVR from `best_starters`, and
   spots used against `roster.size`.

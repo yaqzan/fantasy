@@ -3,7 +3,7 @@ import PlayerRankings from './components/PlayerRankings';
 import TeamManager from './components/TeamManager';
 import Header from './components/Header';
 import LineupOptimizer from './components/LineupOptimizer';
-import DailyStats from './components/DailyStats';
+import DailyLeaders from './components/DailyLeaders';
 import TeamStandings from './components/TeamStandings';
 import WeeklyPickups from './components/WeeklyPickups';
 import Projections from './components/Projections';
@@ -18,7 +18,7 @@ import {
 // league (useLeagueViewState) and follows the league's capabilities, never its platform or id.
 const ALL_TABS = [
   ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true], ['pickups', 'Weekly Pickups', true],
-  ['projections', 'Projections'], ['daily', 'Daily Stats', true], ['standings', 'Team Standings', true],
+  ['projections', 'Projections'], ['daily', 'Daily Leaders', true], ['standings', 'Team Standings', true],
   ['draft', 'Draft Day'],
 ];
 
@@ -272,7 +272,7 @@ function App() {
         {activeTab === 'lineup' && <LineupOptimizer config={config} onEditLeague={() => setLeagueModal('edit')} />}
         {activeTab === 'projections' && <Projections config={config} />}
         {activeTab === 'pickups' && <WeeklyPickups config={config} />}
-        {activeTab === 'daily' && <DailyStats config={config} />}
+        {activeTab === 'daily' && <DailyLeaders config={config} />}
         {activeTab === 'standings' && <TeamStandings config={config} />}
         {activeTab === 'draft' && <DraftDay />}
       </main>
