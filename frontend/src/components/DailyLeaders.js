@@ -102,8 +102,8 @@ const DailyLeaders = ({ config }) => {
   // next to it, so the category cells scroll under both. Dimming is on the cell contents: an
   // opacity on the row would let scrolled cells show through the pinned ones.
   // Phone widths fill 390px with player + Val + five stat columns (PTS REB A-TO STL BLK); the rest scroll.
-  const PLAYER_W = 'w-[9.25rem] min-w-[9.25rem] max-w-[9.25rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
-  const VALUE_W = 'w-11 min-w-[2.75rem] max-w-[2.75rem] sm:w-16 sm:min-w-[4rem] sm:max-w-none left-[9.25rem] sm:left-60';
+  const PLAYER_W = 'w-[10.25rem] min-w-[10.25rem] max-w-[10.25rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
+  const VALUE_W = 'w-11 min-w-[2.75rem] max-w-[2.75rem] sm:w-16 sm:min-w-[4rem] sm:max-w-none left-[10.25rem] sm:left-60';
   const STAT_W = 'min-w-[2.25rem] px-0.5 sm:min-w-0 sm:px-2';
   return (
     <div className="py-2 sm:p-6">

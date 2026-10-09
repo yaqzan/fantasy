@@ -57,7 +57,7 @@ must keep its `sm:` twin.
   edit pencil stays). Wider screens keep the panel above the tabs.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
-- Daily Leaders: one pinned column (9.25rem, sized so the sixth stat column starts off-screen: rank, name, team, minutes, owner chip on other teams'
+- Daily Leaders: one pinned column (10.25rem, sized so the sixth stat column starts off-screen: rank, name, team, minutes, owner chip on other teams'
   players only; mine are the highlighted rows), Val pinned next to
   it (2.75rem), then stat columns at 2.25rem. Columns run PTS, REB, A-TO (AST where a league has
   none), STL, BLK, then the league's other categories (`orderColumns`): those five fit at 390px in
