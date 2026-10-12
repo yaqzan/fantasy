@@ -265,7 +265,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
               Room's likely price: <b style={{ color: AIM }}>under your aim</b> · <b className="text-gray-400">up to your max</b> · <b style={{ color: ROOM_OVER }}>past it</b>
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: UNPRICED }} /> cheap strength worth having (A-TO, 3PM, TB)
+              <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: UNPRICED }} /> cheap strength worth having ({[...unpricedLabels].join(', ')})
             </span>
           </>
         )}

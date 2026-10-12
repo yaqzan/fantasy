@@ -347,7 +347,11 @@ in WSOP categories with the weekly model; against the real room, whose average i
 The app's draft-night cheat sheet (rebuilt 2026-10-03): the plan by phase of the draft (aim curve, what the room does, what to do), a nominate list (likely price furthest past the max), the stars, how to read the board, bench share and targets, the tier-return chart and what was tested. The max-bid lookup and player table were dropped: the board does that live. It reads
 `/api/draft-day`, which serves a gitignored `draft_day.json` (repo root) written by
 `.horizon/wsop-auction-2026/draft_day.py`; without the file the tab shows the 404 message. The page
-is public (owner's choice, 2026-09-30); the player data stays out of git.
+is public (owner's choice, 2026-09-30); the player data stays out of git. One file, one league: since 2026-10-12
+it is the Guillotine league's (`.horizon/guillotine-2026/draft_day_g.py`; WSOP's is kept in
+`.horizon/wsop-auction-2026/out/draft_day_wsop.json`). Texts that differ by league come from the file, with
+WSOP's as the fallback: `header`, `spots` (phase pick ranges), `unpriced` (amber-dot categories, also the
+board's legend), `tier_series`, `stars_note`, optional `bench_gain` and a `guillotine` section.
 
 **Draft mode** (header toggle, per league in localStorage): off unless switched on (owner's call,
 2026-10-09; it used to switch itself on until 6 h past `draft.date`). It hides the in-season tabs (daily leaders, lineups, pickups, standings),

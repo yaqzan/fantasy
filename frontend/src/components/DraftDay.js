@@ -78,11 +78,12 @@ function GroupedBars({ rows, series, max, reference, referenceLabel, format, min
   );
 }
 
-// Draft night by phase (share of the league's 160 spots filled). Sources: .claude/docs/draft-strategy.md "Live auction"
-// (dynamics.py, auction_sim.py, stress.py, mixed*.py, gradient*.py, focus.py, my_draft.py), 2026-10-03.
+// Draft night by phase (share of the league's roster spots filled; `spots` in draft_day.json, WSOP's file has none: 160).
+// Sources: .claude/docs/draft-strategy.md "Live auction" (dynamics.py, auction_sim.py, stress.py, mixed*.py, gradient*.py,
+// focus.py, my_draft.py), 2026-10-03.
 const PHASES = [
   {
-    when: 'Picks 1-32', share: 'first 20%', aim: '85-86%',
+    from: 0, to: 20, share: 'first 20%', aim: '85-86%',
     room: 'Overspends: 1.1-1.4x likely prices. Mid-tier players nominated now went for 1.7x and returned 0.93 per $1.',
     do: [
       'Nominate players the room overpays for (list below), so other teams spend on them.',
@@ -92,7 +93,7 @@ const PHASES = [
     ],
   },
   {
-    when: 'Picks 33-80', share: '20-50%', aim: '86-91%',
+    from: 20, to: 50, share: '20-50%', aim: '86-91%',
     room: 'Still spending. The last $40-74 players sell here, and the ones bought at 20-35% returned 1.20 per $1.',
     do: [
       'This is where your first good buys usually land: the room has cooled, you still have money.',
@@ -101,7 +102,7 @@ const PHASES = [
     ],
   },
   {
-    when: 'Picks 81-128', share: '50-80%', aim: '91-100%',
+    from: 50, to: 80, share: '50-80%', aim: '91-100%',
     room: 'Money runs low. Prices fall below likely, and most teams can no longer bid big.',
     do: [
       "Being well behind the room with money left is normal. It is the plan working. Don't chase: every catch-up rule tested lost.",
@@ -109,7 +110,7 @@ const PHASES = [
     ],
   },
   {
-    when: 'Picks 129-160', share: 'last 20%', aim: 'full max',
+    from: 80, to: 100, share: 'last 20%', aim: 'full max',
     room: 'Broke. Late $1-2 players went cheap because nobody had money (second-highest team cap: $2), not because nobody wanted them. They returned 2x their price.',
     do: [
       'The spot bar lifts: fill every open spot.',
@@ -130,7 +131,7 @@ const BOARD = [
   ['Spot bar', '1.25x your money per open spot. Dimmed rows ("not a spot yet") are valued under it. Lifts at 80%.'],
   ["Others' top bid", 'The most any other team can bid now. Late in the draft, $1 over it wins anyone.'],
   ['"early: room pays 1.7x"', 'Likely $5-25 player in the first 20% of the draft. Let him go.'],
-  ['Amber dots', 'Strength in A-TO, 3PM or TB: cheap and still worth winning. Use to break ties, not to raise a bid.'],
+  ['Amber dots', 'Strength in {unpriced}: cheap and still worth winning. Use to break ties, not to raise a bid.'],
   ['Sorts', "\"best buys\": max far above the room's price. \"nominate\": room's price far above your max (put them up)."],
 ];
 
@@ -147,6 +148,18 @@ const TESTED = [
 // Room prices at the start of the draft, with the early markup (auction.js): what the nominate and star lists compare.
 const opening = (likely) => roomPrice(likely, 1, 0);
 
+// Pick range of a phase, e.g. "Picks 1-28" for the first 20% of 140 spots.
+const picks = (ph, spots) => `Picks ${Math.floor(spots * ph.from / 100) + 1}-${Math.floor(spots * ph.to / 100)}`;
+
+// Page texts that differ by league come from draft_day.json; WSOP's file predates them, hence the fallbacks.
+const WSOP_HEADER = 'WSOP auction · {draft} · 16 teams · $200 · 10 spots, 6 active daily · no injury slot';
+const WSOP_TIERS = [
+  { key: 'orig', label: "2025, that league's categories" },
+  { key: 'w25', label: '2025, our 11 categories' },
+  { key: 'w24', label: '2024, our 11 categories' },
+];
+const STAR_NOTE = 'Max = where a roster built around him ties the best roster without a star (weekly simulation, 8 runs). Good to about ±$10.';
+
 function DraftDay() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -162,10 +175,14 @@ function DraftDay() {
   if (error) return <div className="bg-gray-800 rounded-lg p-6 text-gray-300">{error}</div>;
   if (!data) return <div className="bg-gray-800 rounded-lg p-6 text-gray-400">Loading the draft plan...</div>;
 
+  const spots = data.spots || 160;
+  const unpriced = (data.unpriced || ['A-TO', '3PM', 'TB']).join(', ');
+  const tierSeries = (data.tier_series || WSOP_TIERS).map((t, i) => ({ ...t, color: [C1, C2, C3][i] }));
+
   return (
     <div className="max-w-5xl">
       <div className="bg-gray-800 rounded-lg shadow-xl p-4 sm:p-6 mb-4 sm:mb-6 border-l-4 border-nba-orange">
-        <p className="text-sm text-gray-400">WSOP auction · {data.draft} · 16 teams · $200 · 10 spots, 6 active daily · no injury slot</p>
+        <p className="text-sm text-gray-400">{(data.header || WSOP_HEADER).replace('{draft}', data.draft)}</p>
         <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Be patient early, buy when the room is broke.</h1>
         <p className="text-gray-300 mt-2">
           The room spends big early and runs dry by the last fifth. Hold your aim, don't fill spots with cheap players,
@@ -178,12 +195,20 @@ function DraftDay() {
         </div>
       </div>
 
-      <Section title="Draft night by phase" subtitle="Phases by how many of the league's 160 roster spots are filled.">
+      {data.guillotine && (
+        <Section title={data.guillotine.title} subtitle={data.guillotine.subtitle}>
+          <ul className="space-y-2 text-sm text-gray-200 list-disc ml-5">
+            {data.guillotine.points.map(d => <li key={d}>{d}</li>)}
+          </ul>
+        </Section>
+      )}
+
+      <Section title="Draft night by phase" subtitle={`Phases by how many of the league's ${spots} roster spots are filled.`}>
         <div className="space-y-3">
           {PHASES.map(ph => (
-            <div key={ph.when} className="bg-gray-900 rounded p-4 grid md:grid-cols-[11rem_1fr] gap-3">
+            <div key={ph.share} className="bg-gray-900 rounded p-4 grid md:grid-cols-[11rem_1fr] gap-3">
               <div>
-                <p className="text-white font-semibold">{ph.when}</p>
+                <p className="text-white font-semibold">{picks(ph, spots)}</p>
                 <p className="text-xs text-gray-400">{ph.share} of the draft</p>
                 <p className="text-sm mt-2"><span className="text-gray-400">Aim </span><b className="text-green-400 tabular-nums">{ph.aim}</b><span className="text-gray-400"> of max</span></p>
               </div>
@@ -221,7 +246,7 @@ function DraftDay() {
           </div>
         </Section>
 
-        <Section title="The stars" subtitle="Max = where a roster built around him ties the best roster without a star (weekly simulation, 8 runs). Good to about ±$10.">
+        <Section title="The stars" subtitle={data.stars_note || STAR_NOTE}>
           <div className="space-y-1.5">
             {data.stars.map(s => {
               const room = opening(s.likely);
@@ -234,7 +259,7 @@ function DraftDay() {
               );
             })}
           </div>
-          <p className="text-xs text-gray-500 mt-3">At most one star, and only at or under his max. All five are likely to go for more: buy one only if the bidding stalls.</p>
+          <p className="text-xs text-gray-500 mt-3">At most one star, and only at or under his max. All {data.stars.length} are likely to go for more: buy one only if the bidding stalls.</p>
         </Section>
       </div>
 
@@ -243,7 +268,7 @@ function DraftDay() {
           {BOARD.map(([k, v]) => (
             <div key={k} className="flex gap-3">
               <dt className="flex-none w-40 text-white font-medium">{k}</dt>
-              <dd className="text-gray-400">{v}</dd>
+              <dd className="text-gray-400">{v.replace('{unpriced}', unpriced)}</dd>
             </div>
           ))}
         </dl>
@@ -255,9 +280,11 @@ function DraftDay() {
           series={[{ key: 'v', label: 'Games that count', color: C1 }]}
           max={100} format={v => `${v}%`}
         />
-        <p className="text-sm text-gray-300 mt-4">
-          Same core with four random $1 bench players: <b>{data.bench_gain.random}</b> categories a week. With the right four: <b className="text-nba-orange">{data.bench_gain.best}</b>.
-        </p>
+        {data.bench_gain && (
+          <p className="text-sm text-gray-300 mt-4">
+            Same core with four random $1 bench players: <b>{data.bench_gain.random}</b> categories a week. With the right four: <b className="text-nba-orange">{data.bench_gain.best}</b>.
+          </p>
+        )}
         <h3 className="text-white font-medium mt-5 mb-2">Bench targets for the last fifth (likely $1-4)</h3>
         <div className="grid sm:grid-cols-2 gap-2">
           {data.bench.map(b => (
@@ -272,11 +299,7 @@ function DraftDay() {
       <Section title="Where the room loses money" subtitle="Value delivered per $1 paid, by price tier, in past auctions (1.0 = got what you paid for).">
         <GroupedBars
           rows={data.tiers}
-          series={[
-            { key: 'orig', label: "2025, that league's categories", color: C1 },
-            { key: 'w25', label: '2025, our 11 categories', color: C2 },
-            { key: 'w24', label: '2024, our 11 categories', color: C3 },
-          ]}
+          series={tierSeries}
           max={1.8} format={v => v.toFixed(2)} reference={1} referenceLabel="break-even (1.0)"
         />
         <p className="text-sm text-gray-400 mt-3">
