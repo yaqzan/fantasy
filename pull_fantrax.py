@@ -189,13 +189,7 @@ def sync_draft(fantrax_league_id, apply):
     league = next((lg for lg in list_leagues() if lg.platform == 'fantrax' and lg.platform_league_id == fantrax_league_id), None)
     if league is None:
         raise SystemExit(f'no Fantrax league here has platform_league_id {fantrax_league_id}')
-    reply = session().post(URL, params={'leagueId': fantrax_league_id}, timeout=60,
-                           json={'msgs': [{'method': 'getDraftResults', 'data': {'leagueId': fantrax_league_id}}]})
-    reply.raise_for_status()
-    response = reply.json()['responses'][0]
-    if response.get('pageError'):
-        raise SystemExit(f"Fantrax: {response['pageError']} (log in again in the browser and re-save the cookie)")
-    data = response['data']
+    data = call(session(), fantrax_league_id, 'getDraftResults')   # an expired login is re-read from Firefox
     names = {s['scorerId']: s['name'] for s in data['scorers']}
     teams = {t.platform_team_id: t for t in FantasyTeam.select().where(FantasyTeam.league == league.id) if t.platform_team_id}
     team_ids = [t.id for t in FantasyTeam.select().where(FantasyTeam.league == league.id)]
@@ -418,6 +412,10 @@ if __name__ == '__main__':
                 sync_draft(args.league, args.apply)
             except requests.RequestException as e:      # one bad poll shouldn't end a draft-long watch
                 print(f"{time.strftime('%H:%M:%S')} Fantrax unreachable: {e}")
+            except SystemExit as e:                     # nor a rejected login: Firefox may be logged in again by the next poll
+                if not args.watch:
+                    raise
+                print(f"{time.strftime('%H:%M:%S')} {e}")
             if not args.watch:
                 break
             time.sleep(args.watch)
