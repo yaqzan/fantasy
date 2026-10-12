@@ -328,6 +328,25 @@ in WSOP categories with the weekly model; against the real room, whose average i
   at their expense. Free-agent swaps: under +1.
 - Player-level detail (who, what price): `.horizon/wsop-auction-2026/out/final_sim.txt`, `out/trade_sim.txt`.
 
+## Guillotine league (14 teams, 9-cat, same room; 2026-10-12)
+Scripts and player-level numbers: `.horizon/guillotine-2026/` (`prep.py`, `gsim.py`, `exp.py`, `check_claims.py`, `out/`).
+- **Likely prices = the room's WSOP 2026 prices** (8 days earlier, same season): the teams-share rule (16 -> 14 teams,
+  both $20 a spot) keeps a player's price, blended in logs 0.6 WSOP / 0.2 market model / 0.2 9-cat rank, top 140 sum to $2,800.
+  The room bid on general rankings in WSOP too (market model, "Mixed room"), so its prices barely depend on the categories.
+- `price_exponent` 1.1 (the room's fit). Unpriced in 9-cat by the market model: 3PM (.07), FG% (TS% -.03), few turnovers
+  (TOV -.15: the room pays more for high-turnover players). FT% partly priced (NFT .13).
+- **One star doubles title odds; two stars get cut early** (`gsim.py`: real schedule by Fantrax period, daily best 6, whole-week
+  injuries, known absences until their return week, bottom 2 cut per stage, cut players re-claimed 2 per stage; the room
+  drafted snake-wise from likely price x taste noise; our rosters by knapsack at likely prices). 3,000 seasons per roster:
+  no star 8.6% titles (1/14 = 7.1%), one of the top three at $95 16-18%, two of them 16.5% with stage-1 survival 90% vs 96-98%.
+  The edge holds with claims off (27% -> 31-36%), so it is not the waiver model. Category-share break-evens of the top
+  three $91-121 vs the room's ~$100-105; the fourth (turnover-heavy) about half his price. Opposite of WSOP's 11-category
+  result: there the stars' categories were worth less than the room paid.
+- No IL + stage 1 decides the first cut: absences past stage 1 are capped at $1, out-until-November at ~0.6 of the max
+  (`data/caps.json`). Stage-1 survival is 96%+ for any sensible roster: the title, not survival, is what the draft moves.
+- Caveat: everyone is bought at the likely price (no bargains, no winner's curse); WSOP's draft_sim found the no-star
+  roster gains 0.2-0.3 categories a week when bargains exist, so the star edge is overstated by some amount.
+
 ## Caveats
 - Market z use last season's stats; 2026 z use blended projections. Rookies have no prior.
 - TB and TF projections are our model's (per shot / per minute); Fantrax projects neither.

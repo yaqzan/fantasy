@@ -259,7 +259,7 @@ function DraftDay() {
               );
             })}
           </div>
-          <p className="text-xs text-gray-500 mt-3">At most one star, and only at or under his max. All {data.stars.length} are likely to go for more: buy one only if the bidding stalls.</p>
+          <p className="text-xs text-gray-500 mt-3">{data.stars_footer || `At most one star, and only at or under his max. All ${data.stars.length} are likely to go for more: buy one only if the bidding stalls.`}</p>
         </Section>
       </div>
 
