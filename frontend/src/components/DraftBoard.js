@@ -187,12 +187,14 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
     // No injury slot: a known absence to start the season holds a dead spot (draft_day.json rule.caps, injured.py).
     const cap = draftPlan.rule.caps?.[player.name];
     const max0 = cap != null ? cap : isStar ? star : shareMax(value || 1);
-    const max = Math.max(1, Math.min(max0, myCap));
+    // A drafted player keeps his pre-draft prices: my cap, the room's factor and the draft's progress
+    // only move what is still to be bought.
+    const max = player.drafted ? max0 : Math.max(1, Math.min(max0, myCap));
     const rule = draftPlan.aim;
-    const aim = !rule || progress >= AIM_FULL ? null
+    const aim = !rule || player.drafted || progress >= AIM_FULL ? null
       : isStar ? Math.max(1, Math.round(max * aimShare(rule.star, progress))) : max0 >= rule.floor ? Math.max(1, Math.round(max * aimShare(rule.other, progress))) : null;
     const likely0 = draftPlan.likely?.[player.name] ?? null;
-    const likely = roomPrice(likely0, factor, progress);
+    const likely = player.drafted ? likely0 : roomPrice(likely0, factor, progress);
     const belowBar = spotBar != null && !player.drafted && (value || 0) < spotBar;
     const markup = player.drafted ? 1 : earlyMarkup(likely0, progress);
     const early = markup >= EARLY_TAG ? markup : null;
