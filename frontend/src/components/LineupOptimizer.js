@@ -58,7 +58,7 @@ const WeekCard = ({ title, side, meta, points, opponent, note }) => {
         {side.players.map(p => (
           <div key={p.name} className={`flex justify-between ${p.plays ? '' : 'opacity-50'}`}>
             <span className="text-gray-200">{p.name} <span className="text-gray-500">{p.positions.join('/')}</span>{p.injured && <span className="text-red-400"> INJ</span>}</span>
-            <span title="Games he counts for / games his team plays">{p.plays}/{p.games}</span>
+            <span title="Expected games he counts for (availability and the daily cut) / games his team plays">{Number.isInteger(p.plays) ? p.plays : p.plays.toFixed(1)}/{p.games}</span>
           </div>
         ))}
       </div>
@@ -106,7 +106,9 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
 
   const runWhatIf = () => {
     analyze(view.week, view.statType, { adds, drops })
-      .then(result => setWhatIf(result.what_if))
+      .then(result => {
+        if (result.what_if?.error) { setWhatIf(null); setError(result.what_if.error); } else { setError(null); setWhatIf(result.what_if); }
+      })
       .catch(err => setError(errorMessage(err)));
   };
 
@@ -161,7 +163,9 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 {moves.steps.length === 0 && <p className="text-gray-400">No pickup improves this week.</p>}
                 {moves.steps.map(s => (
                   <p key={s.add}><span className="text-green-400">+ {s.add}</span> <span className="text-red-400">- {s.drop || 'open spot'}</span>
-                    <span className="text-gray-400"> ({s.gain > 0 ? '+' : ''}{s.gain.toFixed(2)})</span></p>
+                    <span className="text-gray-400"> ({s.gain > 0 ? '+' : ''}{s.gain.toFixed(2)})</span>
+                    {s.drop_score != null && s.drop_score - s.add_score >= 10 &&
+                      <span className="text-amber-400" title={`Rated ${s.drop_score} against ${s.add_score}: a one-week gain for a long-term downgrade`}> downgrade</span>}</p>
                 ))}
               </div>
             ) : <p className="text-xs text-gray-400 mb-2">Searching free agents...</p>}

@@ -108,10 +108,21 @@ stats) is shared by all leagues.
   normal on it. A roster's value is its expected categories won (points leagues: the chance of
   winning the week). One model for the Lineup Optimizer, Weekly Pickups and the CLI
   (`lineup_optimizer.py`); the old hand-tuned lineup score and its weight table are gone.
+  **Calibrated 2026-10-13** (`.horizon/weekly_model_backtest.py`: 2025-26 logs, Dec-Apr, 4,800 random
+  10-player head-to-head category matchups from the top 150 by minutes, each player's season-to-date
+  average): single-game noise alone was far too sure (it called 96% categories that won 83%, 4% ones
+  that won 15%). Two fixes, both in `player_stats.py`: `AVAILABILITY` 0.86 (a healthy-looking player,
+  one who played in the last 7 days, played 85.5% of his team's games; a game counts that fraction, and
+  in daily leagues a bench player covers an absent starter: `_lineup_chance`, positions ignored then,
+  plus the variance of games played) and `SD_SCALE` 1.5 on the difference's SD (log-loss optimum
+  k=0.6-0.7 for counting categories, 0.7-0.75 for FG%/FT%; it covers projection error, minutes swings and
+  teammates' correlated nights). Log-loss .644 -> .577. Still a little overconfident at 90%+. Wins
+  (WIN%) weren't backtested. Known-injured players still count 0 for the whole week (the flag has no
+  per-game dates).
 - **Opponent** (`Week.opponent`): the week's scheduled opponent once its roster is in, else the
   average of the league's other teams still playing, else none (the Lineup Optimizer shows my
   totals only, "opponent TBD"; pickups judge against a copy of my team).
-- **Pickups** (`rank_moves`): for each of the 150 best free agents (Z-VALUE) whose team plays that
+- **Pickups** (`rank_moves`): for each of the 250 best free agents (Z-VALUE) whose team plays that
   week, every drop (or an open spot) is tried; gain = change in expected categories won. Moves
   rank by gain + 0.01 x the change in summed margins (SDs), so when a week is as good as won or
   lost (Courtside against a weak team: 0.99+) a bigger margin still ranks first instead of

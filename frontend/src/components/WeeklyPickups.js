@@ -133,7 +133,7 @@ const WeeklyPickups = ({ config }) => {
                         ))}
                       </div>
                     </td>
-                    <td className="table-cell text-center text-white">{p.plays}/{p.games}</td>
+                    <td className="table-cell text-center text-white">{Number.isInteger(p.plays) ? p.plays : p.plays.toFixed(1)}/{p.games}</td>
                     <td className="table-cell text-center text-gray-200">{p.expected_wins.toFixed(1)}</td>
                     <td className={`table-cell text-center font-semibold ${p.gain > 0 ? 'text-green-400' : 'text-gray-400'}`}>
                       {points ? `${p.gain > 0 ? '+' : ''}${Math.round(p.gain * 100)}%` : `${p.gain > 0 ? '+' : ''}${p.gain.toFixed(2)}`}

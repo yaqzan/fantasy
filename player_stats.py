@@ -272,33 +272,71 @@ def best_starters(league, roster, player_stats, last_n_games=''):
     return fill_slots(_by_score(roster, player_stats, last_n_games), league.slots, player_stats)
 
 
-def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=()):
+# Weekly matchup model, calibrated on 2025-26 game logs (Dec-Apr, 4,800 random 10-player rosters, every
+# category): a rostered player not flagged injured played 85.5% of his team's games (rest, day-to-day,
+# new injuries), and with that, single-game noise alone still made the model far too sure (it called 96%
+# categories that won 83%). A difference's SD is scaled up 1.5x (log-loss optimum 1.4-1.55 per category).
+AVAILABILITY = 0.86
+SD_SCALE = 1.5
+
+
+def _lineup_chance(rank, slots, availability):
+    """Chance the player at `rank` (0 = best) among those whose team plays a day makes the lineup: he is
+    available and fewer than `slots` of the better players are (independent availability)."""
+    below = (1 - availability) ** rank
+    cdf = below                      # P(Bin(rank, a) == 0)
+    term = below
+    for k in range(1, slots):
+        if k > rank:
+            break
+        term *= (rank - k + 1) / k * availability / (1 - availability) if availability < 1 else 0
+        cdf += term
+    return availability * min(cdf, 1.0)
+
+
+def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=(),
+                      availability=1.0, variance=False):
     """Games and expected wins each rostered player contributes over the week.
 
     Daily lineups: each day only the players whose team plays and who make that day's lineup count
     (fill_slots by the timeframe's Z-SCORE: the best who fit the league's slots), so a deep bench
     adds little. Weekly lineups: every game of every player in `roster` counts (pass the starters).
     Players in `unavailable` (injured) contribute nothing.
+
+    `availability` < 1: each healthy player plays a team game with that chance, so a game counts
+    fractionally (daily lineups: his chance of being available and above the cut, a bench player
+    covering for absent starters; positions are ignored then). With `variance`, also returns
+    {player: variance of his games} (sum of p(1-p) over days) for team_week_totals.
     """
     games = {p: 0 for p in roster}
     wins = {p: 0.0 for p in roster}
+    game_var = {p: 0.0 for p in roster}
     players = [p for p in roster if p in player_stats and p not in unavailable]
+    out = lambda: (games, wins, game_var) if variance else (games, wins)  # noqa: E731
     if not league.daily_lineups:
         for p in players:
             days = schedule.get(player_stats[p]['TEAM'], {})
-            games[p], wins[p] = len(days), sum(days.values())
-        return games, wins
+            games[p], wins[p] = len(days) * availability, sum(days.values()) * availability
+            game_var[p] = len(days) * availability * (1 - availability)
+        return out()
     by_day = {}
     for p in _by_score(players, player_stats, last_n_games):
         for day, p_win in schedule.get(player_stats[p]['TEAM'], {}).items():
             by_day.setdefault(day, []).append((p, p_win))
     slots = league.slots
     for entries in by_day.values():
-        playing = dict(entries)
-        for p in fill_slots(list(playing), slots, player_stats):
-            games[p] += 1
-            wins[p] += playing[p]
-    return games, wins
+        if availability >= 1:
+            playing = dict(entries)
+            for p in fill_slots(list(playing), slots, player_stats):
+                games[p] += 1
+                wins[p] += playing[p]
+            continue
+        for rank, (p, p_win) in enumerate(entries):
+            chance = _lineup_chance(rank, len(slots), availability)
+            games[p] += chance
+            wins[p] += chance * p_win
+            game_var[p] += chance * (1 - chance)
+    return out()
 
 def calculate_team_totals(roster, player_stats, player_games, player_wins, categories, last_n_games=''):
     """Category totals for a group of players. Counting stats are per-game rate x games; ratios are
@@ -334,10 +372,11 @@ def calculate_team_totals(roster, player_stats, player_games, player_wins, categ
             totals[key] = total(category)
     return totals
 
-def team_week_totals(players, player_stats, player_games, player_wins, categories, last_n_games=''):
+def team_week_totals(players, player_stats, player_games, player_wins, categories, last_n_games='', game_var=None):
     """{category: (total, variance)} for a team's week: calculate_team_totals' totals, and how far
     each can swing on game-to-game noise (CATEGORY_CATALOG `noise` / `attempt_sd`; wins as coin
-    flips at each game's win chance)."""
+    flips at each game's win chance). `game_var`: {player: variance of games played}
+    (player_week_games(variance=True)); a count's variance gains per-game value^2 x that."""
     n = last_n_games
     totals = calculate_team_totals(players, player_stats, player_games, player_wins, categories, n)
     played = [p for p in players if p in player_stats and player_games.get(p)]
@@ -352,12 +391,14 @@ def team_week_totals(players, player_stats, player_games, player_wins, categorie
             variance = 0.0
             for p in played:
                 q = min(max(player_wins.get(p, 0) / player_games[p], 0.0), 1.0)
-                variance += player_games[p] * q * (1 - q)
+                variance += player_games[p] * q * (1 - q) + (game_var or {}).get(p, 0.0) * q * q
         elif spec['kind'] == 'ratio':
             attempts = sum(player_games[p] * per_game(p, spec['attempts']) for p in played)
             variance = spec['attempt_sd'] ** 2 / attempts if attempts else 0.0
         else:
             variance = sum(player_games[p] * per_game(p, spec['noise']) for p in played)
+            if game_var:
+                variance += sum(game_var.get(p, 0.0) * (player_stats[p].get(f'{category}{n}') or 0) ** 2 for p in played)
         result[category] = (totals.get(category + n, 0), variance)
     return result
 
@@ -374,7 +415,7 @@ def category_margins(mine, theirs, league):
     for category in league.categories:
         (a, var_a), (b, var_b) = mine[category], theirs[category]
         lead = (b - a) if category in league.inverse_categories else (a - b)
-        sd = (var_a + var_b) ** 0.5
+        sd = SD_SCALE * (var_a + var_b) ** 0.5
         margins[category] = lead / sd if sd > 0 else (float('inf') if lead > 0 else float('-inf') if lead < 0 else 0.0)
     return margins
 

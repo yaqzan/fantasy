@@ -14,6 +14,7 @@ from datetime import date
 
 from fantasy_database import FantasyTeam, FantasyTeamPlayer
 from player_stats import (league_player_stats, week_schedule, player_week_games, best_starters, team_week_totals,
+                          AVAILABILITY,
                           average_week_totals, category_win_chances, category_margins, games_floor, STAT_SUFFIXES)
 from fantasy_team_helper import (get_all_my_team_players, get_available_players, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_team_by_abv)
@@ -23,7 +24,8 @@ Side = namedtuple('Side', 'totals games wins')          # a roster's week: team_
 # key: what moves are ranked by (gain, then the margin tie-break, see _value).
 Move = namedtuple('Move', 'key gain add drop side chances')
 MARGIN_WEIGHT = 0.01  # a whole SD of lead in a category counts as 1% of a category won
-MOVE_POOL = 150      # free agents with games this week tried per claim, best Z-VALUE first
+MOVE_POOL = 250      # free agents with games this week tried per claim, best Z-VALUE first (the best move
+                     # sat at rank 130 of 421 on 2026-10-13, so 150 was cutting it close)
 NEXT_CLAIM_POOL = 30  # later claims only retry the best candidates of the claim before
 
 
@@ -52,8 +54,10 @@ class Week:
         players = [p for p in players if p in self.stats]
         if not league.daily_lineups:
             players = list(best_starters(league, [p for p in players if p not in self.injured], self.stats, suffix))
-        games, wins = player_week_games(players, self.stats, self.schedule, league, suffix, self.injured)
-        return Side(team_week_totals(players, self.stats, games, wins, league.categories, suffix), games, wins)
+        games, wins, game_var = player_week_games(players, self.stats, self.schedule, league, suffix, self.injured,
+                                                  availability=AVAILABILITY, variance=True)
+        totals = team_week_totals(players, self.stats, games, wins, league.categories, suffix, game_var)
+        return Side(totals, games, wins)
 
     def opponent(self, opponent_abv, suffix):
         """(label, weekly totals) a roster is judged against: the week's opponent once its roster is
@@ -135,7 +139,7 @@ def _side_json(week, side, theirs, suffix):
         'expected': round(sum(chances.values()), 2) if theirs else None,
         'categories': {c: {'mine': side.totals[c][0], 'theirs': theirs[c][0] if theirs else None,
                            'chance': round(chances[c], 3) if theirs else None} for c in league.categories},
-        'players': sorted(({'name': p, 'positions': list(stats[p]['Positions']), 'plays': side.games.get(p, 0),
+        'players': sorted(({'name': p, 'positions': list(stats[p]['Positions']), 'plays': round(side.games.get(p, 0), 1),
                             'games': len(week.schedule.get(stats[p]['TEAM'], {})), 'injured': p in week.injured,
                             'score': round(stats[p].get(f'Z-SCORE{suffix}', 0), 1)}
                            for p in side.games), key=lambda r: (-r['plays'], -r['score'])),
@@ -173,13 +177,20 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
     }
     if adds or drops:
         what_if = [p for p in roster if p not in drops] + [p for p in adds if p in week.stats and p not in roster]
-        result['what_if'] = {**_side_json(week, week.team(what_if, suffix), theirs, suffix),
-                             'adds': list(adds), 'drops': list(drops)}
+        if len(what_if) > league.roster_size:
+            result['what_if'] = {'error': f"That roster has {len(what_if)} players and the league allows "
+                                          f"{league.roster_size}: drop {len(what_if) - league.roster_size} more"}
+        else:
+            result['what_if'] = {**_side_json(week, week.team(what_if, suffix), theirs, suffix),
+                                 'adds': list(adds), 'drops': list(drops)}
     if moves:
         steps, final = best_moves(week, roster, theirs or week.team(roster, suffix).totals, suffix,
                                   undroppable, league.claims_per_week)
         result['moves'] = {**_side_json(week, week.team(final, suffix), theirs, suffix),
-                           'steps': [{'add': m.add, 'drop': m.drop, 'gain': round(m.gain, 3)} for m in steps]}
+                           'steps': [{'add': m.add, 'drop': m.drop, 'gain': round(m.gain, 3),
+                                      'add_score': round(week.stats[m.add].get(f'Z-SCORE{suffix}', 0), 1),
+                                      'drop_score': round(week.stats[m.drop].get(f'Z-SCORE{suffix}', 0), 1) if m.drop else None}
+                                     for m in steps]}
     return result
 
 
@@ -214,8 +225,9 @@ def get_pickup_candidates(league, week_start=None, week_end=None, opponent_abv=N
             'name': m.add, 'team': p['TEAM'], 'positions': list(p['Positions']),
             'gp': p.get('GP') or 0, 'small_sample': (p.get('GP') or 0) < floor,
             'games': len(days), 'days': [d.isoformat() for d in days],
-            'plays': m.side.games.get(m.add, 0), 'expected_wins': round(m.side.wins.get(m.add, 0.0), 2),
+            'plays': round(m.side.games.get(m.add, 0), 1), 'expected_wins': round(m.side.wins.get(m.add, 0.0), 2),
             'score': round(p.get(f'Z-SCORE{suffix}', 0), 1), 'gain': round(m.gain, 3), 'drop': m.drop,
+            'drop_score': round(stats[m.drop].get(f'Z-SCORE{suffix}', 0), 1) if m.drop else None,
             'category_changes': {c: m.side.totals[c][0] - mine[c][0] for c in league.categories},
             'chance_changes': {c: round(m.chances[c] - base[c], 3) for c in league.categories},
         })
