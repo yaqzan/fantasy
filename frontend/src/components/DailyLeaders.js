@@ -234,13 +234,18 @@ const DailyLeaders = ({ config }) => {
                         })()}
                       </span>}
                     </td>
-                    {columns.map(c => (
-                      <td key={c.key}
-                          className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 ${points ? '' : zTint(p.z?.[c.key])} ${mine ? 'bg-row-mine' : ''}`}
-                          title={!points && p.z?.[c.key] != null ? `z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : undefined}>
-                        <span className={fade}>{cellText(c.key, p)}</span>
-                      </td>
-                    ))}
+                    {columns.map(c => {
+                      // My rows: the tint is a translucent layer over the yellow, so both show.
+                      const tint = points ? '' : zTint(p.z?.[c.key]);
+                      return (
+                        <td key={c.key}
+                            className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 ${mine ? 'bg-row-mine relative' : tint}`}
+                            title={!points && p.z?.[c.key] != null ? `z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : undefined}>
+                          {mine && tint && <span className={`absolute inset-0 ${tint}`} />}
+                          <span className={`${fade} ${mine ? `relative ${tint.includes('text-white') ? 'text-white' : ''}` : ''}`}>{cellText(c.key, p)}</span>
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
