@@ -602,6 +602,17 @@ def analyze():
     return jsonify(result)
 
 
+@fantasy_api.route('/stage-plan')
+def stage_plan():
+    """Guillotine: the claims for each remaining week of the current stage (lineup_optimizer.plan_stage)."""
+    from lineup_optimizer import plan_stage
+    league = current_league()
+    result = plan_stage(league, request.args.get('timeframe', 'projected'))
+    if 'error' in result:
+        return jsonify(result), 422
+    return jsonify(result)
+
+
 # ---------------------------------------------------------------- projections (NBA-wide)
 
 def _projection_season():

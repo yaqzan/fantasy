@@ -7,9 +7,10 @@ noise, and the chance of beating the opponent in it is normal on the difference
 (category_win_chances). A roster's value is its expected categories won; a points league has one
 category (FPTS), so that is its chance of winning the week.
 
-    python lineup_optimizer.py [--league <id>] [--timeframe projected|season|5|10|proj] [--moves]
+    python lineup_optimizer.py [league] [timeframe] [moves] [plan]   # plan: a guillotine stage's claims, week by week
 """
 from collections import namedtuple
+from datetime import date
 
 from fantasy_database import FantasyTeam, FantasyTeamPlayer
 from player_stats import (league_player_stats, week_schedule, player_week_games, best_starters, team_week_totals,
@@ -227,15 +228,107 @@ def get_pickup_candidates(league, week_start=None, week_end=None, opponent_abv=N
     }
 
 
-def main(league=None, timeframe='projected', moves=False):
+def plan_stage(league, timeframe='projected', beam=4, alternatives=5):
+    """The claims for the rest of the current guillotine stage, week by week. Each week has
+    `claims_per_week` claims, the roster carries over, and every week is judged against that
+    week's scheduled opponent (the league average where its roster isn't in). A beam search keeps
+    the `beam` best rosters by summed expected categories won, so a pickup that only pays off a
+    week later (a 4-game week next, a better matchup) still shows. The stage's weeks only: the
+    pool of eliminated teams' players and next stage's opponents aren't known yet.
+    Per week: the claim(s), the week's expected categories before and after, and `alternatives`
+    next-best claims on that path (the blind auction can be lost)."""
+    info = league.stage_info()
+    if not info or info.get('stage') is None:
+        return {'error': 'This league has no stage in play (not a guillotine league, or the season is over)'}
+    suffix = timeframe_suffix(timeframe)
+    today = date.today().isoformat()
+    weeks = [w for w in league.weeks()[info['first_week'] - 1:info['last_week']] if w['end'] >= today]
+    if not weeks:
+        return {'error': 'No weeks left in this stage'}
+    roster = get_all_my_team_players(league)
+    undroppable = set(get_undroppable_players(league))
+    states = [(0.0, roster, undroppable, [])]    # (summed expected, roster, keep, plan so far)
+    for w in weeks:
+        week = Week(league, date.fromisoformat(w['start']), date.fromisoformat(w['end']))
+        if not any(p in week.stats for p in roster):
+            return {'error': f"No players on your team ({league.my_team}) in this league yet"}
+        pool = week.free_agents(suffix)
+        label, theirs = week.opponent(w['opponent'] or None, suffix)
+        grown = []
+        for total, state_roster, keep, plan in states:
+            theirs_now = theirs or week.team(state_roster, suffix).totals
+            expected0, _, _ = _value(week.team(state_roster, suffix).totals, theirs_now, league)
+            options = [(expected0, state_roster, keep, [], None)]       # no claim
+            frontier = [(state_roster, keep, [], expected0)]
+            for _ in range(league.claims_per_week):
+                nxt = []
+                for r, k, made, _e in frontier:
+                    ranked, _ = rank_moves(week, r, theirs_now, suffix, [c for c in pool if c not in r], k)
+                    for m in ranked[:beam]:
+                        r2 = [p for p in r if p != m.drop] + [m.add]
+                        e = _e + m.gain
+                        nxt.append((r2, k | {m.add}, made + [m], e))
+                nxt.sort(key=lambda t: -t[3])
+                for r2, k2, made, e in nxt[:beam]:
+                    options.append((e, r2, k2, made, None))
+                frontier = [(r2, k2, made, e) for r2, k2, made, e in nxt[:beam]]
+            for e, r2, k2, made, _ in options:
+                grown.append((total + e, r2, k2, plan + [{
+                    'week': w['week'], 'start': w['start'], 'end': w['end'], 'opponent': label,
+                    'before': round(expected0, 2), 'after': round(e, 2),
+                    'claims': [{'add': m.add, 'drop': m.drop, 'gain': round(m.gain, 3),
+                                'games': len(week.schedule.get(week.stats[m.add]['TEAM'], {}))} for m in made],
+                    'alternatives': []}]))
+        # one state per distinct roster, the best total
+        best = {}
+        for t in grown:
+            key = tuple(sorted(t[1]))
+            if key not in best or t[0] > best[key][0]:
+                best[key] = t
+        states = sorted(best.values(), key=lambda t: -t[0])[:beam]
+        roster = states[0][1]
+    total, final, _, plan = states[0]
+    # the next-best claims for each week of the chosen path
+    path = list(get_all_my_team_players(league))
+    for step, w in zip(plan, weeks):
+        week = Week(league, date.fromisoformat(w['start']), date.fromisoformat(w['end']))
+        label, theirs = week.opponent(w['opponent'] or None, suffix)
+        theirs = theirs or week.team(path, suffix).totals
+        ranked, _ = rank_moves(week, path, theirs, suffix, [c for c in week.free_agents(suffix) if c not in path],
+                               undroppable)
+        chosen = {c['add'] for c in step['claims']}
+        step['alternatives'] = [{'add': m.add, 'drop': m.drop, 'gain': round(m.gain, 3)}
+                                for m in ranked if m.add not in chosen][:alternatives]
+        for c in step['claims']:
+            path = [p for p in path if p != c['drop']] + [c['add']]
+    return {'stage': info['stage'], 'timeframe': timeframe, 'claims_per_week': league.claims_per_week,
+            'expected_total': round(total, 2), 'weeks': plan, 'final_roster': final}
+
+
+def main(league=None, timeframe='projected', moves=False, plan=False):
     """Print this week's matchup for a league (default: the active one).
 
     :param str league: league id
     :param str timeframe: projected, season, 5, 10 or proj
     :param bool moves: also find the best pickups for the week's claims
+    :param bool plan: the claims for each remaining week of the guillotine stage
     """
     from leagues import get_league, CATEGORY_CATALOG
     config = get_league(league)
+    if plan:
+        result = plan_stage(config, timeframe)
+        if 'error' in result:
+            print(result['error'])
+            return
+        print(f"{config.name}: stage {result['stage']} plan ({timeframe}), "
+              f"{result['expected_total']} expected categories over {len(result['weeks'])} weeks")
+        for w in result['weeks']:
+            print(f"week {w['week']} {w['start']} vs {w['opponent'] or 'TBD'}: {w['before']} -> {w['after']}")
+            for c in w['claims']:
+                print(f"  + {c['add']} ({c['games']} g)  - {c['drop'] or 'open spot'}  (+{c['gain']:.2f})")
+            for c in w['alternatives']:
+                print(f"    alt {c['add']}  - {c['drop'] or 'open spot'}  (+{c['gain']:.2f})")
+        return
     data = get_matchup(config, timeframe, moves=moves)
     if 'error' in data:
         print(data['error'])

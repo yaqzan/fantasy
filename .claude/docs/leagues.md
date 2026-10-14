@@ -120,6 +120,12 @@ stats) is shared by all leagues.
   of it among the previous step's top 30, until nothing helps. Exhaustive claim combinations
   (5 of 150) are out of reach. ~0.4 s per league-week. `/api/analyze?add=&drop=` (repeatable) is
   the what-if; `moves=true` adds the best pickups.
+- **Stage plan** (`plan_stage`, `/api/stage-plan`, `python lineup_optimizer.py <league> proj false true`): guillotine
+  leagues only. The claims for each remaining week of the current stage: beam search (4 rosters) over `rank_moves`,
+  each week judged against its scheduled opponent, the roster carrying over, so a claim that pays next week's
+  4-game slate shows. Shows 5 next-best claims per week (the blind auction can be lost); an alternative can beat the
+  chosen claim's single-week gain when the chosen one wins on the following weeks. Not modelled: FAAB bids, the
+  next stage's pool (eliminated teams' players), waiver processing time. ~4 s.
 - **Team Standings** is a power ranking, not the league's real standings. `view=per_game`: one
   game each of every team's `best_starters`. `view=week`: the current fantasy week through
   `player_week_games`. Injured players are left out unless `healthy_only=false`. Ranked by the sum
