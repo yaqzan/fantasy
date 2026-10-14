@@ -63,7 +63,8 @@ must keep its `sm:` twin.
   none), STL, BLK, then the league's other categories (`orderColumns`): those five fit at 390px in
   every league, the rest scroll under the pinned pair. Tapping a scoreboard chip filters the list to that game (orange
   ring, other chips fade; tap again to clear, another to move; owner chips count within it). Taken rows fade their cell
-  contents, not the row: an opacity on the row lets scrolled cells show through the pinned ones.
+  contents, not the row: an opacity on the row lets scrolled cells show through the pinned ones. Their category
+  tints stay (only the text fades), so a taken player's bad night shows why it ranked low.
 - Draft board: the key/legend is off on phones; the room strip is one line (top bid, spot bar, aim %,
   room factor once picks have prices, pace only when it warns) with team chips behind "Teams".
 - The board's scroll box fills the rest of the screen on phones (measured in `DraftBoard`), so the

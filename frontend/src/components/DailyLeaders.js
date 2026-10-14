@@ -236,7 +236,7 @@ const DailyLeaders = ({ config }) => {
                     </td>
                     {columns.map(c => (
                       <td key={c.key}
-                          className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 ${points || fade ? '' : zTint(p.z?.[c.key])} ${mine ? 'bg-row-mine' : ''}`}
+                          className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 ${points ? '' : zTint(p.z?.[c.key])} ${mine ? 'bg-row-mine' : ''}`}
                           title={!points && p.z?.[c.key] != null ? `z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : undefined}>
                         <span className={fade}>{cellText(c.key, p)}</span>
                       </td>
