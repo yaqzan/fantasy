@@ -217,6 +217,7 @@ stats) is shared by all leagues.
   -3, an efficient 10-shot night +3 TS%. Measured on 2026-10-08 (WSOP): 1.84 capped cells per
   player vs 0.09, and a 12-3-0 line (2 stl, 2 blk, a win) ranked first over a 22-10-3-blk line.
   The two orders still agree broadly (Spearman 0.94, 8 of the top 10 shared, both leagues).
+  Price of the cap: one technical is -3 in a TECH league, more than a 28-point night earns (+2.2 PTS): 10-13 Reaves 28 pts, 1 tech, 7 TO ranked 37th, under da Silva's 18. Matchup math agrees (one tech is ~2.5x the category-win swing of +14 points), so the page names the drag instead of softening it.
   **Signals** (`daily_leaders.signals`): *pace* (▲/▼ by Val) = tonight vs his own per-minute norm:
   expected = projected per-game line x (minutes tonight / projected minutes; `_proj` is the only
   timeframe with minutes, so real season minutes are a later pull), per category (tonight -
@@ -235,7 +236,7 @@ stats) is shared by all leagues.
   **Preseason** is per game, from ESPN's season type (1 pre, 2 regular, 3 playoffs, 5 play-in);
   the stored schedule agrees (`season_first_game`: 2026-10-20). Starters sit second halves, so
   minutes are rotations and raw Val favours reserves: no minutes flag, arrows hollow (△▽), default
-  sort Pace (a Val/Pace toggle, remembered per league once picked), Pickups = pace up among
+  sort Pace (a Best/Pace toggle, remembered per league once picked; Best = Val, the server's order; renamed 2026-10-14 because the pinned column showed Val under a Pace order and read as random), Pickups = pace up among
   rotation players only (projected 15+ min: 2-12 a night on 10-06..08 vs 7-17 without). No
   on-page note (owner removed it 2026-10-09). Regular-season games switch all of it back on their own.
   Season averages take each game as ESPN calls it final, and the official NBA pull confirms them

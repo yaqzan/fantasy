@@ -58,9 +58,27 @@ export const isPickup = (p) => p.owner === 'free' && !(p.value < 0 && p.z && Obj
 
 export const keepRow = (filter, p) => filter === 'all' || (filter === 'pickups' ? isPickup(p) : p.owner === filter);
 
-// Sort by tonight's value (the server's order) or by pace. Pickups always read by pace.
+// Sort by Best, tonight's value in the league's scoring (the server's order), or by pace. Pickups
+// always read by pace.
 export const sortRows = (filter, rows, sort = 'val') => (filter === 'pickups' || sort === 'pace'
   ? [...rows].sort((a, b) => (b.pace ?? -99) - (a.pace ?? -99)) : rows);
+
+// The rank shown in the pinned column follows the active sort: Best uses the server's rank, Pace
+// ranks the whole slate (not just the filtered rows) by pace. {espn id: rank}.
+export const paceRanks = (players) => Object.fromEntries(
+  [...players].sort((a, b) => (b.pace ?? -99) - (a.pace ?? -99)).map((p, i) => [p.espn_id, i + 1]));
+
+// The category that sank a night: the worst z at or under -2.5 (one technical, a 7-turnover game),
+// so a 28-point line ranked under an 18-point one says why without scrolling to its column.
+export const DRAG_Z = -2.5;
+export const worstDrag = (p, columns) => {
+  let worst = null;
+  for (const c of columns) {
+    const z = p.z?.[c.key];
+    if (z != null && z <= DRAG_Z && (!worst || z < worst.z)) worst = { label: c.label, z };
+  }
+  return worst;
+};
 
 // Preseason starters sit the second half, so raw value favours reserves: sort by pace then,
 // unless the user picked a sort.

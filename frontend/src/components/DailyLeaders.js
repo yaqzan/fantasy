@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, inGame, toggleGame, cellText, zTint, keepRow, isPickup, sortRows, defaultSort } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, inGame, toggleGame, cellText, zTint, keepRow, isPickup, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -79,6 +79,8 @@ const DailyLeaders = ({ config }) => {
   const game = (data?.games || []).find(g => g.id === gameId) || null;
   const pool = (data?.players || []).filter(p => inGame(game, p));
   const rows = sortRows(ownerFilter, pool.filter(p => keepRow(ownerFilter, p)), sort);
+  const byPace = ownerFilter === 'pickups' || sort === 'pace';
+  const ranks = byPace ? paceRanks(pool) : null;
   const counts = pool.reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }),
                              { pickups: pool.filter(isPickup).length });
 
@@ -134,8 +136,8 @@ const DailyLeaders = ({ config }) => {
           </button>
         ))}
         <div className="ml-auto shrink-0 flex rounded-full border border-gray-600 text-xs overflow-hidden"
-             title="Val: what he put up tonight. Pace: how far ahead of his own per-minute norm.">
-          {[['val', points ? 'FPTS' : 'Val'], ['pace', 'Pace']].map(([key, label]) => (
+             title="Best: what he put up tonight in this league's scoring. Pace: how far ahead of his own per-minute norm.">
+          {[['val', 'Best'], ['pace', 'Pace']].map(([key, label]) => (
             <button key={key} onClick={() => setView({ sort: key })}
                     className={`px-2.5 py-1 ${sort === key ? 'bg-gray-600 text-white' : 'text-gray-400'}`}>{label}</button>
           ))}
@@ -180,9 +182,10 @@ const DailyLeaders = ({ config }) => {
               <tr>
                 <th className={`table-header sticky left-0 z-20 px-2 ${PLAYER_W}`}>Player</th>
                 <th className={`table-header sticky z-20 text-center px-0.5 tracking-normal sm:tracking-wider border-r border-gray-700 ${VALUE_W}`}
-                    title={points ? "This league's fantasy points"
+                    title={byPace ? 'SDs ahead of his own per-minute norm'
+                      : points ? "This league's fantasy points"
                       : "Summed category z: how far this game moved a week's matchup, category by category"}>
-                  {points ? 'FPTS' : 'Val'}
+                  {byPace ? 'Pace' : points ? 'FPTS' : 'Best'}
                 </th>
                 {columns.map(c => <th key={c.key} className={`table-header text-center whitespace-nowrap tracking-normal sm:tracking-wider ${STAT_W}`}>{c.label}</th>)}
               </tr>
@@ -192,11 +195,12 @@ const DailyLeaders = ({ config }) => {
                 const mine = p.owner === 'mine';
                 const fade = p.owner === 'taken' ? 'opacity-40' : '';
                 const bg = mine ? 'bg-row-mine' : 'bg-gray-800 group-hover:bg-row-hover';
+                const drag = points ? null : worstDrag(p, columns);
                 return (
                   <tr key={p.espn_id} className="group border-t border-gray-700">
                     <td className={`sticky left-0 z-10 px-2 py-1.5 ${PLAYER_W} ${bg} ${mine ? 'shadow-[inset_3px_0_0_rgb(var(--accent))]' : ''}`}>
                       <div className={`flex items-baseline gap-1.5 ${fade}`}>
-                        <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right">{p.rank}</span>
+                        <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right">{ranks ? ranks[p.espn_id] : p.rank}</span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 min-w-0">
                             <span className={`font-medium truncate ${mine ? 'text-nba-orange' : 'text-white'}`} title={p.name}>{p.name}</span>
@@ -207,6 +211,7 @@ const DailyLeaders = ({ config }) => {
                             <span>{p.team}<span className="hidden sm:inline"> vs {p.opp}</span> · </span>
                             <span className={p.minutes_up ? 'text-green-400 font-semibold' : ''}
                                   title={p.min_usual ? `Usual ${p.min_usual} min` : undefined}>{p.MIN} mins</span>
+                            {drag && <span className="text-red-400 font-semibold" title={`${drag.label} cost ${drag.z} z`}>−{drag.label}</span>}
                             {p.owner === 'taken' && (  // mine needs no chip: the row highlight says it
                               <span className="ml-auto px-1 rounded text-[10px] font-semibold truncate bg-gray-700 text-gray-300"
                                     title={p.owner_name}>{p.owner_abv}</span>
@@ -216,13 +221,18 @@ const DailyLeaders = ({ config }) => {
                       </div>
                     </td>
                     <td className={`sticky z-10 text-center px-0.5 text-[11px] sm:text-sm font-semibold tabular-nums whitespace-nowrap border-r border-gray-700 ${VALUE_W} ${bg}`}>
-                      <span className={`${fade} ${valueClass(p.value, points)}`}>
+                      {byPace ? (
+                        <span className={`${fade} ${p.pace >= 1.5 ? 'text-sky-400' : p.pace <= -1.5 ? 'text-amber-400' : 'text-white'}`}
+                              title={`Best ${signed(p.value)}`}>
+                          {p.pace == null ? '–' : `${p.pace > 0 ? '+' : ''}${p.pace.toFixed(1)}`}
+                        </span>
+                      ) : <span className={`${fade} ${valueClass(p.value, points)}`}>
                         {signed(p.value)}
                         {(() => {
                           const mark = paceMark(p, points);
                           return mark && <span className={`absolute top-1 right-0.5 leading-none text-[9px] sm:static sm:text-[10px] sm:ml-0.5 ${mark.cls}`} title={mark.title}>{mark.glyph}</span>;
                         })()}
-                      </span>
+                      </span>}
                     </td>
                     {columns.map(c => (
                       <td key={c.key}
