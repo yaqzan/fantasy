@@ -145,7 +145,7 @@ stats) is shared by all leagues.
   `games_floor` are flagged `small_sample`. Fit the exponent to the league's past auction prices by rank (least squares
   over the drafted players); the owner's league stores its fit (a gitignored
   `draft_history_price_curve.json` holds the price curve it came from).
-- **Guillotine leagues** (`elimination.stage_weeks`, e.g. `[3,3,3,3,3,2,2]`; empty = ordinary
+- **Guillotine leagues** (`elimination.stage_weeks`, e.g. `[3,3,3,3,3,3,2]`: six 3-week stages + a 2-week final; empty = ordinary
   league). Stages are consecutive schedule weeks; after each stage but the last, the
   `per_stage` worst records are eliminated and every record resets. `LeagueConfig.stage_info()`
   (in `to_dict()`, so the header shows it) gives the stage, its weeks and dates, teams in it and
