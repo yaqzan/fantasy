@@ -328,6 +328,17 @@ in WSOP categories with the weekly model; against the real room, whose average i
   at their expense. Free-agent swaps: under +1.
 - Player-level detail (who, what price): `.horizon/wsop-auction-2026/out/final_sim.txt`, `out/trade_sim.txt`.
 
+## Owner's draft-night mistakes, 2026-27 (read before the next auction)
+Owner's review 2026-10-14 of both auctions (WSOP 10-04, Guillotine 10-12). Names and prices: `.horizon/wsop-auction-2026/out/player_notes.md` "Owner's mistakes".
+- **Don't bid early on players worth under ~$25.** With a balanced build (fill with value, not top heavy), a
+  low-end player bid on early costs a spot and money for no gain. Those players come cheap once the room's money
+  is gone (see "After full" in the player notes: $1-19 buys worth $24-42). Early money goes to $25+ value; the
+  under-$25 tier waits.
+- **Only bid to the max on players you are willing to own.** The max is a ceiling for a player you want, not a
+  tool to push someone else's price. Running a player you don't want up to his max is how you end up owning him.
+  Before raising, ask "do I want him on this roster, in this build?" If not, stop well under the max or don't bid.
+- Kanban "Draft Lessons For 2027-28" carries both rules into the Draft Day tab for next season.
+
 ## Guillotine league (14 teams, 9-cat, same room; 2026-10-12)
 Scripts and player-level numbers: `.horizon/guillotine-2026/` (`prep.py`, `gsim.py`, `exp.py`, `check_claims.py`, `out/`).
 - **Likely prices = the room's WSOP 2026 prices** (8 days earlier, same season): the teams-share rule (16 -> 14 teams,
