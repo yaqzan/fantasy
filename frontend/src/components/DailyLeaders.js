@@ -140,29 +140,44 @@ const DailyLeaders = ({ config }) => {
   const STAT_W = 'min-w-[2.25rem] px-0.5 sm:min-w-0 sm:px-2';
   return (
     <div className="py-2 sm:p-6">
-      <div className="flex items-center gap-2 mb-2 sm:mb-3">
+      {/* Phones: date stepper, the three owner chips (tap the lit one to go back to everything)
+          and the sort toggle share ONE row (`contents` flattens the two sm: rows into it).
+          Status text and Today link are desktop-only: on a phone the date turns orange on
+          today, and tapping the date from another day jumps back to today. */}
+      <div className="flex items-center gap-1 mb-2 sm:block sm:mb-0">
+      <div className="contents sm:flex sm:items-center sm:gap-2 sm:mb-3">
         <h2 className="hidden sm:block text-2xl font-bold text-white mr-4">Daily Leaders</h2>
-        <div className="flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
+        <div className="shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
           <button onClick={() => shown && setDay(shiftDate(shown, -1))}
-                  className="px-2.5 py-1.5 text-gray-300 hover:text-white rounded-l-md" aria-label="Previous day">‹</button>
-          <span className="py-1.5 text-white font-medium min-w-[6.5rem] text-center">
-            {shown ? new Date(`${shown}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '…'}
-          </span>
+                  className="px-1.5 sm:px-2.5 py-1.5 text-gray-300 hover:text-white rounded-l-md" aria-label="Previous day">‹</button>
+          <button onClick={() => data && setDay(data.today)} disabled={!data || shown === data.today}
+                  title={data && shown !== data.today ? 'Back to today' : undefined}
+                  className={`py-1.5 font-medium min-w-[3.25rem] sm:min-w-[6.5rem] text-center ${
+                    data && shown === data.today ? 'text-nba-orange sm:text-white' : 'text-white'}`}>
+            {shown ? (() => {
+              const d = new Date(`${shown}T12:00:00`);
+              return <>
+                <span className="sm:hidden">{d.toLocaleDateString('en-US', { weekday: 'short' })} {d.getDate()}</span>
+                <span className="hidden sm:inline">{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+              </>;
+            })() : '…'}
+          </button>
           <button onClick={() => shown && setDay(shiftDate(shown, 1))}
-                  className="px-2.5 py-1.5 text-gray-300 hover:text-white rounded-r-md" aria-label="Next day">›</button>
+                  className="px-1.5 sm:px-2.5 py-1.5 text-gray-300 hover:text-white rounded-r-md" aria-label="Next day">›</button>
         </div>
         {data && shown !== data.today && (
-          <button onClick={() => setDay(data.today)} className="text-xs text-nba-orange px-1">Today</button>
+          <button onClick={() => setDay(data.today)} className="hidden sm:block text-xs text-nba-orange px-1">Today</button>
         )}
-        <span className="ml-auto">{status}</span>
+        <span className="hidden sm:block ml-auto">{status}</span>
       </div>
 
-      <div className="flex gap-1 mb-2 sm:mb-3 overflow-x-auto">
+      <div className="contents sm:flex sm:gap-1 sm:mb-3 sm:overflow-x-auto">
         {OWNER_FILTERS.map(([key, label, short]) => (
-          <button key={key} onClick={() => setView({ owner: key })}
-                  className={`shrink-0 px-2 sm:px-2.5 py-1 rounded-full border text-xs font-medium ${ownerFilter === key
+          <button key={key} onClick={() => setView({ owner: ownerFilter === key ? 'all' : key })}
+                  aria-pressed={ownerFilter === key}
+                  className={`shrink-0 px-2 sm:px-2.5 py-1 rounded-full border text-xs font-medium ${key === 'all' ? 'hidden sm:block' : ''} ${ownerFilter === key
                     ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-600 text-gray-300 hover:text-white'}`}>
-            <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="opacity-70"> {counts[key]}</span> : ''}
+            <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="hidden sm:inline opacity-70"> {counts[key]}</span> : ''}
           </button>
         ))}
         <div className="ml-auto shrink-0 flex rounded-full border border-gray-600 text-xs overflow-hidden"
@@ -173,7 +188,7 @@ const DailyLeaders = ({ config }) => {
           ))}
         </div>
       </div>
-
+      </div>
 
       {(data?.espn_folded?.folded > 0 || data?.stats_refresh) && (
         <div className="text-[11px] sm:text-xs text-gray-400 mb-2">

@@ -57,6 +57,7 @@ must keep its `sm:` twin.
   edit pencil stays). Wider screens keep the panel above the tabs.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
+- Daily Leaders toolbar: one row on phones: `‹ Wed 14 ›` (orange on today; tap it from another day to jump back), Pickups / Free / Mine chips (no All, no counts; tap the lit chip to return to everything), Best|Pace. Status text and the Today link are desktop-only.
 - Daily Leaders: one pinned column (10.375rem, sized so the sixth stat column starts off-screen on a 400px phone: rank, name, team, minutes, game progress; no owner chip (owner
   2026-10-15: dimming is enough); mine are the highlighted rows (theme colour `mine`: gold on Podium; the same tint colours Draft Board rows); this week's
   opponent's players differ only by name colour `opp` (copper, still inside the 40% dim; `vs_me`, from the league schedule, the first week before the season); a rostered player who sat a finished game
