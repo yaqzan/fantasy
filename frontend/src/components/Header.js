@@ -58,7 +58,7 @@ const ThemePicker = () => {
   );
 };
 
-const Header = ({ leagues = [], currentLeague, onSwitchLeague, onEditLeague, onNewLeague }) => {
+const Header = ({ leagues = [], currentLeague, onSwitchLeague, onEditLeague, onNewLeague, draftMode, onToggleDraftMode }) => {
   // Phones: logo, league picker and a menu button on one row; the rest lives in the menu.
   const [menu, setMenu] = useState(false);
   const stage = currentLeague?.stage && (
@@ -122,6 +122,17 @@ const Header = ({ leagues = [], currentLeague, onSwitchLeague, onEditLeague, onN
               <span className="text-xs text-gray-400">Colours</span>
               <ThemePicker />
             </div>
+            {currentLeague && onToggleDraftMode && (
+              <button onClick={onToggleDraftMode} role="switch" aria-checked={!!draftMode}
+                      className="w-full flex items-center justify-between text-sm text-gray-200"
+                      title="Draft mode shows only what matters for the draft: no in-season tabs or columns.">
+                <span>Draft mode</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                  draftMode ? 'bg-nba-orange text-onaccent border-nba-orange' : 'text-gray-400 border-gray-600'}`}>
+                  {draftMode ? 'On' : 'Off'}
+                </span>
+              </button>
+            )}
             {stage}
             <div className="flex items-center justify-end gap-2">{buttons}</div>
           </div>

@@ -50,8 +50,8 @@ box). Phone styles are the unprefixed classes, `sm:` restores the desktop look, 
 must keep its `sm:` twin.
 
 - **Phones keep only what drafting needs on screen; levers are one tap away.**
-- Header: one row, logo + league picker + a menu button (colours, Settings, New league, guillotine stage).
-- Tabs scroll sideways in one row; the draft-mode pill sits outside the scrolling strip.
+- Header: one row, logo + league picker + a menu button (colours, Draft mode switch, Settings, New league, guillotine stage).
+- Tabs scroll sideways in one row; the draft-mode pill is desktop-only (phones: the menu switch).
 - Fantasy Teams panel: phones get it as the last tab, **Teams** (`TeamManager asTab`, `useIsPhone` in
   App.js): rosters in a 2-column grid, no fold, no Add team (teams come from the platform syncs; the
   edit pencil stays). Wider screens keep the panel above the tabs.

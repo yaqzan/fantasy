@@ -207,6 +207,8 @@ function App() {
       onSwitchLeague={switchLeague}
       onEditLeague={() => setLeagueModal('edit')}
       onNewLeague={() => setLeagueModal('create')}
+      draftMode={draftMode}
+      onToggleDraftMode={toggleDraftMode}
     />
   );
 
@@ -266,7 +268,7 @@ function App() {
             <button
               onClick={toggleDraftMode}
               title="Draft mode shows only what matters for the draft: no in-season tabs or columns. On by default until the draft."
-              className={`mb-1 px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap flex-shrink-0 ${
+              className={`hidden sm:block mb-1 px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap flex-shrink-0 ${
                 draftMode ? 'bg-nba-orange text-onaccent border-nba-orange' : 'text-gray-400 border-gray-600 hover:text-gray-200'
               }`}
             >
