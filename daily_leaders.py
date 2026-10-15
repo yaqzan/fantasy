@@ -334,11 +334,13 @@ def default_tab():
     return 'players'
 
 
+SCOREBOARD_FLIP_HOUR = 12  # Eastern: last night's games until noon, then tonight's slate
+
+
 def default_day():
-    """Today (Eastern) once a game has tipped, else yesterday's results."""
-    today = nba_today()
-    started = any(g['state'] != 'pre' for g in slate(today)['scoreboard'])
-    return today if started else today - timedelta(days=1)
+    """Yesterday's results until SCOREBOARD_FLIP_HOUR (Eastern), then today's slate."""
+    now = datetime.now(NBA_TZ)
+    return now.date() - timedelta(days=1) if now.hour < SCOREBOARD_FLIP_HOUR else now.date()
 
 
 # ---------------------------------------------------------------- scoring

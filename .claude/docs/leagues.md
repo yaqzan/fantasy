@@ -208,7 +208,7 @@ stats) is shared by all leagues.
   failed game keeps its last lines and retries next pass. ESPN publishes no limit (hobbyist docs
   guess ~2,500 calls/day); a 15-game night at 5 min is ~550. It does drop TLS handshakes now and
   then (SSL EOF on 2 of 6 calls, 2026-10-09), hence the kept-alive session with backoff retries.
-  Default day: today (Eastern) once a game has tipped, else yesterday.
+  Default day: yesterday until noon Eastern (`SCOREBOARD_FLIP_HOUR`), then today.
   **Game progress / on court:** the same `summary` call carries `plays`, so no extra request: the
   box score's `starter` flags seed each team's floor, every "Substitution" play (participants
   `[enters, exits]`, team id on the play) is replayed, and a live game's lines get `ON`
