@@ -105,18 +105,21 @@ const DailyLeaders = ({ config }) => {
 
   const shown = data?.date || day;
   const [minDay, maxDay] = data?.season_range || [];
-  // Hold the date to open the native calendar (min/max keep it inside the season).
+  // Tap the date for the native calendar (min/max keep it inside the season); hold it for today.
   const pickerRef = useRef(null);
   const holdTimer = useRef(null);
   const held = useRef(false);
   const endHold = () => clearTimeout(holdTimer.current);
+  const openPicker = () => {
+    const el = pickerRef.current;
+    if (!el) return;
+    try { el.showPicker(); } catch (e) { el.focus(); el.click(); }
+  };
   const startHold = () => {
     held.current = false;
     holdTimer.current = setTimeout(() => {
       held.current = true;
-      const el = pickerRef.current;
-      if (!el) return;
-      try { el.showPicker(); } catch (e) { el.focus(); el.click(); }
+      if (data) setDay(data.today);
     }, 450);
   };
   const columns = orderColumns(points ? BOX_COLUMNS : (data?.categories || config?.categories || []).map(c => ({ key: c.key, label: c.label })));
@@ -165,11 +168,11 @@ const DailyLeaders = ({ config }) => {
         <div className="relative shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
           <button onClick={() => shown && (!minDay || shown > minDay) && setDay(shiftDate(shown, -1))}
                   className="px-2 sm:px-2.5 py-1.5 text-gray-300 hover:text-white rounded-l-md" aria-label="Previous day">‹</button>
-          {/* Tap: back to today. Hold: the calendar, limited to the season (preseason to playoffs). */}
-          <button onClick={() => { if (held.current) { held.current = false; return; } data && shown !== data.today && setDay(data.today); }}
+          {/* Tap: the calendar, limited to the season (preseason to playoffs). Hold: back to today. */}
+          <button onClick={() => { if (held.current) { held.current = false; return; } openPicker(); }}
                   onPointerDown={startHold} onPointerUp={endHold} onPointerLeave={endHold} onPointerCancel={endHold}
                   onContextMenu={(e) => e.preventDefault()}
-                  title={data && shown !== data.today ? 'Tap: back to today. Hold: pick a date' : 'Hold: pick a date'}
+                  title={data && shown !== data.today ? 'Tap: pick a date. Hold: back to today' : 'Tap: pick a date'}
                   className={`py-1.5 font-medium min-w-[4.75rem] sm:min-w-[6.5rem] text-center select-none touch-manipulation ${
                     data && shown === data.today ? 'text-nba-orange sm:text-white' : 'text-white'}`}
                   style={{ WebkitTouchCallout: 'none' }}>
