@@ -209,6 +209,15 @@ stats) is shared by all leagues.
   guess ~2,500 calls/day); a 15-game night at 5 min is ~550. It does drop TLS handshakes now and
   then (SSL EOF on 2 of 6 calls, 2026-10-09), hence the kept-alive session with backoff retries.
   Default day: today (Eastern) once a game has tipped, else yesterday.
+  **Game progress / on court:** the same `summary` call carries `plays`, so no extra request: the
+  box score's `starter` flags seed each team's floor, every "Substitution" play (participants
+  `[enters, exits]`, team id on the play) is replayed, and a live game's lines get `ON`
+  (verified 2026-10-15 on a finished game: 5 per side, 0 exits of a player not on the floor).
+  It is as fresh as the 5-min refetch. The scoreboard adds `period` + `clock`; a player row gets
+  `game_period`, `game_clock`, `on_court`, and `game_result` ("W 144-128", own score first, final
+  games only). UI: four quarter pips under the name, the current one pulsing red on the floor and
+  plain grey on the bench; a final game shows only the muted result. ESPN drops DNP players from
+  the box (`didNotPlay` is skipped), so a DNP can't be shown without changing that.
   Category leagues rank by summed z per category: (game value - scaling pool's per-game mean) /
   the SINGLE-GAME noise SD from the matchup model (`noise`, `attempt_sd`, wins a coin flip),
   capped at +/-3, ratios as impact. Wins count once final. **Don't switch to the OVR scale**

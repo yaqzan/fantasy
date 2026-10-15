@@ -84,6 +84,7 @@ def _scoreboard(day):
             'preseason': (event.get('season') or {}).get('type') == 1,
             'season_type': (event.get('season') or {}).get('type'),
             'detail': status.get('shortDetail') or status.get('detail'),
+            'period': comp['status'].get('period'), 'clock': comp['status'].get('displayClock'),
             'start': event.get('date'),
             'teams': [{'abbr': c['team']['abbreviation'], 'score': int(c['score']) if c.get('score') else None,
                        'home': c['homeAway'] == 'home', 'winner': c.get('winner')}
@@ -107,12 +108,14 @@ def _summary(game):
     winners = {t['abbr']: t['winner'] for t in game['teams']} if game['state'] == 'post' else {}
     teams = [t['abbr'] for t in game['teams']]
     lines = {}
+    on_court = {}  # ESPN team id -> athlete ids on the floor now (starters, then every substitution replayed)
     for team in data.get('boxscore', {}).get('players', []):
         abbr = team['team']['abbreviation']
         block = team['statistics'][0] if team.get('statistics') else None
         if not block:
             continue
         keys = block['names']
+        on_court[team['team']['id']] = {a['athlete']['id'] for a in block['athletes'] if a.get('starter')}
         for athlete in block['athletes']:
             if athlete.get('didNotPlay') or not athlete.get('stats'):
                 continue
@@ -134,6 +137,13 @@ def _summary(game):
                 'BLKA': 0, 'TECH': 0, 'W': (1 if winners[abbr] else 0) if abbr in winners else None,
             }
     for play in data.get('plays', []):
+        if (play.get('type') or {}).get('text') == 'Substitution':  # participants: [enters, exits]
+            floor = on_court.get((play.get('team') or {}).get('id'))
+            who = [p.get('athlete', {}).get('id') for p in play.get('participants', [])]
+            if floor is not None and len(who) == 2:
+                floor.discard(who[1])
+                floor.add(who[0])
+            continue
         text = play.get('text') or ''
         people = [p.get('athlete', {}).get('id') for p in play.get('participants', [])]
         if not people or people[0] not in lines:
@@ -142,7 +152,10 @@ def _summary(game):
             lines[people[0]]['BLKA'] += 1
         elif TECH_RE.search(text) and not NOT_PLAYER_TECH_RE.search(text):
             lines[people[0]]['TECH'] += 1
+    live = game['state'] == 'in'
+    floors = set().union(*on_court.values()) if on_court else set()
     for line in lines.values():
+        line['ON'] = (line['espn_id'] in floors) if live else None  # on the floor right now (None: not live)
         tens = sum(line[k] >= 10 for k in ('PTS', 'REB', 'AST', 'STL', 'BLK'))
         line['DD2'], line['TD3'] = int(tens >= 2), int(tens >= 3)
     return lines
@@ -509,6 +522,15 @@ def owners(league):
     return {pid: (abv, name) for pid, abv, name in rows}
 
 
+def _result(game, abbr):
+    """'W 112-108' (own score first) for a finished game."""
+    me = next((t for t in game['teams'] if t['abbr'] == abbr), None)
+    them = next((t for t in game['teams'] if t['abbr'] != abbr), None)
+    if not me or not them or me['score'] is None or them['score'] is None:
+        return None
+    return f"{'W' if me['winner'] else 'L'} {me['score']}-{them['score']}"
+
+
 def daily_leaders(league, day=None, force=False):
     from projections import norm_name
     day = day or default_day()
@@ -530,6 +552,9 @@ def daily_leaders(league, day=None, force=False):
                 'owner': ('mine' if team[0] == league.my_team else 'taken') if team else 'free',
                 'owner_abv': team[0] if team else None, 'owner_name': team[1] if team else None,
                 'game_state': game['state'] if game else None,
+                'game_period': game['period'] if game else None, 'game_clock': game['clock'] if game else None,
+                'game_result': _result(game, line['team']) if game and game['state'] == 'post' else None,
+                'on_court': line.get('ON'),
                 'preseason': bool(game and game.get('preseason')),
                 **signals(line, bases.get(norm_name(line['name'])), league, scale, streaks_on,
                           preseason=bool(game and game.get('preseason'))),

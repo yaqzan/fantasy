@@ -34,6 +34,29 @@ const GameChip = ({ game, selected, dimmed, onToggle }) => {
   );
 };
 
+// Where his game stands, in the sub-line under the name: four quarter pips (the current one
+// pulses red while he is on the floor, plain grey on the bench) and the clock; a finished game
+// shows only the muted result. Overtime: all four filled, clock says OT.
+const GameProgress = ({ p }) => {
+  if (p.game_state === 'post') {
+    return p.game_result ? <span className="text-gray-500 tabular-nums" title="Final score">{p.game_result}</span> : null;
+  }
+  if (p.game_state !== 'in' || !p.game_period) return null;
+  const q = p.game_period;
+  const on = p.on_court;
+  return (
+    <span className="flex items-center gap-1 shrink-0" title={on ? 'On the floor' : on === false ? 'On the bench' : undefined}>
+      <span className="flex gap-px">
+        {[1, 2, 3, 4].map(i => (
+          <i key={i} className={`block w-[7px] sm:w-[9px] h-[5px] rounded-[1px] ${
+            i < q || q > 4 ? 'bg-gray-400' : i === q ? (on ? 'bg-red-500 animate-pulse' : 'bg-gray-400') : 'bg-gray-600'}`} />
+        ))}
+      </span>
+      <span className={`tabular-nums ${on ? 'text-red-400 font-semibold' : ''}`}>{q > 4 ? 'OT ' : ''}{p.game_clock}</span>
+    </span>
+  );
+};
+
 const DailyLeaders = ({ config }) => {
   const points = config?.capabilities?.scoring === 'points';
   const [{ owner: ownerFilter, sort: pickedSort }, setView] = useLeagueViewState(config?.league?.id, 'daily', { owner: 'all' });
@@ -206,11 +229,11 @@ const DailyLeaders = ({ config }) => {
                             <span className={`font-medium truncate ${mine ? 'text-nba-orange' : 'text-white'}`} title={p.name}>{p.name}</span>
                             {p.streak && <span className="shrink-0 text-[11px]" title={p.streak === 'hot' ? 'Last 10 games well above his season' : 'Last 10 games well below his season'}>{p.streak === 'hot' ? '🔥' : '🧊'}</span>}
                           </div>
-                          <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap">
-                            {p.game_state === 'in' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" title="Playing now" />}
+                          <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                             <span>{p.team}<span className="hidden sm:inline"> vs {p.opp}</span> · </span>
                             <span className={p.minutes_up ? 'text-green-400 font-semibold' : ''}
-                                  title={p.min_usual ? `Usual ${p.min_usual} min` : undefined}>{p.MIN} mins</span>
+                                  title={p.min_usual ? `Usual ${p.min_usual} min` : undefined}>{p.MIN}<span className="sm:hidden">m</span><span className="hidden sm:inline"> mins</span></span>
+                            <GameProgress p={p} />
                             {drag && <span className="text-red-400 font-semibold" title={`${drag.label} cost ${drag.z} z`}>−{drag.label}</span>}
                             {p.owner === 'taken' && (  // mine needs no chip: the row highlight says it
                               <span className="ml-auto px-1 rounded text-[10px] font-semibold truncate bg-gray-700 text-gray-300"
