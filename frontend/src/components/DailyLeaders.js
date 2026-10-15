@@ -180,7 +180,14 @@ const DailyLeaders = ({ config }) => {
             <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="hidden sm:inline opacity-70"> {counts[key]}</span> : ''}
           </button>
         ))}
-        <div className="ml-auto shrink-0 flex rounded-full border border-gray-600 text-xs overflow-hidden"
+        {/* Phone-only slot in whatever space the chips leave: a Today jump when browsing another
+            day, otherwise the day's status (live clock + refresh, Final). Shrinks and clips. */}
+        <div className="sm:hidden flex-1 min-w-0 flex justify-center overflow-hidden">
+          {data && shown !== data.today
+            ? <button onClick={() => setDay(data.today)} className="text-xs text-nba-orange px-1 whitespace-nowrap">Today</button>
+            : status}
+        </div>
+        <div className="sm:ml-auto shrink-0 flex rounded-full border border-gray-600 text-xs overflow-hidden"
              title="Best: what he put up tonight in this league's scoring. Pace: how far ahead of his own per-minute norm.">
           {[['val', 'Best'], ['pace', 'Pace']].map(([key, label]) => (
             <button key={key} onClick={() => setView({ sort: key })}
