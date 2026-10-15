@@ -104,6 +104,21 @@ const DailyLeaders = ({ config }) => {
   }, [data, load]);
 
   const shown = data?.date || day;
+  const [minDay, maxDay] = data?.season_range || [];
+  // Hold the date to open the native calendar (min/max keep it inside the season).
+  const pickerRef = useRef(null);
+  const holdTimer = useRef(null);
+  const held = useRef(false);
+  const endHold = () => clearTimeout(holdTimer.current);
+  const startHold = () => {
+    held.current = false;
+    holdTimer.current = setTimeout(() => {
+      held.current = true;
+      const el = pickerRef.current;
+      if (!el) return;
+      try { el.showPicker(); } catch (e) { el.focus(); el.click(); }
+    }, 450);
+  };
   const columns = orderColumns(points ? BOX_COLUMNS : (data?.categories || config?.categories || []).map(c => ({ key: c.key, label: c.label })));
   const sort = pickedSort || defaultSort(data?.preseason);
   const game = (data?.games || []).find(g => g.id === gameId) || null;
@@ -144,16 +159,20 @@ const DailyLeaders = ({ config }) => {
           and the sort toggle share ONE row (`contents` flattens the two sm: rows into it).
           Status text and Today link are desktop-only: on a phone the date turns orange on
           today, and tapping the date from another day jumps back to today. */}
-      <div className="flex items-center justify-between gap-1 mb-2 sm:block sm:mb-0">
+      <div className="flex items-center justify-between gap-0.5 mb-2 sm:block sm:mb-0">
       <div className="contents sm:flex sm:items-center sm:gap-2 sm:mb-3">
         <h2 className="hidden sm:block text-2xl font-bold text-white mr-4">Daily Leaders</h2>
-        <div className="shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
-          <button onClick={() => shown && setDay(shiftDate(shown, -1))}
-                  className="px-1.5 sm:px-2.5 py-1.5 text-gray-300 hover:text-white rounded-l-md" aria-label="Previous day">‹</button>
-          <button onClick={() => data && setDay(data.today)} disabled={!data || shown === data.today}
-                  title={data && shown !== data.today ? 'Back to today' : undefined}
-                  className={`py-1.5 font-medium min-w-[3.25rem] sm:min-w-[6.5rem] text-center ${
-                    data && shown === data.today ? 'text-nba-orange sm:text-white' : 'text-white'}`}>
+        <div className="relative shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
+          <button onClick={() => shown && (!minDay || shown > minDay) && setDay(shiftDate(shown, -1))}
+                  className="px-2 sm:px-2.5 py-1.5 text-gray-300 hover:text-white rounded-l-md" aria-label="Previous day">‹</button>
+          {/* Tap: back to today. Hold: the calendar, limited to the season (preseason to playoffs). */}
+          <button onClick={() => { if (held.current) { held.current = false; return; } data && shown !== data.today && setDay(data.today); }}
+                  onPointerDown={startHold} onPointerUp={endHold} onPointerLeave={endHold} onPointerCancel={endHold}
+                  onContextMenu={(e) => e.preventDefault()}
+                  title={data && shown !== data.today ? 'Tap: back to today. Hold: pick a date' : 'Hold: pick a date'}
+                  className={`py-1.5 font-medium min-w-[4.75rem] sm:min-w-[6.5rem] text-center select-none touch-manipulation ${
+                    data && shown === data.today ? 'text-nba-orange sm:text-white' : 'text-white'}`}
+                  style={{ WebkitTouchCallout: 'none' }}>
             {shown ? (() => {
               const d = new Date(`${shown}T12:00:00`);
               return <>
@@ -162,8 +181,12 @@ const DailyLeaders = ({ config }) => {
               </>;
             })() : '…'}
           </button>
-          <button onClick={() => shown && setDay(shiftDate(shown, 1))}
-                  className="px-1.5 sm:px-2.5 py-1.5 text-gray-300 hover:text-white rounded-r-md" aria-label="Next day">›</button>
+          <input ref={pickerRef} type="date" tabIndex={-1} aria-label="Pick a date" value={shown || ''}
+                 min={minDay} max={maxDay}
+                 onChange={(e) => { if (e.target.value) setDay(e.target.value); }}
+                 className="absolute inset-0 w-full h-full opacity-0 pointer-events-none" />
+          <button onClick={() => shown && (!maxDay || shown < maxDay) && setDay(shiftDate(shown, 1))}
+                  className="px-2 sm:px-2.5 py-1.5 text-gray-300 hover:text-white rounded-r-md" aria-label="Next day">›</button>
         </div>
         {data && shown !== data.today && (
           <button onClick={() => setDay(data.today)} className="hidden sm:block text-xs text-nba-orange px-1">Today</button>
@@ -175,7 +198,7 @@ const DailyLeaders = ({ config }) => {
         {OWNER_FILTERS.map(([key, label, short]) => (
           <button key={key} onClick={() => setView({ owner: ownerFilter === key ? 'all' : key })}
                   aria-pressed={ownerFilter === key}
-                  className={`shrink-0 px-2 sm:px-2.5 py-1 rounded-full border text-xs font-medium ${key === 'all' ? 'hidden sm:block' : ''} ${ownerFilter === key
+                  className={`shrink-0 px-1.5 sm:px-2.5 py-1 rounded-full border text-xs font-medium ${key === 'all' ? 'hidden sm:block' : ''} ${ownerFilter === key
                     ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-600 text-gray-300 hover:text-white'}`}>
             <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="hidden sm:inline opacity-70"> {counts[key]}</span> : ''}
           </button>
@@ -184,7 +207,7 @@ const DailyLeaders = ({ config }) => {
              title="Best: what he put up tonight in this league's scoring. Pace: how far ahead of his own per-minute norm.">
           {[['val', 'Best'], ['pace', 'Pace']].map(([key, label]) => (
             <button key={key} onClick={() => setView({ sort: key })}
-                    className={`px-2.5 py-1 ${sort === key ? 'bg-gray-600 text-white' : 'text-gray-400'}`}>{label}</button>
+                    className={`px-2 sm:px-2.5 py-1 ${sort === key ? 'bg-gray-600 text-white' : 'text-gray-400'}`}>{label}</button>
           ))}
         </div>
       </div>

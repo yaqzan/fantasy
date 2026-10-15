@@ -550,7 +550,7 @@ def daily_leaders(league, day=None, force=False):
     from projections import norm_name
     day = day or default_day()
     s = slate(day, force=force)
-    from player_stats import is_preseason, season_first_game
+    from player_stats import is_preseason, season_first_game, season_window
     scale = None if league.is_points else league_scale(league)
     names, owned, bases = _name_index(), owners(league), _by_name(league)
     streaks_on = not is_preseason()
@@ -612,6 +612,7 @@ def daily_leaders(league, day=None, force=False):
         'scoring': 'points' if league.is_points else 'categories',
         'preseason': any(g.get('preseason') for g in s['scoreboard']),
         'season_start': (lambda d: d.isoformat() if d else None)(season_first_game()),
+        'season_range': [d.isoformat() for d in season_window() or ()] or None,
         'stats_refresh': __import__('nightly_stats').status().get(day.isoformat()),
         'espn_folded': _folds.get(day),
     }

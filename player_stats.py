@@ -2,7 +2,7 @@
 Player statistics calculation.
 Builds player_stats dictionary from fantasy_database data.
 """
-from datetime import date
+from datetime import date, timedelta
 from statistics import NormalDist, mean, pstdev
 from peewee import fn
 from fantasy_database import Player, Game
@@ -46,6 +46,20 @@ def season_first_game(today=None):
     today = today or date.today()
     season_start = date(today.year if today.month >= 7 else today.year - 1, 7, 1)
     return Game.select(fn.MIN(Game.date)).where(Game.date >= season_start).scalar()
+
+
+PRESEASON_DAYS, POSTSEASON_DAYS = 30, 70  # around the stored regular-season schedule
+
+
+def season_window(today=None):
+    """(first, last) dates a Daily Leaders calendar may pick: the stored regular season widened by
+    the preseason before it and the play-in/playoffs after it. None when no schedule is stored."""
+    today = today or date.today()
+    first = season_first_game(today)
+    if first is None:
+        return None
+    last = Game.select(fn.MAX(Game.date)).where(Game.date >= first).scalar() or first
+    return first - timedelta(days=PRESEASON_DAYS), last + timedelta(days=POSTSEASON_DAYS)
 
 
 def is_preseason(today=None):
