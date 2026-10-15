@@ -144,7 +144,7 @@ const DailyLeaders = ({ config }) => {
           and the sort toggle share ONE row (`contents` flattens the two sm: rows into it).
           Status text and Today link are desktop-only: on a phone the date turns orange on
           today, and tapping the date from another day jumps back to today. */}
-      <div className="flex items-center gap-1 mb-2 sm:block sm:mb-0">
+      <div className="flex items-center justify-between gap-1 mb-2 sm:block sm:mb-0">
       <div className="contents sm:flex sm:items-center sm:gap-2 sm:mb-3">
         <h2 className="hidden sm:block text-2xl font-bold text-white mr-4">Daily Leaders</h2>
         <div className="shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
@@ -180,13 +180,6 @@ const DailyLeaders = ({ config }) => {
             <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="hidden sm:inline opacity-70"> {counts[key]}</span> : ''}
           </button>
         ))}
-        {/* Phone-only slot in whatever space the chips leave: a Today jump when browsing another
-            day, otherwise the day's status (live clock + refresh, Final). Shrinks and clips. */}
-        <div className="sm:hidden flex-1 min-w-0 flex justify-center overflow-hidden">
-          {data && shown !== data.today
-            ? <button onClick={() => setDay(data.today)} className="text-xs text-nba-orange px-1 whitespace-nowrap">Today</button>
-            : status}
-        </div>
         <div className="sm:ml-auto shrink-0 flex rounded-full border border-gray-600 text-xs overflow-hidden"
              title="Best: what he put up tonight in this league's scoring. Pace: how far ahead of his own per-minute norm.">
           {[['val', 'Best'], ['pace', 'Pace']].map(([key, label]) => (
