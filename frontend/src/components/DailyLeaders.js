@@ -235,10 +235,6 @@ const DailyLeaders = ({ config }) => {
                                   title={p.min_usual ? `Usual ${p.min_usual} min` : undefined}>{p.MIN}<span className="sm:hidden">m</span><span className="hidden sm:inline"> mins</span></span>
                             <GameProgress p={p} />
                             {drag && <span className="text-red-400 font-semibold" title={`${drag.label} cost ${drag.z} z`}>−{drag.label}</span>}
-                            {p.owner === 'taken' && (  // mine needs no chip: the row highlight says it
-                              <span className="ml-auto px-1 rounded text-[10px] font-semibold truncate bg-gray-700 text-gray-300"
-                                    title={p.owner_name}>{p.owner_abv}</span>
-                            )}
                           </div>
                         </div>
                       </div>

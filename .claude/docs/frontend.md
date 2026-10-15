@@ -57,8 +57,8 @@ must keep its `sm:` twin.
   edit pencil stays). Wider screens keep the panel above the tabs.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
-- Daily Leaders: one pinned column (10.375rem, sized so the sixth stat column starts off-screen on a 400px phone: rank, name, team, minutes, owner chip on other teams'
-  players only; mine are the highlighted rows; the sub-line ends with `GameProgress` (quarter pips + clock while live, red pulse only on the floor, muted result when final; minutes read `27m` on phones); a red `-TF`-style tag names a category at z <= -2.5, `worstDrag`), Best (FPTS in points leagues) pinned next to
+- Daily Leaders: one pinned column (10.375rem, sized so the sixth stat column starts off-screen on a 400px phone: rank, name, team, minutes, game progress; no owner chip (owner
+  2026-10-15: dimming is enough); mine are the highlighted rows; the sub-line ends with `GameProgress` (quarter pips + clock while live, red pulse only on the floor, muted result when final; minutes read `27m` on phones); a red `-TF`-style tag names a category at z <= -2.5, `worstDrag`), Best (FPTS in points leagues) pinned next to
   it (2.375rem: the number only, the pace arrow sits absolute in its top-right corner on phones; on the Pace sort it shows the pace number and the rank is pace order), then stat columns at 2.25rem. Columns run PTS, REB, A-TO (AST where a league has
   none), STL, BLK, then the league's other categories (`orderColumns`): those five fit at 390px in
   every league, the rest scroll under the pinned pair. Tapping a scoreboard chip filters the list to that game (orange
