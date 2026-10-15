@@ -216,8 +216,9 @@ stats) is shared by all leagues.
   It is as fresh as the 5-min refetch. The scoreboard adds `period` + `clock`; a player row gets
   `game_period`, `game_clock`, `on_court`, and `game_result` ("W 144-128", own score first, final
   games only). UI: four quarter pips under the name, the current one pulsing red on the floor and
-  plain grey on the bench; a final game shows only the muted result. ESPN drops DNP players from
-  the box (`didNotPlay` is skipped), so a DNP can't be shown without changing that.
+  plain grey on the bench; a final game shows only the muted result. DNP: box-score athletes with
+  `didNotPlay` stay off the stat lines (`_dnp`, so folds and pools ignore them) and come back as
+  last-ranked rows (`dnp`, `dnp_reason`) only for rostered players of a finished game.
   Category leagues rank by summed z per category: (game value - scaling pool's per-game mean) /
   the SINGLE-GAME noise SD from the matchup model (`noise`, `attempt_sd`, wins a coin flip),
   capped at +/-3, ratios as impact. Wins count once final. **Don't switch to the OVR scale**

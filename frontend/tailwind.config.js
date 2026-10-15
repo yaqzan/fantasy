@@ -9,17 +9,20 @@ const THEMES = {
   podium: {
     gray: { 100: '#F0F2F5', 200: '#DEE2E7', 300: '#C2C8D0', 400: '#949CA7', 500: '#6A727D', 600: '#3A4048', 700: '#262A30', 800: '#15171B', 900: '#0C0D0F' },
     white: '#FFFFFF', accent: '#FF7A1A', onaccent: '#0C0D0F', head: '#0C0D0F', th: '#1A1D22', onth: '#C2C8D0',
-    'row-mine': '#2E2212', 'row-hover': '#20242A',
+    'row-mine': '#2B2410', 'row-hover': '#20242A',
+    mine: '#F2C14E', opp: '#D98E6B',
   },
   hardwood: {
     gray: { 100: '#F5EEE5', 200: '#E6DBCE', 300: '#CDBFAF', 400: '#A39382', 500: '#7A6A59', 600: '#4A3B2D', 700: '#33281E', 800: '#1F1812', 900: '#15100C' },
     white: '#FFF8EF', accent: '#F2731D', onaccent: '#1A120C', head: '#1F1812', th: '#2C2219', onth: '#E6DBCE',
     'row-mine': '#3A2712', 'row-hover': '#2A2118',
+    mine: '#F2731D', opp: '#E0B48A',
   },
   banner: {
     gray: { 100: '#EFF3F9', 200: '#DCE4F0', 300: '#BECADC', 400: '#8FA1BD', 500: '#62779B', 600: '#2B467A', 700: '#1C3157', 800: '#0F1D36', 900: '#0A1426' },
     white: '#FFFFFF', accent: '#E9B949', onaccent: '#0A1426', head: '#12284D', th: '#16305A', onth: '#E9B949',
     'row-mine': '#303439', 'row-hover': '#18294A',
+    mine: '#E9B949', opp: '#D98E6B',
   },
   // Light: the gray scale runs the other way, and the status colours are mirrored (see LIGHT below).
   pressbox: {
@@ -27,6 +30,7 @@ const THEMES = {
     gray: { 100: '#1B1B1B', 200: '#2E2B26', 300: '#4A453D', 400: '#6E675B', 500: '#8A8275', 600: '#CFC6B5', 700: '#E6DFD1', 800: '#FFFFFF', 900: '#F7F3EB' },
     white: '#111111', accent: '#F06A1A', onaccent: '#FFFFFF', head: '#FFFFFF', th: '#E6DFD1', onth: '#1B1B1B',
     'row-mine': '#FDEBDD', 'row-hover': '#F1ECE2',
+    mine: '#F06A1A', opp: '#B5532A',
   },
 };
 
@@ -41,7 +45,7 @@ const asVar = (name) => `rgb(var(--${name}) / <alpha-value>)`;
 const themeVars = (theme) => {
   const vars = {};
   Object.entries(theme.gray).forEach(([shade, hex]) => { vars[`--gray-${shade}`] = triplet(hex); });
-  ['white', 'accent', 'onaccent', 'head', 'th', 'onth', 'row-mine', 'row-hover'].forEach(k => { vars[`--${k}`] = triplet(theme[k]); });
+  ['white', 'accent', 'onaccent', 'head', 'th', 'onth', 'row-mine', 'row-hover', 'mine', 'opp'].forEach(k => { vars[`--${k}`] = triplet(theme[k]); });
   FAMILIES.forEach(family => SHADES.forEach(shade => {
     vars[`--${family}-${shade}`] = triplet(colors[family][theme.light ? 1000 - shade : shade]);
   }));
@@ -73,6 +77,9 @@ module.exports = {
           blue: asVar('th'),
           red: '#C8102E',
         },
+        // Daily Leaders rows: my players' stripe + name, and this week's opponent's name.
+        mine: asVar('mine'),
+        opp: asVar('opp'),
         onaccent: asVar('onaccent'),
         head: asVar('head'),
         th: asVar('th'),

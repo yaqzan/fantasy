@@ -38,6 +38,10 @@ const GameChip = ({ game, selected, dimmed, onToggle }) => {
 // pulses red while he is on the floor, plain grey on the bench) and the clock; a finished game
 // shows only the muted result. Overtime: all four filled, clock says OT.
 const GameProgress = ({ p }) => {
+  if (p.dnp) {
+    return <span className="shrink-0 px-1 rounded border border-dashed border-gray-500 text-[10px] font-semibold text-gray-400"
+                 title={p.dnp_reason || 'Did not play'}>DNP</span>;
+  }
   if (p.game_state === 'post') {
     return p.game_result ? <span className="text-gray-500 tabular-nums" title="Final score">{p.game_result}</span> : null;
   }
@@ -221,18 +225,18 @@ const DailyLeaders = ({ config }) => {
                 const drag = points ? null : worstDrag(p, columns);
                 return (
                   <tr key={p.espn_id} className="group border-t border-gray-700">
-                    <td className={`sticky left-0 z-10 px-2 py-1.5 ${PLAYER_W} ${bg} ${mine ? 'shadow-[inset_3px_0_0_rgb(var(--accent))]' : ''}`}>
+                    <td className={`sticky left-0 z-10 px-2 py-1.5 ${PLAYER_W} ${bg} ${mine ? 'shadow-[inset_3px_0_0_rgb(var(--mine))]' : ''}`}>
                       <div className={`flex items-baseline gap-1.5 ${fade}`}>
-                        <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right">{ranks ? ranks[p.espn_id] : p.rank}</span>
+                        <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right">{p.dnp ? '–' : ranks ? ranks[p.espn_id] : p.rank}</span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 min-w-0">
-                            <span className={`font-medium truncate ${mine ? 'text-nba-orange' : 'text-white'}`} title={p.name}>{p.name}</span>
+                            <span className={`font-medium truncate ${mine ? 'text-mine' : p.vs_me ? 'text-opp' : 'text-white'}`} title={p.name}>{p.name}</span>
                             {p.streak && <span className="shrink-0 text-[11px]" title={p.streak === 'hot' ? 'Last 10 games well above his season' : 'Last 10 games well below his season'}>{p.streak === 'hot' ? '🔥' : '🧊'}</span>}
                           </div>
                           <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                             <span>{p.team}<span className="hidden sm:inline"> vs {p.opp}</span> · </span>
                             <span className={p.minutes_up ? 'text-green-400 font-semibold' : ''}
-                                  title={p.min_usual ? `Usual ${p.min_usual} min` : undefined}>{p.MIN}<span className="sm:hidden">m</span><span className="hidden sm:inline"> mins</span></span>
+                                  title={p.min_usual ? `Usual ${p.min_usual} min` : undefined}>{p.dnp ? 0 : p.MIN}<span className="sm:hidden">m</span><span className="hidden sm:inline"> mins</span></span>
                             <GameProgress p={p} />
                             {drag && <span className="text-red-400 font-semibold" title={`${drag.label} cost ${drag.z} z`}>−{drag.label}</span>}
                           </div>
@@ -245,7 +249,7 @@ const DailyLeaders = ({ config }) => {
                               title={`Best ${signed(p.value)}`}>
                           {p.pace == null ? '–' : `${p.pace > 0 ? '+' : ''}${p.pace.toFixed(1)}`}
                         </span>
-                      ) : <span className={`${fade} ${valueClass(p.value, points)}`}>
+                      ) : p.dnp ? <span className={`${fade} text-gray-500`}>–</span> : <span className={`${fade} ${valueClass(p.value, points)}`}>
                         {signed(p.value)}
                         {(() => {
                           const mark = paceMark(p, points);
@@ -261,7 +265,7 @@ const DailyLeaders = ({ config }) => {
                             className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 ${mine ? 'bg-row-mine relative' : tint}`}
                             title={!points && p.z?.[c.key] != null ? `z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : undefined}>
                           {mine && tint && <span className={`absolute inset-0 ${tint}`} />}
-                          <span className={`${fade} ${mine ? `relative ${tint.includes('text-white') ? 'text-white' : ''}` : ''}`}>{cellText(c.key, p)}</span>
+                          <span className={`${fade} ${mine ? `relative ${tint.includes('text-white') ? 'text-white' : ''}` : ''}`}>{p.dnp ? '–' : cellText(c.key, p)}</span>
                         </td>
                       );
                     })}

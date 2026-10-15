@@ -34,6 +34,7 @@ NBA_TZ = ZoneInfo('America/New_York')  # an NBA "day" is an Eastern-time date
 _lock = threading.Lock()
 _days = {}    # date -> {'fetched': epoch, 'scoreboard': [...], 'games': {event id: parsed summary}}
 _cache = {}   # key -> (epoch, value), for _cached
+_dnp = {}     # event id -> [{espn id, name, team, reason}]: box-score players who didn't play (kept off the stat lines)
 
 
 def _cached(key, build, ttl=SCALE_SECONDS):
@@ -107,7 +108,7 @@ def _summary(game):
     data = _get('summary', event=game['id'])
     winners = {t['abbr']: t['winner'] for t in game['teams']} if game['state'] == 'post' else {}
     teams = [t['abbr'] for t in game['teams']]
-    lines = {}
+    lines, dnp = {}, []
     on_court = {}  # ESPN team id -> athlete ids on the floor now (starters, then every substitution replayed)
     for team in data.get('boxscore', {}).get('players', []):
         abbr = team['team']['abbreviation']
@@ -118,6 +119,9 @@ def _summary(game):
         on_court[team['team']['id']] = {a['athlete']['id'] for a in block['athletes'] if a.get('starter')}
         for athlete in block['athletes']:
             if athlete.get('didNotPlay') or not athlete.get('stats'):
+                if athlete.get('didNotPlay'):
+                    dnp.append({'espn_id': athlete['athlete']['id'], 'name': athlete['athlete']['displayName'],
+                                'team': abbr, 'reason': (athlete.get('reason') or '').lower().capitalize()})
                 continue
             s = dict(zip(keys, athlete['stats']))
             minutes = int(s.get('MIN') or 0) if str(s.get('MIN', '')).isdigit() else 0
@@ -152,6 +156,7 @@ def _summary(game):
             lines[people[0]]['BLKA'] += 1
         elif TECH_RE.search(text) and not NOT_PLAYER_TECH_RE.search(text):
             lines[people[0]]['TECH'] += 1
+    _dnp[game['id']] = dnp
     live = game['state'] == 'in'
     floors = set().union(*on_court.values()) if on_court else set()
     for line in lines.values():
@@ -531,6 +536,16 @@ def _result(game, abbr):
     return f"{'W' if me['winner'] else 'L'} {me['score']}-{them['score']}"
 
 
+def _opponent_abv(league, day):
+    """Abbreviation of the team I face in the fantasy week containing `day`, or None."""
+    weeks = league.weeks()
+    week = weeks[0] if weeks else None  # before the season: the first week
+    for entry in weeks:
+        if entry['start'] <= day.isoformat():
+            week = entry
+    return (week or {}).get('opponent') or None
+
+
 def daily_leaders(league, day=None, force=False):
     from projections import norm_name
     day = day or default_day()
@@ -540,6 +555,7 @@ def daily_leaders(league, day=None, force=False):
     names, owned, bases = _name_index(), owners(league), _by_name(league)
     streaks_on = not is_preseason()
     states = {t['abbr']: g for g in s['scoreboard'] for t in g['teams']}
+    versus = _opponent_abv(league, day)
     players = []
     for lines in s['games'].values():
         for line in lines.values():
@@ -551,6 +567,7 @@ def daily_leaders(league, day=None, force=False):
                 **line, 'player_id': pid, 'value': value, 'z': zs,
                 'owner': ('mine' if team[0] == league.my_team else 'taken') if team else 'free',
                 'owner_abv': team[0] if team else None, 'owner_name': team[1] if team else None,
+                'vs_me': bool(team and versus and team[0] == versus),
                 'game_state': game['state'] if game else None,
                 'game_period': game['period'] if game else None, 'game_clock': game['clock'] if game else None,
                 'game_result': _result(game, line['team']) if game and game['state'] == 'post' else None,
@@ -562,6 +579,26 @@ def daily_leaders(league, day=None, force=False):
     players.sort(key=lambda p: p['value'], reverse=True)
     for rank, p in enumerate(players, start=1):
         p['rank'] = rank
+    # Rostered players who sat out a finished game: listed last, no rank, no value.
+    for g in s['scoreboard']:
+        if g['state'] != 'post':
+            continue
+        for d in _dnp.get(g['id'], []):
+            pid = names.get(norm_name(d['name']))
+            team = owned.get(pid)
+            if not team:
+                continue
+            players.append({
+                **{k: 0 for k in ('MIN', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TOV', 'PF', 'FGM', 'FGA', 'FG3M',
+                                  'FG3A', 'FTM', 'FTA', 'TECH', 'BLKA', 'DD2', 'TD3', 'PLUS_MINUS', 'OREB', 'DREB')},
+                'espn_id': d['espn_id'], 'name': d['name'], 'team': d['team'],
+                'opp': next((t['abbr'] for t in g['teams'] if t['abbr'] != d['team']), None),
+                'player_id': pid, 'value': 0, 'z': {}, 'rank': None, 'dnp': True, 'dnp_reason': d['reason'],
+                'owner': 'mine' if team[0] == league.my_team else 'taken',
+                'owner_abv': team[0], 'owner_name': team[1], 'vs_me': bool(versus and team[0] == versus),
+                'game_state': 'post', 'game_period': g.get('period'), 'game_clock': g.get('clock'),
+                'game_result': _result(g, d['team']), 'on_court': None, 'preseason': bool(g.get('preseason')),
+            })
     live = any(g['state'] == 'in' for g in s['scoreboard'])
     pending = any(g['state'] != 'post' for g in s['scoreboard'])
     fetched = datetime.fromtimestamp(s['fetched']).astimezone()
