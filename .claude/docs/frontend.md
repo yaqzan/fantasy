@@ -63,7 +63,7 @@ must keep its `sm:` twin.
   is listed last with a dashed `DNP` tag (reason in the tooltip); the sub-line ends with `GameProgress` (quarter pips + clock while live, red pulse only on the floor, muted result when final; minutes read `27m` on phones); a red `-TF`-style tag names a category at z <= -2.5, `worstDrag`), Best (FPTS in points leagues) pinned next to
   it (2.375rem: the number only, the pace arrow sits absolute in its top-right corner on phones; on the Pace sort it shows the pace number and the rank is pace order), then stat columns at 2.25rem. Columns run PTS, REB, A-TO (AST where a league has
   none), STL, BLK, then the league's other categories (`orderColumns`): those five fit at 390px in
-  every league, the rest scroll under the pinned pair. Tapping a scoreboard chip filters the list to that game (orange
+  every league, the rest scroll under the pinned pair. Scoreboard chips run ongoing, upcoming, completed (earliest start first within each; `orderGames`), each with a status dot beside the clock (hollow / red / grey, no pulse); an ongoing chip's border is one grey step lighter, a final one is faded. Tapping a chip filters the list to that game (orange
   ring, other chips fade; tap again to clear, another to move; owner chips count within it). Taken rows fade their cell
   contents, not the row: an opacity on the row lets scrolled cells show through the pinned ones. Their category
   tints stay (only the text fades), so a taken player's bad night shows why it ranked low. My rows lay the

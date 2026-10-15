@@ -118,3 +118,8 @@ export const paceMark = (p, points) => {
 // game) clears or moves the filter.
 export const inGame = (game, p) => !game || game.teams.some(t => t.abbr === p.team);
 export const toggleGame = (selected, id) => (selected === id ? null : id);
+
+// Scoreboard chip order: ongoing, upcoming, completed; earliest start first within each.
+const STATE_ORDER = { in: 0, pre: 1, post: 2 };
+export const orderGames = (games) => [...games].sort((a, b) =>
+  (STATE_ORDER[a.state] ?? 3) - (STATE_ORDER[b.state] ?? 3) || String(a.start).localeCompare(String(b.start)));

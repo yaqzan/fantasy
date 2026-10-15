@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, inGame, toggleGame, cellText, zTint, keepRow, isPickup, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, inGame, toggleGame, cellText, zTint, keepRow, isPickup, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -25,10 +25,13 @@ const GameChip = ({ game, selected, dimmed, onToggle }) => {
   return (
     <button onClick={onToggle} aria-pressed={selected} title={selected ? 'Show every game' : 'Show only this game'}
             className={`shrink-0 text-left rounded px-1.5 py-0.5 text-[11px] leading-tight min-w-[4.5rem] sm:text-xs sm:px-2 sm:py-1 sm:min-w-[5.5rem] border transition-opacity ${
-              selected ? 'bg-gray-700 border-nba-orange ring-1 ring-nba-orange' : 'bg-gray-800 border-gray-700'} ${dimmed ? 'opacity-50' : ''}`}>
+              selected ? 'bg-gray-700 border-nba-orange ring-1 ring-nba-orange'
+                : `bg-gray-800 ${game.state === 'in' ? 'border-gray-500' : 'border-gray-700'}`
+            } ${dimmed ? 'opacity-50' : game.state === 'post' ? 'opacity-75' : ''}`}>
       {side(away)}{side(home)}
-      <div className={`mt-0.5 truncate ${game.state === 'in' ? 'text-red-400' : 'text-gray-400'}`}>
-        {game.state === 'pre' ? clock(game.start) : game.detail}
+      <div className={`mt-0.5 flex items-center gap-1 ${game.state === 'in' ? 'text-red-400' : 'text-gray-400'}`}>
+        <span className={`shrink-0 w-[7px] h-[7px] rounded-full ${game.state === 'pre' ? 'border-[1.5px] border-gray-400' : game.state === 'in' ? 'bg-red-500' : 'bg-gray-500'}`} />
+        <span className="truncate">{game.state === 'pre' ? clock(game.start) : game.detail}</span>
       </div>
     </button>
   );
@@ -183,7 +186,7 @@ const DailyLeaders = ({ config }) => {
 
       {data?.games?.length > 0 && (
         <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2 sm:mb-3">
-          {data.games.map(g => (
+          {orderGames(data.games).map(g => (
             <GameChip key={g.id} game={g} selected={g.id === gameId} dimmed={gameId !== null && g.id !== gameId}
                       onToggle={() => setGameId(id => toggleGame(id, g.id))} />
           ))}
@@ -199,7 +202,7 @@ const DailyLeaders = ({ config }) => {
       ) : rows.length === 0 ? (
         <div className="text-center py-8 text-gray-400">
           {data?.games?.length && data.games.every(g => g.state === 'pre')
-            ? `No game has tipped yet (first at ${clock(data.games[0].start)})`
+            ? `No game has tipped yet (first at ${clock(orderGames(data.games)[0].start)})`
             : 'No stat lines'}
         </div>
       ) : (
