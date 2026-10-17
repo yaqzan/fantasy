@@ -206,3 +206,7 @@ export const getTeamStandings = async (statType, healthyOnly, view = 'per_game')
   });
   return response.data;
 };
+
+// Player card: game log + Projection / Preseason / Season / Last 10 / Last 5 in the league's categories.
+export const getPlayerCard = async ({ id, name }) =>
+  (await api.get('/player-card', { params: id ? { id } : { name } })).data;

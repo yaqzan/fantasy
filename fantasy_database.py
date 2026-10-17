@@ -328,6 +328,16 @@ class GameLine(BaseModel):
         indexes = ((('season', 'game_date'), False),)
 
 
+class PreseasonLine(GameLine):
+    """One player's line in one preseason game (the NBA's 'Pre Season' game log, game_log.store_preseason).
+    Kept apart from game_lines so it never reaches season totals; the player card shows it, and
+    projections.md "Preseason signal" says how much it predicts."""
+    matchup = CharField(max_length=16, null=True)  # NBA's "DEN vs. LAL" / "DEN @ LAL"
+
+    class Meta:
+        table_name = 'preseason_lines'
+
+
 class TeamProjection(BaseModel):
     """One source's projected regular-season wins for a team. source 'owner' holds the owner's
     adjustment in wins (added to the index), not a projection."""
@@ -345,4 +355,4 @@ class TeamProjection(BaseModel):
 
 ALL_MODELS = [Team, Player, Game, League, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag, TechnicalFoul,
               ScannedGame, DailyPlayerStats, PlayerSeason, PlayerProjection, ProjectionAdjustment, TeamProjection,
-              GameLine]
+              GameLine, PreseasonLine]

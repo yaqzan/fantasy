@@ -263,6 +263,7 @@ def get_fantasy_players():
         full_team_name = TEAM_DICT.get(team_name, team_name)
         team_id = drafted.get(player_name)
         players_data.append({
+            'id': player.id if player else None,
             'name': player_name,
             'team': team_name,
             'team_abv': abbreviations.get(team_name) or abbreviations.get(full_team_name) or team_name[:3].upper(),
@@ -799,6 +800,18 @@ def get_daily_leaders():
     league = current_league()
     result = daily_leaders(league, target_date, force=request.args.get('refresh') == '1')
     result['categories'] = category_meta(league.categories)
+    return jsonify(result)
+
+
+@fantasy_api.route('/player-card', methods=['GET'])
+def get_player_card():
+    """One player's game log (regular season + preseason) and Projection / Preseason / Season / Last 10 /
+    Last 5 averages in the league's categories (player_card.py). ?id=<NBA id> or ?name=."""
+    from player_card import card
+    pid = request.args.get('id', type=int)
+    result = card(current_league(), player_id=pid, name=request.args.get('name'))
+    if result is None:
+        return jsonify({'error': 'player not found'}), 404
     return jsonify(result)
 
 

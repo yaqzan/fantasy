@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import DraftModal from './DraftModal';
+import { PlayerName } from './PlayerCard';
 import usePlayerValues from '../usePlayerValues';
 import { weekRange } from '../weeks';
 
@@ -439,7 +440,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 <td className="table-cell">
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="font-medium text-white">{player.name}</span>
+                      <PlayerName id={player.id} name={player.name} className="font-medium text-white" />
                     </div>
                     <div className="text-xs text-gray-400">
                       {player.positions?.length ? player.positions.join('/') : player.position} | {player.team_abv || 'N/A'}

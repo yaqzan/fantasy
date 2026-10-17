@@ -116,3 +116,32 @@ def fold_espn(day, lines, season=None):
             player.save()
         folded += 1
     return folded, skipped
+
+
+PRESEASON_DAYS = 45  # 2019-20's 'Pre Season' log also holds the July 2020 bubble scrimmages
+
+
+def store_preseason(season):
+    """Store the NBA's preseason game log for `season` (one call) in preseason_lines, never game_lines,
+    so season totals don't see it. Keeps PRESEASON_DAYS from the first preseason game. Returns rows stored."""
+    from datetime import timedelta
+    from fantasy_database import PreseasonLine
+    from pull_api_data import nba_api_call
+    from nba_api.stats.endpoints import leaguegamelog
+    resp = nba_api_call(leaguegamelog.LeagueGameLog, season=season, player_or_team_abbreviation='P',
+                        season_type_all_star='Pre Season')
+    df = resp.get_data_frames()[0] if resp is not None else None
+    if df is None or len(df) == 0:
+        return 0
+    dates = pd.to_datetime(df.GAME_DATE)
+    df = df[dates <= dates.min() + timedelta(days=PRESEASON_DAYS)]
+    rows = [{
+        'player_id': int(r.PLAYER_ID), 'game_date': str(r.GAME_DATE)[:10], 'season': season, 'source': 'nba',
+        'game_id': str(r.GAME_ID), 'team': r.TEAM_ABBREVIATION, 'w': int(r.WL == 'W'), 'matchup': r.MATCHUP,
+        'min': int(round(r.MIN or 0)), **{c.lower(): int(getattr(r, c) or 0) for c in BOX},
+        'blka': None, 'tech': None,
+    } for r in df.itertuples()]
+    with DB.atomic():
+        for i in range(0, len(rows), 500):
+            PreseasonLine.replace_many(rows[i:i + 500]).execute()
+    return len(rows)

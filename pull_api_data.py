@@ -293,6 +293,8 @@ def pull_all_data(season=SEASON, force=False, skip_techs=False):
     rostered_players = update_team_rosters()
     if not skip_techs and (not is_off_season() or force):
         scan_technical_fouls(season)
+    from game_log import store_preseason
+    print(f"Preseason lines stored: {store_preseason(season)}")  # one call; the player card's preseason log
     update_all_player_stats(rostered_players, season=season, force=force)
 
 NOT_YET = 75  # exit code for --after-games: stats.nba.com doesn't have the whole night yet; try later

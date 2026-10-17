@@ -36,6 +36,24 @@ Draft mode reloads players and teams every 60s (App.js; skipped while the tab is
 `pull_fantrax.py draft --watch` writes picks behind the page's back. Values recompute in the browser
 from those rosters. Typed bids are DraftBoard state and survive the reload.
 
+## Player card
+
+Tap a player's name on Daily Leaders or Player Rankings (`PlayerName`) -> `components/PlayerCard.js`
+(design A of the 2026-10-17 mockups: centred card from `sm`, bottom sheet on phones, drag the header
+down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` (or `?name=`), `player_card.py`.
+
+- **Averages** in the league's categories, Daily Leaders' column order (points leagues: FPTS first):
+  Projection; Preseason at his projected minutes (per-minute x projected MPG: preseason minutes are
+  rotations); Season, Last 10, Last 5 (a window only when he has more games than it). Delta under each
+  vs the season from 10 games, else vs the projection; percentages in points; grey under 6% / 1 point.
+- **Game log**: regular season then preseason (`preseason_lines`, never in season totals), scored by
+  `daily_leaders.score_line`, so tints and Z equal the board's. Stats the source lacks per game (NBA
+  rows: BLKA; preseason: TECH) show '–' and leave the game's Z; season BLKA comes from the player's totals.
+- **Performance**: `PlayerCardProvider` wraps `<App>` in `index.js`, so opening a card re-renders no
+  board. The request starts on tap and is cached 2 min per league + player. Only opacity/transform
+  animate (`.pc-card` / `.pc-scrim` in `index.css`: ~160-190ms in, ~110-140ms out, none under
+  reduced motion); the card unmounts after the close animation.
+
 ## Deploying a change
 
 `npm --prefix frontend run build` empties `frontend/build` first, so the live site 404s for the whole

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
+import { PlayerName } from './PlayerCard';
 import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, inGame, toggleGame, cellText, zTint, keepRow, isPickup, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
@@ -279,7 +280,7 @@ const DailyLeaders = ({ config }) => {
                         <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right">{p.dnp ? '–' : ranks ? ranks[p.espn_id] : p.rank}</span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 min-w-0">
-                            <span className={`font-medium truncate ${mine ? 'text-mine' : p.vs_me ? 'text-opp' : 'text-white'}`} title={p.name}>{p.name}</span>
+                            <PlayerName id={p.player_id} name={p.name} className={`font-medium truncate min-w-0 ${mine ? 'text-mine' : p.vs_me ? 'text-opp' : 'text-white'}`} />
                             {p.streak && <span className="shrink-0 text-[11px]" title={p.streak === 'hot' ? 'Last 10 games well above his season' : 'Last 10 games well below his season'}>{p.streak === 'hot' ? '🔥' : '🧊'}</span>}
                           </div>
                           <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap overflow-hidden">
