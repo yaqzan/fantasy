@@ -165,14 +165,15 @@ function App() {
     }
   };
 
-  // Draft mode: picks also arrive from outside the page (pull_fantrax.py draft --watch), so reload
-  // the board every minute; prices and values recompute from the fresh rosters.
+  // Draft mode: picks also arrive from outside the page (pull_fantrax.py / pull_yahoo.py draft --watch), so
+  // reload the board: every minute in an auction, every 15 s in a snake (60-second picks; the Yahoo sync polls
+  // every 20 s; a reload is ~0.3 s). Prices, values and position fit recompute from the fresh rosters.
   useEffect(() => {
     if (!draftMode || !leagueId) return undefined;
-    const timer = setInterval(() => { if (!document.hidden) loadData(false); }, 60000);
+    const timer = setInterval(() => { if (!document.hidden) loadData(false); }, caps.auction ? 60000 : 15000);
     return () => clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftMode, leagueId]);
+  }, [draftMode, leagueId, caps.auction]);
 
   if (loading) {
     return (

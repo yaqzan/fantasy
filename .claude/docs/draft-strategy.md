@@ -370,6 +370,17 @@ Scripts and player lists: `.horizon/courtside-2026/` (`prep.py`, `sim.py`, `plan
   value +216 FPTS a week over the average team, the app's per-game rank +185, drafting like the room +131. One-pick
   lookahead (take someone else when a target will likely last) +217: no gain, the room wants other players. Half or
   all of the room drafting on points: +127 / +121 vs +55 / +53 for ADP. Projections taken as true, so sizes are high.
+- **Positions (2026-10-16, `pos_sim.py` -> `out/pos_sim.txt`, `out/pos_rounds.txt`).** Half the top 30 by value are
+  guard-only. 1,000 drafts (room as above), every roster played through the real 2026-27 schedule day by day with
+  Yahoo's eligibility (slots PG SG G SF PF F C UTIL UTIL, greedy fill with augmenting paths, streamers for empty
+  slot-days up to 10 a week, availability = projected games / team games): picking the best fit for my roster (most
+  season FPTS added, among the top 12 by value) +229 FPTS a week over the average team; value with guard-only capped at
+  4 / 5 / 6: +180 / +176 / +168; value alone +163 (7.0 guard-only drafted, 23 guard games benched). The winning picks:
+  rounds 1-3 ~65% guards, then spread (forwards, F/C bigs, G/F wings 16-36% of rounds 4-6); pure centres rarely.
+  Fit = added with the real slots / added if all were UTIL: a 6th guard-only player 0.94, 7th 0.82, 8th 0.74, 9th 0.53;
+  centres the same from the third. Board (`frontend/src/fit.js`, same scorer, fixed per-player draws, schedule from the
+  plan file's `schedule`): recomputed per pick for the best 40 left; "best fit" tag on the pick, "fit N%" under 95%,
+  row dimmed under 80%, a Best fit sort and my position counts in the strip. Snake boards reload every 15 s.
 - Board, points leagues in draft mode (owner, 2026-10-16: OVR is the categories' summary, FPTS already is one): no OVR
   or category strip; columns by importance FPTS/g (keeps its score heat), Season (FPTS/g x games), GP, then with a
   snake plan (`draft_day_<league>.json` type `snake`) Next (chance he lasts to my next pick, normal around ADP with

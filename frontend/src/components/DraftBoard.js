@@ -5,6 +5,7 @@ import usePlayerValues from '../usePlayerValues';
 import { bidEdge } from '../bidColor';
 import { auctionState, roomPrice, earlyMarkup, shareMaxOf } from '../auction';
 import { teamAt, picksOf, survival, seasonValues } from '../snake';
+import { fitTable } from '../fit';
 
 // The Player Rankings table in draft mode: one dense row per player, built to be read while he is
 // being bid on. Left to right: who he is, what to pay (aim, max), what the room will pay (likely,
@@ -94,6 +95,13 @@ const sortNotes = (notes = []) => {
 const SLEEPER = 15;
 const REACH = 20;
 // The Δ column (ADP - our rank): green when the room waits on him, red when it reaches; strong past the tag lines.
+// Position fit (fit.js, pos_sim.py): candidates scored against my roster (the best FIT_POOL left by value); the
+// best fit among the top BEST_OF is the pick (+66 FPTS a week over value alone in 1,000 simulated drafts). Tag
+// "fit N%" under FIT_TAG, row dimmed under FIT_DIM (an 8th guard-only player: 0.74).
+const FIT_POOL = 40;
+const BEST_OF = 12;
+const FIT_TAG = 0.95;
+const FIT_DIM = 0.8;
 const PIN_COL = 'w-[1.2rem] sm:w-8 flex-none text-right text-[10px] sm:text-[11px] leading-tight';
 const gapClass = (gap) => (gap == null ? '' : gap >= SLEEPER ? 'text-emerald-300 font-bold' : gap >= 5 ? 'text-emerald-400'
   : gap <= -REACH ? 'text-rose-300 font-bold' : gap <= -5 ? 'text-rose-400' : 'text-gray-400');
@@ -289,11 +297,40 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
       case 'adp': { const r = snakeInfo(player).room; return r == null ? null : -r; }
       case 'here': return snakeInfo(player).here;
       case 'gap': return snakeInfo(player).gap;
+      case 'fit': return fits[player.name]?.adds ?? null;
       default: return null;
     }
   };
   const rankOf = (player) => (season ? season.rank[player.name] : getRank(player)) || 999;
   const byRank = (a, b) => rankOf(a) - rankOf(b);
+
+  // Position fit against my roster, recomputed when a pick lands (~0.5 s, off the render).
+  const sched = snake?.schedule;
+  const slotList = settings.roster?.slots?.length ? settings.roster.slots : Array(settings.roster?.active || 9).fill('UTIL');
+  const myRoster = allPlayers.filter(pl => pl.fantasy_team?.abbreviation && pl.fantasy_team.abbreviation === myTeam);
+  const [fits, setFits] = useState({});
+  const fitKey = `${myRoster.map(pl => pl.name).sort().join('|')}#${picked}#${statType}#${season ? season.streamer : ''}`;
+  useEffect(() => {
+    if (!pinSnake || !sched || !season) { setFits({}); return undefined; }
+    const t = setTimeout(() => {
+      const input = (pl) => ({ name: pl.name, fpg: fpg(pl), games: games(pl), positions: pl.positions, teamDays: sched.teams[pl.team_abv] || [] });
+      const pool = allPlayers.filter(pl => !pl.drafted && fpg(pl) != null).sort(byRank).slice(0, FIT_POOL);
+      setFits(fitTable({ roster: myRoster.map(input), candidates: pool.map(input), slots: slotList,
+                         nDays: sched.days, streamer: season.streamer }));
+    }, 0);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitKey, pinSnake, !!sched]);
+  const bestFit = (() => {
+    const top = allPlayers.filter(pl => !pl.drafted && fits[pl.name]).sort(byRank).slice(0, BEST_OF);
+    return top.reduce((best, pl) => (!best || fits[pl.name].adds > fits[best].adds ? pl.name : best), null);
+  })();
+  const groupOf = (pl) => {
+    const ps = new Set(pl.positions || []);
+    const g = ['PG', 'SG', 'G'].some(x => ps.has(x)); const f = ['SF', 'PF', 'F'].some(x => ps.has(x)); const c = ps.has('C');
+    return (g ? 'G' : '') + (f ? 'F' : '') + (c ? 'C' : '');
+  };
+  const myGroups = myRoster.reduce((acc, pl) => { const k = groupOf(pl) || '?'; acc[k] = (acc[k] || 0) + 1; return acc; }, {});
   const sorted = [...players].sort((a, b) => {
     if (sort === 'rank') return byRank(a, b);
     const [x, y] = [sortValue(a), sortValue(b)];
@@ -374,6 +411,18 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                 {Array.from({ length: numTeams }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
               </select>
             </label>
+          )}
+          {pinSnake && sched && (
+            <button onClick={() => sortBy('fit')}
+                    className={`rounded px-1.5 py-0.5 border ${sort === 'fit' ? 'border-nba-orange text-nba-orange' : 'border-gray-600 text-gray-300'}`}
+                    title="Sort the best 40 left by what each adds to YOUR roster a week (positions included). The orange 'best fit' tag marks the pick: the most added among the top 12 by value.">
+              Best fit{sort === 'fit' ? ' ↓' : ''}
+            </button>
+          )}
+          {pinSnake && myRoster.length > 0 && (
+            <span title="Your roster by position group: G = guard only, F = forward only, C = centre only; GF, FC = both.">
+              You: {Object.entries(myGroups).sort().map(([k, v]) => `${v} ${k}`).join(' · ')}
+            </span>
           )}
           {season && <span className="hidden sm:inline" title="The average FPTS a game of the best free agents once every roster is full: what a weekly add gives you.">Streamer {season.streamer.toFixed(1)} FPTS/g</span>}
           {leagueTeams.map(team => {
@@ -573,6 +622,8 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
               const rank = season ? rankOf(player) : getRank(player);
               const moved = !season && customScores[player.name] ? getOverallRank(player) - rank : 0;
               const sn = snake ? snakeInfo(player) : null;
+              const fit = !player.drafted ? fits[player.name] : null;
+              const misfit = fit && fit.fit < FIT_DIM;
               const score = Math.round(getScore(player));
               const scoreMoved = customScores[player.name] ? score - Math.round(getZScore(player)) : 0;
               const whatIf = draftPlan && !snake && !p.isStar ? player.what_if : null;  // auction max bids only
@@ -581,7 +632,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
               const cell = 'border-b border-gray-700/60';
               const rowBg = mine ? 'bg-row-mine' : 'bg-gray-800 group-hover:bg-row-hover';
               return (
-                <tr key={player.name} className={`group ${gone ? 'opacity-40' : ''}`}>
+                <tr key={player.name} className={`group ${gone ? 'opacity-40' : misfit ? 'opacity-50' : ''}`}>
                   <td className={`${cell} ${rowBg} sticky left-0 z-10 w-[1%] pl-1 pr-1.5 sm:pl-3 sm:pr-3 py-1 ${mine ? 'shadow-[inset_3px_0_0_rgb(var(--accent))]' : ''} ${touch && caps.auction && fantasyTeams.length ? 'active:bg-row-hover' : ''}`}
                       onClick={touch && caps.auction && fantasyTeams.length ? () => (player.drafted
                         ? setModalPlayer({ ...player, overall_rank: rank, auction_value: p.value })
@@ -620,6 +671,14 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                           {whatIf && <span className={`${TAG} bg-emerald-500/15 text-emerald-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀 ${shareMax(whatIf.breakout)}</span>}
                           {whatIf && whatIf.corrected != null && <span className={`${TAG} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">yr 3 ${shareMax(whatIf.corrected)}</span>}
                           {notes.risks.map(r => <span key={r} className={`${TAG} bg-amber-500/15 text-amber-300`}>{r}</span>)}
+                          {player.name === bestFit && (
+                            <span className={`${TAG} bg-nba-orange/25 text-orange-200`}
+                                  title={`Adds ${fit?.adds} FPTS a week to your roster (positions on the real schedule), the most of the top ${BEST_OF} left by value. Picking this way beat value alone by ~66 FPTS a week in 1,000 simulated drafts.`}>best fit</span>
+                          )}
+                          {fit && fit.fit < FIT_TAG && (
+                            <span className={`${TAG} ${misfit ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'}`}
+                                  title={`With your roster, positions cost ${Math.round(100 * (1 - fit.fit))}% of what he would add: on busy nights he or a teammate sits for lack of a slot. Adds ${fit.adds} FPTS a week.`}>fit {Math.round(100 * fit.fit)}%</span>
+                          )}
                           {sn && !player.drafted && sn.gap != null && sn.gap >= SLEEPER && (
                             <span className={`${TAG} bg-emerald-500/15 text-emerald-300`} title={`Yahoo's drafters take him around pick ${Math.round(sn.room)}; on season value he is #${sn.ours}. The room's category ranking undervalues him in points.`}>room waits {sn.gap}</span>
                           )}

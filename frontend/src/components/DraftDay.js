@@ -234,6 +234,34 @@ function SnakeDraftDay({ data }) {
         </ul>
       </Section>
 
+      {data.positions && (
+        <Section title="Positions: guards early, then fit"
+                 subtitle={`${data.positions.drafts.toLocaleString()} simulated drafts, every roster played through the real 2026-27 schedule day by day with Yahoo's eligibility: 9 slots (PG SG G SF PF F C UTIL UTIL), streamers for empty slots (up to 10 a week).`}>
+          <table className="text-sm tabular-nums mb-3">
+            <thead><tr className="text-xs uppercase tracking-wider text-gray-400">
+              <th className="text-left font-semibold py-1 pr-6">How I pick</th><th className="text-right font-semibold px-2">FPTS a week</th>
+              <th className="text-right font-semibold px-2">Guard-only drafted</th><th className="text-right font-semibold pl-2">Guard games benched</th>
+            </tr></thead>
+            <tbody>
+              {data.positions.rows.map(([label, v, g, b], i) => (
+                <tr key={label} className="border-t border-gray-700/60">
+                  <td className={`py-1 pr-6 ${i === 0 ? 'text-white font-semibold' : 'text-gray-200'}`}>{label}</td>
+                  <td className="text-right px-2 font-semibold text-white">+{v}</td>
+                  <td className="text-right px-2 text-gray-300">{g}</td>
+                  <td className="text-right pl-2 text-gray-300">{b}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <ul className="space-y-1.5 text-sm text-gray-300 list-disc ml-5">
+            <li>Half the top 30 by value are guard-only, so the first three rounds lean guard, and that's right: about 65% of the winning picks in rounds 1-3 were guards.</li>
+            <li><b className="text-white">From round 4, let fit decide.</b> The winning picks spread to forwards, F/C bigs and G/F wings (16-36% of picks in rounds 4-6). Pure centres are rarely needed: F/C players cover the C slot.</li>
+            <li>A guard-only player's fit as you add them: {data.positions.fit_curve.map(([k, v]) => `${k} ${v}%`).join(', ')}. Centres drop the same way from the third.</li>
+            <li>The board does it live: <b className="text-orange-200">best fit</b> marks the pick (most added to your roster among the top 12 by value), <b className="text-amber-300">fit N%</b> warns, rows under 80% dim. A fixed cap (max 4 or 5 guards) did worse than letting fit decide.</li>
+          </ul>
+        </Section>
+      )}
+
       <Section title="The room lets these slide" subtitle="Our season rank at least 15 picks ahead of Yahoo's ADP: points players the category ranking undervalues. Still take them in value order, but don't panic if one looks early: the room is not on him.">
         <PlayerList rows={data.sleepers || []} good />
       </Section>
