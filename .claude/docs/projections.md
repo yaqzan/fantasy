@@ -21,9 +21,32 @@ team wins (`team_strength`). NBA-wide, shared by every league.
 - **Our model** (`projection_model.py`): last 3 seasons 5/4/3 by minutes + 800 minutes of league
   average, a one-year age factor (delta method, seasons before the target only); players
   entering year 2-3 use last season only + experience curves; rookies = past picks' first
-  seasons by draft range. Backtest (fit before each target, 2023-24..2025-26, 9-cat per-game
+  seasons by draft range; then an **age calibration** (2026-10-16, below). Backtest (fit before each target, 2023-24..2025-26, 9-cat per-game
   value rho): ESPN .840/.847/.800, ours .829/.842/.767, last season .823/.851/.769, blend
   .848/.852/.802.
+- **Audit 2026-10-16** (`audit.py` -> `out/audit.md`, `calib.py`, `breakout_shape.py` in the `.horizon` driver;
+  players with 20+ games; ours 2015-16..2025-26, ESPN/blend on 2020-21, 2021-22, 2023-24..2025-26, n=1,613).
+  - Per game, blend vs ESPN vs ours (MAE): PTS 2.38/2.49/2.58, REB .83/.86/.90, AST .65/.65/.71, STL .18/.19/.19,
+    BLK .16/.17/.15, 3PM .36/.37/.38, TOV .33/.34/.35, FG% 2.9/2.9/2.9 pts, FT% 4.0/4.1/4.0 pts, FPTS 4.87/5.05/5.31,
+    9-cat value 1.56/1.62/1.64 z. The blend beats every source on every stat but blocks (ours). ESPN runs high:
+    PTS +0.8, minutes +1.5, games +9.4, FPTS +1.6 a game; ours +0.2/+0.5/+1.3/+0.4. Everyone under-projects FT% by ~.3.
+  - **Biggest miss: minutes.** Players whose minutes then rose 6+ were under-projected by 2.2 z (blend; -7 FPTS a
+    game), down 6+ over by 2.5 z (+9 FPTS). That's half the error and nothing in the history predicts it.
+  - **Systematic: age.** Before the fix, the blend over-projected 32+ by +0.81 z / +3.0 FPTS a game and <=24 by
+    -0.01 / +0.14, in every season (ours alone in all 11, ESPN in all 5). By NBA year: rookies +0.84 z (ESPN +1.09,
+    ours -0.46), year 2 -0.10, 3 -0.24, 8+ +0.6. Team changers +0.81 (inflated: "changed" is read off the final
+    team, so mid-season trades count). Injury-short last season (<= 40 games) +0.45 vs +0.10 on 61+.
+    Games by age: flat (+6 to +8 at every age), so no games fix.
+  - **Adopted: age calibration in our model** (`projection_model.age_calibration`): per age (pooled +-1), actual /
+    projected per-game sums of the model's own last 6 seasons, relative to all ages, pooled with 100 player-seasons
+    of 1.0; scales per-game stats and minutes, rookies untouched. Out of sample on the blend (season-demeaned
+    MAE, what ranks and $ feel): 9-cat 1.547 -> 1.538 z (90% bootstrap -.014 to -.004), WSOP-8 1.960 -> 1.946,
+    FPTS 4.791 -> 4.764 (-.042 to -.011), Spearman .812 -> .814 / .849 -> .851; 32+ bias +2.96 -> +2.27 FPTS. Small
+    because minutes changes dominate the error. On 2026-27 it moved top-150 ranks 2.3 on average (max 13) and $
+    under $1.
+  - Rejected: calibrating the final blend by age (leave one season out or forward) or both layers: same gain or
+    less, and it pushes the young up. A games correction by age: no age pattern. Rookie weight: too few rookies
+    with 20+ games and an ESPN line (80) to refit; `source_weights.py` already found the per-type weights tie.
 - **Blend** (`projections.player_lines`): experts averaged stat by stat, then
   `EXPERT_WEIGHT` by player type (rookie .9, year 2-3 .9, other .7, age 32+ .6, changed team .5)
   vs our model: fit on 2024-25/2025-26 with ESPN + FantasyPros, the experts with a past.

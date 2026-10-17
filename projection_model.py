@@ -8,7 +8,11 @@ target season:
   (blended with 200 minutes): their rookie year says less about them;
 - a one-year change factor per stat, minutes and games, by age (by NBA experience for players
   entering year 2-3), measured from consecutive seasons before the target (delta method);
-- rookies: the average first season of past picks in the same draft range.
+- rookies: the average first season of past picks in the same draft range;
+- an age calibration: the model under-projected young players and over-projected veterans in
+  every season 2015-16..2025-26 (survivors bias the delta curves), so each age's per-game stats
+  and minutes are scaled by how the last AGE_CAL_YEARS seasons' projections at that age missed,
+  relative to all ages (the overall level stays). Hold-out backtest: .claude/docs/projections.md.
 Everything is fit on seasons before the target, so backtests stay out of sample.
 """
 import numpy as np
@@ -21,6 +25,11 @@ PRIOR_MIN = 800
 YOUNG_PRIOR_MIN = 200
 GP_PRIOR = 0.8          # share of 82 games a player is assumed to play before his record says otherwise
 PICK_BUCKETS = [(1, 3), (4, 7), (8, 14), (15, 30), (31, 60)]
+AGE_CAL_YEARS = 6       # past seasons of our own projections the age calibration is fit on
+AGE_CAL_PRIOR = 100     # player-seasons of "no correction" each age's factor is pooled with
+AGE_CAL_STATS = ['PTS', 'REB', 'AST', 'STL', 'BLK', 'FG3M', 'TOV', 'FGM', 'FGA', 'FTM', 'FTA', 'MPG']
+# Stats the calibration doesn't fit, scaled with the one they follow.
+AGE_CAL_FOLLOW = {'BLKA': 'FGA', 'PF': 'MPG', 'DD2': 'PTS', 'TD3': 'PTS'}
 
 
 def delta_curves(hist, before, key='AGE', min_minutes=500):
@@ -76,7 +85,40 @@ def rookie_baselines(hist, drafts, before, years=6):
     return out
 
 
-def project_season(hist, drafts, target):
+def age_calibration(hist, drafts, target, years=AGE_CAL_YEARS):
+    """{age: {stat: factor}} from our uncalibrated projections of the `years` seasons before `target`
+    against what happened (players with 20+ games, rookies left out): actual / projected per-game
+    sum at that age (ages pooled +-1), over the same ratio for every age, pooled with AGE_CAL_PRIOR
+    player-seasons of 1.0."""
+    pairs = []
+    for t in range(target - years, target):
+        if not (hist.SEASON == t).any() or not (hist.SEASON <= t - 3).any():
+            continue
+        proj = project_season(hist, drafts, t, calibrate=False)
+        proj = proj[proj.EXP >= 1].drop_duplicates('PLAYER_ID').set_index('PLAYER_ID')
+        act = hist[(hist.SEASON == t) & (hist.GP >= 20)].drop_duplicates('PLAYER_ID').set_index('PLAYER_ID')
+        both = proj.index.intersection(act.index)
+        frame = pd.DataFrame({'AGE': proj.loc[both, 'AGE']})
+        for s in AGE_CAL_STATS:
+            frame[f'p_{s}'] = proj.loc[both, s]
+            frame[f'a_{s}'] = act.loc[both, 'MIN' if s == 'MPG' else s] / act.loc[both, 'GP']
+        pairs.append(frame)
+    if not pairs:
+        return {}
+    r = pd.concat(pairs).dropna(subset=['AGE'])
+    overall = {s: r[f'a_{s}'].sum() / r[f'p_{s}'].sum() for s in AGE_CAL_STATS}
+    out = {}
+    for a in range(19, 41):
+        sel = r[(r.AGE >= a - 1) & (r.AGE <= a + 1)]
+        if sel.empty:
+            continue
+        n = len(sel)
+        out[a] = {s: (n * sel[f'a_{s}'].sum() / sel[f'p_{s}'].sum() / overall[s] + AGE_CAL_PRIOR) / (n + AGE_CAL_PRIOR)
+                  for s in AGE_CAL_STATS}
+    return out
+
+
+def project_season(hist, drafts, target, calibrate=True):
     """Per-game projections for the season starting in year `target`: a DataFrame with PLAYER_ID,
     PLAYER_NAME, AGE, EXP (NBA seasons before it), PREV_TEAM, GP, MPG and COUNT_STATS per game.
 
@@ -113,6 +155,14 @@ def project_season(hist, drafts, target):
                'GP': min(gp, 82.0), 'MPG': min(mpg, 40.0)}
         row.update({s: rates[s] * row['MPG'] for s in COUNT_STATS})
         rows.append(row)
+    if calibrate:
+        cal = age_calibration(hist, drafts, target)
+        for row in rows:
+            f = cal.get(int(round(min(max(row['AGE'], 19), 40))), {}) if row['AGE'] == row['AGE'] else {}
+            for s in AGE_CAL_STATS:
+                row[s] *= f.get(s, 1.0)
+            for s, follows in AGE_CAL_FOLLOW.items():
+                row[s] *= f.get(follows, 1.0)
     base = rookie_baselines(hist, drafts, target)
     seen = set(before.PLAYER_ID)
     for r in drafts[(drafts.SEASON == target) & (~drafts.PLAYER_ID.isin(seen))].itertuples():
