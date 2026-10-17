@@ -71,7 +71,9 @@ stats) is shared by all leagues.
   coefficient grows roughly with the size of the weights, so a league with much bigger weights
   would need its own measurement.
   `fantasy_config.FPOINTS_SCORING` is the default weight table; Courtside Tamasha (Yahoo) uses it.
-  Daily Leaders scores each game line with the same formula (`leagues.fantasy_points`). There's no separate FPts
+  Daily Leaders scores each game line with the same formula (`leagues.fantasy_points`); FPTS is its pinned primary
+  column in every sort (bold, wider: 3rem on phones; in Pace order the pace number sits under it), paid for by 2rem stat
+  columns so PTS REB AST STL BLK still fit a phone (166 + 48 + 5 x 32 = 374px). There's no separate FPts
   column in the player table: it was the same idea hard-coded for every league.
 - **Categories.** `CATEGORY_CATALOG` in `leagues.py`: key, label, `inverse` (lower wins), `kind`;
   ratios also carry `attempts` (per-game attempts formula) and `prior` (shrinkage strength in

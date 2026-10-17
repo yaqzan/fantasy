@@ -153,9 +153,14 @@ const DailyLeaders = ({ config }) => {
   // opacity on the row would let scrolled cells show through the pinned ones.
   // Phone widths fill a 400px screen with player + Val + five stat columns (PTS REB A-TO STL BLK); the
   // rest scroll. Val fits only the number: the pace arrow sits in the cell's corner on phones.
+  // Points leagues: FPTS is the primary column in every sort (wider, bold; pace goes under it in Pace
+  // order), paid for by narrower stat columns, which hold plain 1-2 digit counts there:
+  // 166 + 48 + 5 x 32 = 374px, against 166 + 38 + 5 x 36 = 384px for categories.
   const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
-  const VALUE_W = 'w-[2.375rem] min-w-[2.375rem] max-w-[2.375rem] sm:w-16 sm:min-w-[4rem] sm:max-w-none left-[10.375rem] sm:left-60';
-  const STAT_W = 'min-w-[2.25rem] px-0.5 sm:min-w-0 sm:px-2';
+  const VALUE_W = points
+    ? 'w-[3rem] min-w-[3rem] max-w-[3rem] sm:w-20 sm:min-w-[5rem] sm:max-w-none left-[10.375rem] sm:left-60'
+    : 'w-[2.375rem] min-w-[2.375rem] max-w-[2.375rem] sm:w-16 sm:min-w-[4rem] sm:max-w-none left-[10.375rem] sm:left-60';
+  const STAT_W = points ? 'min-w-[2rem] px-0.5 sm:min-w-0 sm:px-2' : 'min-w-[2.25rem] px-0.5 sm:min-w-0 sm:px-2';
   return (
     <div className="py-2 sm:p-6">
       {/* Phones: date stepper, the three owner chips (tap the lit one to go back to everything)
@@ -253,10 +258,10 @@ const DailyLeaders = ({ config }) => {
               <tr>
                 <th className={`table-header sticky left-0 z-20 px-2 ${PLAYER_W}`}>Player</th>
                 <th className={`table-header sticky z-20 text-center px-0.5 tracking-normal sm:tracking-wider border-r border-gray-700 ${VALUE_W}`}
-                    title={byPace ? 'SDs ahead of his own per-minute norm'
-                      : points ? "This league's fantasy points"
+                    title={points ? `This league's fantasy points${byPace ? '; under it, SDs ahead of his own per-minute norm (the order)' : ''}`
+                      : byPace ? 'SDs ahead of his own per-minute norm'
                       : "Summed category z: how far this game moved a week's matchup, category by category"}>
-                  {byPace ? 'Pace' : points ? 'FPTS' : 'Best'}
+                  {points ? 'FPTS' : byPace ? 'Pace' : 'Best'}
                 </th>
                 {columns.map(c => <th key={c.key} className={`table-header text-center whitespace-nowrap tracking-normal sm:tracking-wider ${STAT_W}`}>{c.label}</th>)}
               </tr>
@@ -287,8 +292,22 @@ const DailyLeaders = ({ config }) => {
                         </div>
                       </div>
                     </td>
-                    <td className={`sticky z-10 text-center px-0.5 text-[11px] sm:text-sm font-semibold tabular-nums whitespace-nowrap border-r border-gray-700 ${VALUE_W} ${bg}`}>
-                      {byPace ? (
+                    <td className={`sticky z-10 text-center px-0.5 tabular-nums whitespace-nowrap border-r border-gray-700 ${VALUE_W} ${bg} ${
+                      points ? 'text-[13px] sm:text-base font-bold' : 'text-[11px] sm:text-sm font-semibold'}`}>
+                      {points ? (p.dnp ? <span className={`${fade} text-gray-500`}>–</span> : (
+                        <span className={`${fade} text-white`}>
+                          {signed(p.value)}
+                          {byPace ? (
+                            <span className={`block leading-none text-[10px] sm:text-[11px] font-semibold ${p.pace >= 1.5 ? 'text-sky-400' : p.pace <= -1.5 ? 'text-amber-400' : 'text-gray-400'}`}
+                                  title="SDs ahead of his own per-minute norm">
+                              {p.pace == null ? '–' : `${p.pace > 0 ? '+' : ''}${p.pace.toFixed(1)}`}
+                            </span>
+                          ) : (() => {
+                            const mark = paceMark(p, points);
+                            return mark && <span className={`absolute top-1 right-0.5 leading-none text-[9px] sm:static sm:text-[10px] sm:ml-0.5 ${mark.cls}`} title={mark.title}>{mark.glyph}</span>;
+                          })()}
+                        </span>
+                      )) : byPace ? (
                         <span className={`${fade} ${p.pace >= 1.5 ? 'text-sky-400' : p.pace <= -1.5 ? 'text-amber-400' : 'text-white'}`}
                               title={`Best ${signed(p.value)}`}>
                           {p.pace == null ? '–' : `${p.pace > 0 ? '+' : ''}${p.pace.toFixed(1)}`}
