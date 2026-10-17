@@ -531,7 +531,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
               const sn = snake ? snakeInfo(player) : null;
               const score = Math.round(getScore(player));
               const scoreMoved = customScores[player.name] ? score - Math.round(getZScore(player)) : 0;
-              const whatIf = draftPlan && !p.isStar ? player.what_if : null;
+              const whatIf = draftPlan && !snake && !p.isStar ? player.what_if : null;  // auction max bids only
               const gp = games(player);
               const target = p.aim ?? p.max;
               const cell = 'border-b border-gray-700/60';
