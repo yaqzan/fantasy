@@ -175,8 +175,8 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   `'_pre'` timeframe (`preseason.py` holds the constants below; `player_stats._add_projections` builds it from the
   unfaded projection, then fades it with real games like `'_proj'`; `PROJ_FRAMES` treats both alike). Player Rankings'
   "Preseason-adjusted" stats choice (only there: Lineup/Pickups/Standings don't offer it) with a Δ column
-  (`pre_trend`: OVR points vs the projection; tap again for fallers); the card's Adjusted row. Players projected
-  28+ MPG keep their minutes (owner, 2026-10-17). Lines: `game_log.store_preseason` -> `preseason_lines` (every
+  (`pre_trend`: OVR points vs the projection; tap again for fallers); the card's Adjusted row; the draft board
+  follows the same stats choice. Players projected 32+ MPG keep their minutes (below). Lines: `game_log.store_preseason` -> `preseason_lines` (every
   `pull_api_data.py` full pull, one call; minutes clamped at 0: the NBA log had a -4).
   stats.nba.com `LeagueGameLog` `Pre Season` has every season (one call each; 2019-20's also holds the July 2020
   bubble scrimmages: keep 45 days from the first game). 4,285 player-seasons 2013-14..2025-26 (500+ regular-season
@@ -193,3 +193,11 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   Minutes: preseason MPG is not the role: starters play 8-11 fewer (projected 32+: -11.2), deep bench +5. Against
   the expected preseason MPG (13.3 + 0.31 x projected MPG) the surprise carries g/(g+5) games' weight and removes
   8% of the minutes error out of sample (young 7%, vets 9%); weakest part, and a star resting looks like a role loss.
+  **In fantasy points** (`eval_fpts.py`, default weights, constants fit 2013-20, scored 2021-25, top 150 by the
+  baseline, 500+ min players): vs our model FPTS/g RMSE 6.64 -> 6.39, Spearman .788 -> .80; vs ESPN's preseason
+  projection (2020-21, 2023-24..2025-26) 6.14 -> 5.63, .816 -> .836, better in every season. Where the update reorders
+  two players it is right 58-60% of the time: a tiebreaker inside a tier, not a reshuffle. Rates only (no minutes)
+  gains about half. **By draft range** (`eval_cutoff.py`): ranks 60-250 gain most from the minutes part (RMSE -0.5,
+  60-65% of reorders right); in the top 60 a rested star's minutes are noise: exempting players projected 32+ MPG
+  is best vs ESPN (top 60: -0.50, 64% right; none exempt: -0.33, 54%) and keeps the gain below rank 60. **Top 30:**
+  preseason doesn't help (vs ours RMSE +0.18, reorders ~coin flip): don't let it reorder the first ~30 picks.

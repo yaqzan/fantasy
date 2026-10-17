@@ -4,8 +4,9 @@ Constants from the 2026-10-17 backtest (.claude/docs/projections.md "Preseason s
 fit before each target, holdout 2021-25). Per stat: take the preseason's hot level off (offset), then
 move the projected per-minute rate m / (m + k) of the way to it, m = preseason minutes (attempts for
 FG%/FT%), k by NBA year (years 1-3 trust preseason far more). Minutes: the surprise against the
-expected preseason MPG (13.3 + 0.31 x projected) at g / (g + 5) games' weight, skipped for players
-projected STARTER_MPG+ (a rested star is not a lost role)."""
+expected preseason MPG (13.3 + 0.31 x projected) at g / (g + 5) games' weight, except for players
+projected STARTER_MPG+: a rested star is not a lost role (eval_cutoff.py, 2026-10-17: 32 scored best
+in the top 60 against ESPN and kept the gain from rank 60 down)."""
 from functools import lru_cache
 
 from fantasy_database import PreseasonLine
@@ -20,7 +21,7 @@ SHRINK = {
 }
 RATIOS = {'fgm': ('fga', ((-0.0064, 170), (-0.0087, 550))), 'ftm': ('fta', ((-0.0085, 70), (-0.0064, 160)))}
 MPG_A, MPG_B, MPG_K = 13.3, 0.31, 5
-STARTER_MPG = 28
+STARTER_MPG = 32
 YOUNG_EXP = 2      # NBA seasons before this one: 0-2 = years 1-3
 MAX_MPG = 40.0
 FIELDS = ['min', 'pts', 'reb', 'ast', 'stl', 'blk', 'fg3m', 'tov', 'fga', 'fgm', 'fta', 'ftm']

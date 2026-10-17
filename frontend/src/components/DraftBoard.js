@@ -519,7 +519,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
               <th className={`${TH} top-0 h-6 left-0 z-30`} />
 {pointsLayout ? (
                 <th className={`${TH} top-0 h-6 text-left border-l border-gray-700`} colSpan={4}>
-                  {statType === 'proj' || statType === 'projected' ? 'Projected' : 'Stats'}{snake && <span className="ml-3 text-nba-orange font-semibold">· Pick</span>}
+                  {['proj', 'pre', 'projected'].includes(statType) ? 'Projected' : 'Stats'}{snake && <span className="ml-3 text-nba-orange font-semibold">· Pick</span>}
                 </th>
               ) : null}
               {pointsLayout && <th className={`${TH} top-0 h-6`} />}
@@ -541,7 +541,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                 )}
               </th>
               <th className={`${TH} top-0 h-6 text-center border-l border-gray-700`} colSpan={categories.length + 1}>
-                {statType === 'proj' || statType === 'projected' ? 'Projected per game' : 'Per game'}
+                {['proj', 'pre', 'projected'].includes(statType) ? 'Projected per game' : 'Per game'}
               </th>
               <th className={`${TH} top-0 h-6 border-l border-gray-700`} colSpan={2} />
               </>)}
