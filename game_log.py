@@ -138,8 +138,8 @@ def store_preseason(season):
     rows = [{
         'player_id': int(r.PLAYER_ID), 'game_date': str(r.GAME_DATE)[:10], 'season': season, 'source': 'nba',
         'game_id': str(r.GAME_ID), 'team': r.TEAM_ABBREVIATION, 'w': int(r.WL == 'W'), 'matchup': r.MATCHUP,
-        'min': int(round(r.MIN or 0)), **{c.lower(): int(getattr(r, c) or 0) for c in BOX},
-        'blka': None, 'tech': None,
+        'min': max(int(round(r.MIN or 0)), 0),  # the NBA's log has the odd negative minute count (-4, 2026-10-14)
+        **{c.lower(): int(getattr(r, c) or 0) for c in BOX}, 'blka': None, 'tech': None,
     } for r in df.itertuples()]
     with DB.atomic():
         for i in range(0, len(rows), 500):

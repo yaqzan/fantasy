@@ -23,7 +23,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
     statType: config.default_stat_type || 'projected', positions: chips, available: true, healthy: true,
     priceExponent: null, punts: [],
   }, (picked) => ({
-    ...validStat(config)(picked),
+    ...validStat(config, { preseason: true })(picked),
     ...(picked.punts && { punts: picked.punts.filter(c => categoryKeys.includes(c)) }),
     ...(picked.positions && { positions: picked.positions.filter(p => chips.includes(p)) }),
   }));
@@ -55,7 +55,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
           <div className={`${lever} items-center space-x-2`}>
             <span className="text-sm text-gray-300">Stats:</span>
             <select value={view.statType} onChange={(e) => setView({ statType: e.target.value })} className={selectClass}>
-              {statOptions(config).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {statOptions(config, { preseason: true }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </div>
 

@@ -19,15 +19,17 @@ export default function useLeagueViewState(leagueId, tab, defaults, sanitize = (
   return [{ ...defaults, ...picked }, set];
 }
 
-// The stats choices every tab offers; 'proj' only when this season's projections exist.
-export const statOptions = (config) => [
+// The stats choices every tab offers; 'proj' only when this season's projections exist. 'pre' (the
+// projection moved by this season's preseason games) only where a tab asks for it (Player Rankings).
+export const statOptions = (config, { preseason = false } = {}) => [
   ...(config?.projection_season ? [['proj', `${config.projection_season} projection`]] : []),
+  ...(preseason && config?.has_preseason ? [['pre', 'Preseason-adjusted']] : []),
   ['projected', 'Projected'], ['season', 'Season Average'], ['10', 'Last 10 Games'], ['5', 'Last 5 Games'],
 ];
 
 // Drops a stored stats choice the league can't offer any more.
-export const validStat = (config) => (picked) => {
+export const validStat = (config, options) => (picked) => {
   const out = { ...picked };
-  if (out.statType && !statOptions(config).some(([value]) => value === out.statType)) delete out.statType;
+  if (out.statType && !statOptions(config, options).some(([value]) => value === out.statType)) delete out.statType;
   return out;
 };

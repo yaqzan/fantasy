@@ -216,6 +216,18 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     return null;
   };
 
+  // Preseason-adjusted view: how far his preseason games moved his OVR off the projection.
+  const getPreIndicator = (player) => {
+    const d = player.pre_trend;
+    if (d === null || d === undefined) return <span className="text-[11px] text-gray-500" title="No preseason games">–</span>;
+    const r = Math.round(d);
+    const title = `${player.preseason_games} preseason games, ${player.preseason_minutes} min: OVR ${r > 0 ? '+' : ''}${r} vs the projection (rank ${player.overall_rank_proj} → ${player.overall_rank_pre})`;
+    if (r === 0) return <span className="text-[11px] text-gray-500" title={title}>±0</span>;
+    return <span className={`text-xs font-semibold ${r > 0 ? 'text-green-400' : 'text-red-400'}`} title={title}>{r > 0 ? '▲' : '▼'}{Math.abs(r)}</span>;
+  };
+  const preView = statType === 'pre';
+  const trendKey = preView ? 'pre_trend' : 'hot_overall';
+
   const getZScoreColor = (score) => {
     if (score > 55) {
       // Green spectrum with clear text
@@ -241,7 +253,10 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     
     if (sortConfig.key === key) {
       // If clicking the same column, cycle: current direction -> unsorted -> unsorted
-      if (sortConfig.direction === null) {
+      // (the preseason trend goes risers -> fallers -> unsorted)
+      if (key === 'pre_trend' && sortConfig.direction === 'desc') {
+        direction = 'asc';
+      } else if (sortConfig.direction === null) {
         direction = null; // Stay unsorted
       } else {
         direction = null; // Go to unsorted
@@ -293,8 +308,9 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
       bValue = b[sortConfig.key];
     }
     
-    // Handle null/undefined values
+    // Handle null/undefined values (players with no preseason games sit below risers and fallers alike)
     if (aValue == null && bValue == null) return 0;
+    if (sortConfig.key === 'pre_trend' && (aValue == null || bValue == null)) return aValue == null ? 1 : -1;
     if (aValue == null) return sortConfig.direction === 'asc' ? 1 : -1;
     if (bValue == null) return sortConfig.direction === 'asc' ? -1 : 1;
     
@@ -348,11 +364,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
               </th>
               <th 
                 className="table-header cursor-pointer hover:bg-gray-600 w-10 text-center px-1"
-                onClick={() => handleSort('hot_overall')}
-                title="OVR Trend (5-game vs season)"
+                onClick={() => handleSort(trendKey)}
+                title={preView ? 'Preseason vs projection (OVR points; tap again for fallers)' : 'OVR Trend (5-game vs season)'}
               >
                 <div className="flex items-center justify-center">
-                  📈<SortIcon columnKey="hot_overall" />
+                  {preView ? 'Δ' : '📈'}<SortIcon columnKey={trendKey} />
                 </div>
               </th>
               <th 
@@ -435,7 +451,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   </div>
                 </td>
                 <td className="table-cell text-center px-1">
-                  {getHotColdIndicator(player)}
+                  {preView ? getPreIndicator(player) : getHotColdIndicator(player)}
                 </td>
                 <td className="table-cell">
                   <div>

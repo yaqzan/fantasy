@@ -171,8 +171,13 @@ team wins (`team_strength`). NBA-wide, shared by every league.
 - **Check a new source before blending it**: median per-game ratio to ESPN per stat and games.
   CBS 2026-27 came out at .84 points / 1.12 games (totals over too many games) and is in
   `NOT_BLENDED`; the others sit within ~7% (ESPN is the most optimistic, as in the backtests).
-- **Preseason signal (backtest 2026-10-17, `.horizon/preseason-2026/`: `backtest.py`, `holdout.py`; the shrink isn't in the app yet).**
-  Stored: `game_log.store_preseason` -> `preseason_lines` (every `pull_api_data.py` full pull, one call); the player card shows them.
+- **Preseason signal (backtest 2026-10-17, `.horizon/preseason-2026/`: `backtest.py`, `holdout.py`).** In the app as the
+  `'_pre'` timeframe (`preseason.py` holds the constants below; `player_stats._add_projections` builds it from the
+  unfaded projection, then fades it with real games like `'_proj'`; `PROJ_FRAMES` treats both alike). Player Rankings'
+  "Preseason-adjusted" stats choice (only there: Lineup/Pickups/Standings don't offer it) with a Δ column
+  (`pre_trend`: OVR points vs the projection; tap again for fallers); the card's Adjusted row. Players projected
+  28+ MPG keep their minutes (owner, 2026-10-17). Lines: `game_log.store_preseason` -> `preseason_lines` (every
+  `pull_api_data.py` full pull, one call; minutes clamped at 0: the NBA log had a -4).
   stats.nba.com `LeagueGameLog` `Pre Season` has every season (one call each; 2019-20's also holds the July 2020
   bubble scrimmages: keep 45 days from the first game). 4,285 player-seasons 2013-14..2025-26 (500+ regular-season
   minutes), baseline = `project_season` fit before each target. Update: `rate = proj + m/(m+k) x (pre/(1+offset) - proj)`,

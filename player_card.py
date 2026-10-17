@@ -2,7 +2,8 @@
 averages in the selected league's categories.
 
 Rows of averages: Projection; Preseason at his projected minutes (per-minute rates x projected
-MPG, the pace idea of Daily Leaders: preseason minutes are rotations, not roles); Season, Last 10,
+MPG, the pace idea of Daily Leaders: preseason minutes are rotations, not roles); Adjusted (the
+'_pre' timeframe: the projection moved by the preseason, preseason.py); Season, Last 10,
 Last 5 once regular-season games exist (a window only when he has played more games than it).
 Deltas are against the season once he has DELTA_SEASON_GAMES games, else against the projection.
 Each game is scored exactly as Daily Leaders scores it (daily_leaders.score_line): summed category z
@@ -151,6 +152,11 @@ def card(league, player_id=None, name=None):
                      'title': (f'{len(pre_lines)} preseason games, {pre_min} minutes, scaled to his projected '
                                f'{proj_min:.0f} minutes a game' if proj_min else None),
                      'values': _average(cats, pre_lines, league, minutes=proj_min or None)})
+    if stats.get('PRE_G') and any(stats.get(f'{c}_pre') is not None for c in cats):
+        rows.append({'key': 'adj', 'label': 'Adjusted', 'note': f"{stats.get('MIN_pre') or 0:.0f} min",
+                     'title': 'The projection moved by his preseason, weighted by how much preseason has predicted '
+                              'the season (projections.md "Preseason signal")',
+                     'values': {c: stats.get(f'{c}_pre') for c in cats}})
     n = len(rs_lines)
     if n:
         windows = [('season', 'Season', None, '')] + [(f'l{w}', f'Last {w}', w, f'_{w}') for w in (10, 5) if n > w]

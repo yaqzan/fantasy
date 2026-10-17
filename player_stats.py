@@ -11,9 +11,10 @@ from leagues import CATEGORY_CATALOG, slot_reach
 
 
 TIME_PERIODS = ['', '_5', '_10']
-TIMEFRAMES = ['', '_5', '_10', '_projected', '_proj']  # '_proj': this season's projection (projections.py)
+TIMEFRAMES = ['', '_5', '_10', '_projected', '_proj', '_pre']  # '_proj': this season's projection (projections.py)
+PROJ_FRAMES = ('_proj', '_pre')  # '_pre': the projection moved by his preseason games (preseason.py)
 # The frontend's stats choices -> key suffix. 'projected': half season, half last 10 games.
-STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected', 'proj': '_proj'}
+STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected', 'proj': '_proj', 'pre': '_pre'}
 Z_CAP = 3.0       # a category's z-score is capped at +/-Z_CAP before categories are summed
 POOL_PASSES = 3   # re-rank passes that settle the pool the z-scores are measured against
 # Players in that pool per roster spot. Teams reach past the top `spots` for categories and injuries
@@ -103,9 +104,11 @@ def _add_projections(player_stats, preseason, team_win):
     players table, each stat becomes (projection x K + actual total) / (K + games played),
     K = PROJECTION_FADE_GAMES, so early-season samples don't swing him around."""
     from projections import player_lines, season_label
+    from preseason import adjust, preseason_totals
     lines = player_lines(season_label())
     if not lines:
         return
+    pre_totals = preseason_totals(season_label())
     first_game = season_first_game()
     rostered = Player.select().where(Player.id.in_(list(lines)), Player.team.is_null(False), Player.pos.is_null(False))
     for player in rostered:
@@ -116,18 +119,21 @@ def _add_projections(player_stats, preseason, team_win):
         current = (not preseason and first_game is not None and player.api_updated_at is not None
                    and player.api_updated_at.date() >= first_game)
         played = (player.gp or 0) if current else 0
-        for key, attr in PROJECTED_STATS.items():
-            projected = line[attr] or 0.0
-            actual = getattr(player, attr, None) or 0
-            stats[f'{key}_proj'] = ((projected * PROJECTION_FADE_GAMES + actual) / (PROJECTION_FADE_GAMES + played)
-                                    if played else projected)
-        stats['GP_proj'] = line['gp'] or 0.0
+        pre = pre_totals.get(player.id)
+        for n, source in (('_proj', line), ('_pre', adjust(line, pre))):
+            for key, attr in PROJECTED_STATS.items():
+                projected = source[attr] or 0.0
+                actual = getattr(player, attr, None) or 0
+                stats[f'{key}{n}'] = ((projected * PROJECTION_FADE_GAMES + actual) / (PROJECTION_FADE_GAMES + played)
+                                      if played else projected)
+            stats[f'MIN{n}'] = source['min'] or 0.0
+            stats[f'WIN%{n}'] = stats[f'W{n}'] = team_win.get(team_name, 0.5)
+            stats[f'PLUS_MINUS{n}'] = 0.0
+            _ratios(stats, n)
+        stats['PRE_G'], stats['PRE_MIN'] = (pre['g'], pre['min']) if pre else (0, 0)
+        stats['GP_proj'] = stats['GP_pre'] = line['gp'] or 0.0   # preseason moves rates and minutes, not games
         if line.get('exp') is not None:
             stats['NBA_YEAR'] = line['exp'] + 1   # 3 = entering his third season
-        stats['MIN_proj'] = line['min'] or 0.0
-        stats['WIN%_proj'] = stats['W_proj'] = team_win.get(team_name, 0.5)
-        stats['PLUS_MINUS_proj'] = 0.0
-        _ratios(stats, '_proj')
 
 
 # populates a full dictionary of player stats from the db
@@ -485,7 +491,7 @@ def _category_values(player_stats, category, n, pool, rates=None):
     pool_rate = sum(raw[p] * attempts[p] for p in in_pool) / pool_attempts if pool_attempts else 0.0
     if rates is not None:
         rates[category] = pool_rate
-    prior = 0 if n == '_proj' else spec.get('prior', 0)  # projections come already regressed
+    prior = 0 if n in PROJ_FRAMES else spec.get('prior', 0)  # projections come already regressed
     values = {}
     for p, rate in raw.items():
         total = attempts[p] * (player_stats[p].get(f'GP{n}') or 0)
@@ -637,9 +643,9 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
     pool_size = round(drafted * SCALING_POOL_FACTOR)
 
     for n in TIMEFRAMES:
-        if n == '_proj' and not projected:
+        if n in PROJ_FRAMES and not projected:
             continue  # no projections for this season yet
-        eligible = projected if n == '_proj' else qualified
+        eligible = projected if n in PROJ_FRAMES else qualified
         scales = {}
         z_all = _z_scores(player_stats, categories, inverse, n, eligible, pool_size, scales)
         z_scored = (z_all if len(scored) == len(categories)
@@ -678,7 +684,7 @@ def auction_value_at(player_stats, league, name, delta, value_key='VALUE_proj'):
     if len(ranked) <= n or name not in player_stats:
         return 1
     replacement = player_stats[ranked[n]][value_key]
-    weighted = value_key.endswith('_proj')
+    weighted = value_key.endswith(PROJ_FRAMES)
     games = lambda p: min((player_stats[p].get('GP_proj') or 0) / SEASON_GAMES, 1.0) if weighted else 1.0
     surplus = lambda p, extra=0.0: (max(player_stats[p][value_key] + extra - replacement, 0.0) * games(p)) ** league.price_exponent
     total = sum(surplus(p) for p in ranked[:n])
@@ -693,7 +699,7 @@ def add_fantasy_points(player_stats, league):
     weights = league.point_weights
     for stats in player_stats.values():
         for n in TIMEFRAMES:
-            if n == '_proj' and 'GP_proj' not in stats:
+            if n in PROJ_FRAMES and 'GP_proj' not in stats:
                 continue
             stats[f'FPTS{n}'] = sum((stats.get(f'{stat}{n}') or 0) * w for stat, w in weights.items())
 
@@ -729,7 +735,7 @@ def calculate_auction_values(player_stats, league, price_exponent=None, value_ke
     replacement = (player_stats[undrafted[0]][value_key] if undrafted
                    else min(player_stats[p][value_key] for p in drafted))
     games = ((lambda p: min((player_stats[p].get('GP_proj') or 0) / SEASON_GAMES, 1.0))
-             if value_key.endswith('_proj') else (lambda p: 1.0))
+             if value_key.endswith(PROJ_FRAMES) else (lambda p: 1.0))
     surplus = {p: (max(player_stats[p][value_key] - replacement, 0.0) * games(p)) ** price_exponent for p in drafted}
     total_surplus = sum(surplus.values())
     spend = max(league.num_teams * league.budget - len(drafted), 0)

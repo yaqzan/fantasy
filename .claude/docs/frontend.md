@@ -44,7 +44,7 @@ down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` 
 
 - **Averages** in the league's categories, Daily Leaders' column order (points leagues: FPTS first):
   Projection; Preseason at his projected minutes (per-minute x projected MPG: preseason minutes are
-  rotations); Season, Last 10, Last 5 (a window only when he has more games than it). Delta under each
+  rotations); Adjusted (the `'_pre'` timeframe, projections.md "Preseason signal"); Season, Last 10, Last 5 (a window only when he has more games than it). Delta under each
   vs the season from 10 games, else vs the projection; percentages in points; grey under 6% / 1 point.
 - **Game log**: regular season then preseason (`preseason_lines`, never in season totals), scored by
   `daily_leaders.score_line`, so tints and Z equal the board's. Stats the source lacks per game (NBA
