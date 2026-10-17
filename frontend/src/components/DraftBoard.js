@@ -4,6 +4,7 @@ import DraftSheet from './DraftSheet';
 import usePlayerValues from '../usePlayerValues';
 import { bidEdge } from '../bidColor';
 import { auctionState, roomPrice, earlyMarkup, shareMaxOf } from '../auction';
+import { teamAt, picksOf, survival, seasonValues } from '../snake';
 
 // The Player Rankings table in draft mode: one dense row per player, built to be read while he is
 // being bid on. Left to right: who he is, what to pay (aim, max), what the room will pay (likely,
@@ -11,6 +12,8 @@ import { auctionState, roomPrice, earlyMarkup, shareMaxOf } from '../auction';
 // draftPlan: the Draft Day data (/api/draft-day) when it belongs to this league; without it the
 // price columns are just the Value (or the draft round, in a snake league).
 // allPlayers: every player, filtered out or not: the prices paid so far move the prices left (auction.js).
+// A snake plan (draftPlan.type 'snake') swaps the bid ruler for the pick: season value (points leagues), Yahoo's ADP
+// and the chance he is still there at my next turn (snake.js).
 
 // Heat for a 0-100 score: neutral at 50, teal above, rose below (values stay printed, so the
 // colour is never the only signal).
@@ -85,6 +88,12 @@ const sortNotes = (notes = []) => {
   return out;
 };
 
+// Snake tags: our season rank this many picks ahead of the room's ADP ("room waits": a points player the room's
+// category ranking undervalues), or behind it ("room's pick"). sim.py: drafting on season value instead of ADP
+// gained ~85 FPTS a week; waiting on a sleeper (one-pick lookahead) added nothing on top.
+const SLEEPER = 15;
+const REACH = 20;
+
 const TAG = 'inline-block rounded px-1 py-[2px] text-[10.5px] leading-none font-medium whitespace-nowrap';
 const TH = 'sticky z-20 bg-gray-900 px-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-700 whitespace-nowrap select-none';
 const NUM = 'px-2 py-1 text-right tabular-nums whitespace-nowrap';
@@ -157,7 +166,8 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
   // put on the prices left. Mine also caps my bids (money less $1 for each other open spot).
   const settings = config?.league?.settings || {};
   const leagueTeams = fantasyTeams.filter(team => !team.eliminated_stage);
-  const econ = draftPlan && leagueTeams.length
+  const snake = draftPlan?.type === 'snake' ? draftPlan : null;
+  const econ = draftPlan && !snake && leagueTeams.length
     ? auctionState({ players: allPlayers, likely: draftPlan.likely || {}, teams: leagueTeams,
                      budget: settings.draft?.budget || 200, rosterSize: settings.roster?.size || 1 })
     : null;
@@ -181,7 +191,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
   // auctions); only the room's price does (x the factor, x the early markup). The aim climbs to the max by AIM_FULL.
   const prices = (player) => {
     const value = getAuctionValue(player);
-    if (!draftPlan) return { value };
+    if (!draftPlan || snake) return { value };
     const star = draftPlan.rule.stars[player.name];
     const isStar = star != null;
     // No injury slot: a known absence to start the season holds a dead spot (draft_day.json rule.caps, injured.py).
@@ -216,6 +226,38 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
     return s ? (s[periodKey(field)] ?? s[field]) : null;
   };
 
+  // Snake: where the draft is and what each player is worth over a season. Draft slot: Yahoo's order
+  // (settings.draft.order, pull_yahoo.py draft), else the slot picked here (remembered per league).
+  const rounds = settings.roster?.size || 13;
+  const order = settings.draft?.order || [];
+  const [slotPick, setSlotPick] = useState(() => {
+    try { return parseInt(localStorage.getItem(`fantasy.draftSlot.${config?.league?.id}`), 10) || null; } catch (e) { return null; }
+  });
+  const pickSlot = (n) => {
+    setSlotPick(n);
+    try { localStorage.setItem(`fantasy.draftSlot.${config?.league?.id}`, String(n || '')); } catch (e) { /* storage blocked */ }
+  };
+  const snakeOrder = order.length === numTeams ? order
+    : slotPick ? Array.from({ length: numTeams }, (_, i) => (i === slotPick - 1 ? myTeam : `#${i + 1}`)) : [];
+  const picked = allPlayers.filter(p => p.drafted).length;
+  const pickNow = picked + 1;
+  const myPicks = snake ? picksOf(myTeam, snakeOrder, rounds) : [];
+  const onClock = snake && snakeOrder.length && pickNow <= numTeams * rounds ? teamAt(pickNow, snakeOrder) : null;
+  // My next turn after the one being made now: on the clock, the one after it.
+  const nextTurn = myPicks.find(n => n > pickNow) ?? null;
+  const thisTurn = myPicks.find(n => n >= pickNow) ?? null;
+  const season = snake && config?.capabilities?.scoring === 'points'
+    ? seasonValues(allPlayers, p => stat(p, 'FPTS', 'value'), games, numTeams * rounds) : null;
+  const snakeInfo = (player) => {
+    const adp = snake?.adp?.[player.name] ?? null;
+    const yrank = snake?.yahoo_rank?.[player.name] ?? null;
+    const room = adp ?? (yrank != null ? yrank * 1.05 : null);
+    const here = player.drafted ? null : survival(pickNow, thisTurn === pickNow ? nextTurn : thisTurn, room);
+    const ours = season?.rank[player.name] ?? getRank(player);
+    return { adp, yrank, room, here, ours, value: season?.value[player.name] ?? null,
+             gap: room == null || ours == null ? null : Math.round(room - ours) };
+  };
+
   const sortValue = (player) => {
     if (sort.startsWith('cat:')) return stat(player, sort.slice(4), 'value');
     const p = prices(player);
@@ -230,10 +272,13 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
       // players to nominate: the room's likely price furthest past my max (they drain the room's money, not mine)
       case 'nominate': return player.drafted || p.gap == null || p.gap >= 0 ? null : -p.gap;
       case 'gp': return games(player);
+      case 'adp': { const r = snakeInfo(player).room; return r == null ? null : -r; }
+      case 'here': return snakeInfo(player).here;
       default: return null;
     }
   };
-  const byRank = (a, b) => (getRank(a) || 999) - (getRank(b) || 999);
+  const rankOf = (player) => (season ? season.rank[player.name] : getRank(player)) || 999;
+  const byRank = (a, b) => rankOf(a) - rankOf(b);
   const sorted = [...players].sort((a, b) => {
     if (sort === 'rank') return byRank(a, b);
     const [x, y] = [sortValue(a), sortValue(b)];
@@ -258,7 +303,14 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
       {/* The key: off on phones (the Draft Day tab explains the rules) */}
       <div className="hidden sm:flex flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 text-xs text-gray-400 border-b border-gray-700">
         <span className="text-gray-300 font-medium tabular-nums">{sorted.length} players</span>
-        {draftPlan && (
+        {snake && (
+          <>
+            <span><b className="text-white">Season</b> FPTS over a streamer across his projected games: the order to draft in</span>
+            <span><b className="text-gray-200">ADP</b> where Yahoo's drafters take him (this room follows it, ±20%)</span>
+            <span><b style={{ color: AIM }}>Next turn</b> chance he is still there at your next pick</span>
+          </>
+        )}
+        {draftPlan && !snake && (
           <>
             <span><b style={{ color: AIM }}>Aim</b> your limit now: rises from 85% of max to the max by 80% of the draft</span>
             <span><b style={{ color: MAX }}>Max</b> never past it</span>
@@ -278,6 +330,49 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
         </span>
         {loadingCustomScores && <span className="text-nba-orange">recalculating...</span>}
       </div>
+
+      {snake && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 sm:px-4 py-1.5 sm:py-2 text-xs text-gray-400 border-b border-gray-700 tabular-nums">
+          <span>
+            <b className="text-gray-200">Pick {Math.min(pickNow, numTeams * rounds)}</b> of {numTeams * rounds}
+            {pickNow <= numTeams * rounds && <> · round {Math.ceil(pickNow / numTeams)}</>}
+          </span>
+          {onClock && (
+            <span className={onClock === myTeam ? 'rounded px-1.5 py-0.5 bg-nba-orange/25 text-orange-200 font-semibold' : ''}>
+              {onClock === myTeam ? 'You are on the clock' : <>On the clock: <b className="text-gray-200">{onClock}</b></>}
+            </span>
+          )}
+          {myPicks.length > 0 && (
+            <span title={`Your picks: ${myPicks.join(', ')}`}>
+              {nextTurn != null
+                ? <>Your {thisTurn === pickNow ? 'next turn after this one' : 'next pick'}: <b className="text-gray-200">#{thisTurn === pickNow ? nextTurn : thisTurn}</b>
+                  {thisTurn !== pickNow && <> (in {thisTurn - pickNow})</>}</>
+                : thisTurn === pickNow ? 'Your last pick' : 'Your picks are done'}
+            </span>
+          )}
+          {order.length !== numTeams && (
+            <label className="flex items-center gap-1" title="Yahoo sets the order shortly before the draft; pull_yahoo.py draft fills it in. Until then, pick your slot here.">
+              Your slot
+              <select value={slotPick || ''} onChange={e => pickSlot(parseInt(e.target.value, 10) || null)}
+                      className="rounded border border-gray-600 bg-gray-900 px-1 py-0.5 text-xs text-gray-100">
+                <option value="">?</option>
+                {Array.from({ length: numTeams }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+              </select>
+            </label>
+          )}
+          {season && <span className="hidden sm:inline" title="The average FPTS a game of the best free agents once every roster is full: what a weekly add gives you.">Streamer {season.streamer.toFixed(1)} FPTS/g</span>}
+          {leagueTeams.map(team => {
+            const n = allPlayers.filter(p => p.fantasy_team?.id === team.id).length;
+            const me = team.abbreviation === myTeam;
+            return (
+              <span key={team.id} className={`hidden sm:inline rounded px-1.5 py-0.5 whitespace-nowrap ${me ? 'bg-nba-orange/20 text-orange-200' : 'bg-gray-700/60 text-gray-300'} ${n >= rounds ? 'opacity-40' : ''}`}
+                    title={`${team.name}: ${n} of ${rounds}`}>
+                {team.abbreviation || team.name} <b>{n}</b>
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {econ && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 sm:px-4 py-1.5 sm:py-2 text-xs text-gray-400 border-b border-gray-700">
@@ -347,7 +442,8 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
             <tr>
               <th className={`${TH} top-0 h-6 left-0 z-30`} />
               <th className={`${TH} top-0 h-6 text-left ${draftPlan ? 'border-l border-gray-700' : ''}`}>
-                {draftPlan && (
+                {snake && <span className="text-nba-orange font-semibold">Pick</span>}
+                {draftPlan && !snake && (
                   <span className="flex items-center gap-2.5 font-medium normal-case tracking-normal">
                     <span className="text-nba-orange font-semibold uppercase tracking-wider">Bid</span>
                     <span className="text-gray-600">sort</span>
@@ -372,7 +468,19 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                 <span className={`cursor-pointer hover:text-white ml-4 ${sort === 'name' ? 'text-white' : ''}`} onClick={() => sortBy('name')}
                       title={draftPlan ? "Tags: the rule that applies to him and how this room prices his kind (discounts players over 30, pays up for young ones). Rocket: his max if he breaks out (second- and third-year players). Yr 3: his max with the average third-year correction." : undefined}>Player</span>
               </th>
-              {draftPlan ? (
+              {snake ? (
+                <th className={`${TH} top-6 h-8 border-l border-gray-700`}>
+                  <div className="grid grid-cols-3 gap-2 min-w-[12rem] sm:min-w-[15rem] text-right">
+                    {[['rank', 'Season', 'FPTS over a streamer across his projected games (FPTS a game on the selected stats). Rank order.'],
+                      ['adp', 'ADP', "Yahoo's average draft position; this room drafted within about 20% of it last year. Players past Yahoo's ADP list use its rank."],
+                      ['here', 'Next turn', 'Chance he is still there at your next pick, the room drafting around his ADP. Low: take him now or lose him.']].map(([k, label, title]) => (
+                      <span key={k} className={`cursor-pointer hover:text-white ${sort === k ? 'text-white' : ''}`} onClick={() => (k === 'rank' ? setSort('rank') : sortBy(k))} title={title}>
+                        {label}{sort === k && <span className="text-nba-orange">↓</span>}
+                      </span>
+                    ))}
+                  </div>
+                </th>
+              ) : draftPlan ? (
                 <th className={`${TH} top-6 h-8 border-l border-gray-700`}>
                   <div className="relative h-4 min-w-[13.5rem] sm:min-w-[26rem]">
                     {[['aim', "The price worth holding out for early in the draft: 90% of a star's max (a star is only worth it at a real discount), 85% of everyone else's from $15; under $15 it is the max. It climbs to the max by the time 80% of the league's spots are filled."],
@@ -418,8 +526,9 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
               const notes = sortNotes(draftPlan?.notes?.[player.name]);
               const mine = player.fantasy_team?.abbreviation && player.fantasy_team.abbreviation === myTeam;
               const gone = player.drafted && !mine;
-              const rank = getRank(player);
-              const moved = customScores[player.name] ? getOverallRank(player) - rank : 0;
+              const rank = snake ? rankOf(player) : getRank(player);
+              const moved = !snake && customScores[player.name] ? getOverallRank(player) - rank : 0;
+              const sn = snake ? snakeInfo(player) : null;
               const score = Math.round(getScore(player));
               const scoreMoved = customScores[player.name] ? score - Math.round(getZScore(player)) : 0;
               const whatIf = draftPlan && !p.isStar ? player.what_if : null;
@@ -456,13 +565,33 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                           {whatIf && <span className={`${TAG} bg-emerald-500/15 text-emerald-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀 ${shareMax(whatIf.breakout)}</span>}
                           {whatIf && whatIf.corrected != null && <span className={`${TAG} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">yr 3 ${shareMax(whatIf.corrected)}</span>}
                           {notes.risks.map(r => <span key={r} className={`${TAG} bg-amber-500/15 text-amber-300`}>{r}</span>)}
+                          {sn && !player.drafted && sn.gap != null && sn.gap >= SLEEPER && (
+                            <span className={`${TAG} bg-emerald-500/15 text-emerald-300`} title={`Yahoo's drafters take him around pick ${Math.round(sn.room)}; on season value he is #${sn.ours}. The room's category ranking undervalues him in points.`}>room waits {sn.gap}</span>
+                          )}
+                          {sn && !player.drafted && sn.gap != null && sn.gap <= -REACH && (
+                            <span className={`${TAG} bg-rose-500/15 text-rose-300`} title={`Yahoo's drafters take him around pick ${Math.round(sn.room)}, ${-sn.gap} picks before his season value says (#${sn.ours}). A category player: let the room have him.`}>room's pick</span>
+                          )}
                           {p.early && <span className={`${TAG} bg-rose-500/15 text-rose-300`} title={`Early in the draft the room pays 1.5-2x for $5-25 players; the room price already carries x${p.early.toFixed(1)}. Bought in the first 20% they returned 0.93 per $1, against 1.2-2.0 later. Let him go now; he comes back cheaper.`}>early: room x{p.early.toFixed(1)}</span>}
                           {p.belowBar && <span className={`${TAG} bg-gray-700 text-gray-400`} title={`Valued under your $${Math.round(spotBar)} a spot: buying him now uses a spot your money should fill with a better player. Fine once 80% of the league's spots are filled.`}>not a spot yet</span>}
                         </div>
                       </div>
                     </div>
                   </td>
-                  {draftPlan ? (
+                  {snake ? (
+                    <td className={`${cell} ${rowBg} px-1.5 sm:px-2 py-1 border-l border-l-gray-700`}>
+                      <div className="grid grid-cols-3 gap-2 min-w-[12rem] sm:min-w-[15rem] text-right tabular-nums items-baseline">
+                        <span className="text-[15px] font-bold text-white" title={sn.value != null ? `${sn.value} FPTS over a streamer this season (#${sn.ours})` : undefined}>
+                          {sn.value != null ? sn.value.toLocaleString() : '-'}
+                        </span>
+                        <span className="text-gray-300" title={sn.adp == null && sn.yrank != null ? `No Yahoo ADP: Yahoo rank ${sn.yrank}` : undefined}>
+                          {sn.adp != null ? sn.adp.toFixed(1) : sn.yrank != null ? <span className="text-gray-500">#{sn.yrank}</span> : '-'}
+                        </span>
+                        <span className="font-semibold" style={{ color: sn.here == null ? undefined : sn.here >= 0.7 ? AIM : sn.here >= 0.35 ? MAX : ROOM_OVER }}>
+                          {sn.here == null ? <span className="text-gray-600">-</span> : `${Math.round(sn.here * 100)}%`}
+                        </span>
+                      </div>
+                    </td>
+                  ) : draftPlan ? (
                     <td className={`${cell} ${rowBg} px-1.5 sm:px-2 py-1 border-l border-l-gray-700 ${p.belowBar ? 'opacity-40' : ''}`}
                         title={`Aim $${target} · max $${p.max} · room ${p.likely != null ? `$${p.likely}` : '-'} · value $${p.value}`
                           + (p.gap == null ? '' : p.gap >= 0 ? `. The room's likely price is $${p.gap} under your max.` : `. The room's likely price is $${-p.gap} over your max.`)

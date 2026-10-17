@@ -160,6 +160,93 @@ const WSOP_TIERS = [
 ];
 const STAR_NOTE = 'Max = where a roster built around him ties the best roster without a star (weekly simulation, 8 runs). Good to about ±$10.';
 
+// A snake draft's plan (draft_day_<league>.json type 'snake', .horizon/courtside-2026/plan.py): the rule from the
+// simulated drafts, then who the room lets slide and who it reaches for.
+function PlayerList({ rows, good }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm tabular-nums">
+        <thead>
+          <tr className="text-xs uppercase tracking-wider text-gray-400">
+            <th className="text-left font-semibold py-1 pr-3">Player</th>
+            <th className="text-right font-semibold py-1 px-2" title="Season value rank: FPTS over a streamer across his projected games">Ours</th>
+            <th className="text-right font-semibold py-1 px-2" title="Yahoo's average draft position (Yahoo's rank when it has none)">ADP</th>
+            <th className="text-right font-semibold py-1 px-2">FPTS/g</th>
+            <th className="text-right font-semibold py-1 px-2">GP</th>
+            <th className="text-right font-semibold py-1 pl-2">{good ? 'Room waits' : 'Room early by'}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.name} className="border-t border-gray-700/60">
+              <td className="py-1 pr-3 text-gray-100 whitespace-nowrap">{r.name} <span className="text-xs text-gray-500">{r.team}</span>
+                {r.injured && <span className="ml-1.5 text-[11px] text-amber-300">out till {r.injured}</span>}</td>
+              <td className="text-right px-2 text-white font-semibold">{r.rank}</td>
+              <td className="text-right px-2 text-gray-300">{r.adp != null ? r.adp.toFixed(1) : r.yrank != null ? `#${r.yrank}` : '-'}</td>
+              <td className="text-right px-2 text-gray-300">{r.fpg}</td>
+              <td className={`text-right px-2 ${r.gp < 60 ? 'text-amber-400' : 'text-gray-300'}`}>{r.gp}</td>
+              <td className={`text-right pl-2 font-semibold ${good ? 'text-emerald-300' : 'text-rose-300'}`}>{Math.abs(r.gap)} picks</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SnakeDraftDay({ data }) {
+  const sim = data.sim || {};
+  return (
+    <div className="max-w-5xl">
+      <div className="bg-gray-800 rounded-lg shadow-xl p-4 sm:p-6 mb-4 sm:mb-6 border-l-4 border-nba-orange">
+        <p className="text-sm text-gray-400">{data.header.replace('{draft}', data.draft)}</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">Draft by season value. Let the room take its category players.</h1>
+        <p className="text-gray-300 mt-2">
+          Daily lineups, 9 starters, 13 spots and 5 adds a week: almost every game a rostered player plays counts. So a player is
+          worth his FPTS a game over a streamer's ({data.streamer_fpg}) times the games he plays, and the bench is not a bench.
+          The room drafts off Yahoo's default ranking, which is built for categories: it reaches for defenders and efficient
+          bigs and lets high-usage scorers slide.
+        </p>
+        <div className="mt-4 grid sm:grid-cols-3 gap-3 text-sm">
+          <div className="bg-gray-900 rounded p-3"><p className="text-gray-400">Before the first pick</p><p className="text-white">Draft mode on, stats on <b>2026-27 projection</b>. Your slot comes from Yahoo once it's set (or pick it in the strip).</p></div>
+          <div className="bg-gray-900 rounded p-3"><p className="text-gray-400">Every pick</p><p className="text-white">Take the <b>top Season</b> player left. <b>Next turn</b> only breaks near-ties: under 35%, he won't come back.</p></div>
+          <div className="bg-gray-900 rounded p-3"><p className="text-gray-400">Never</p><p className="text-white">Take a <b>room's pick</b> player early, or a long-term injury before round 10.</p></div>
+        </div>
+      </div>
+
+      <Section title="What the simulated drafts say"
+               subtitle={`${(sim.drafts || 0).toLocaleString()} drafts: 10 teams, 13 rounds, the room picking around Yahoo's ADP with this league's 2025 spread (sd about 20% of ADP). Score: season FPTS over a streamer, all 13 players, a week, against the average other team.`}>
+        <table className="text-sm tabular-nums">
+          <tbody>
+            {(sim.rows || []).map(([label, v]) => (
+              <tr key={label} className="border-t border-gray-700/60">
+                <td className="py-1 pr-6 text-gray-200">{label}</td>
+                <td className="py-1 text-right font-semibold text-white">+{v} FPTS a week</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <ul className="mt-3 space-y-1.5 text-sm text-gray-300 list-disc ml-5">
+          <li>Season value beats the room's way by about <b className="text-white">{sim.gain_vs_adp} FPTS a week</b>, and the app's per-game order by {sim.gain_vs_pergame} (games played matter).</li>
+          <li>Waiting on a player the room undervalues (taking someone else first and hoping he lasts) added nothing ({sim.lookahead >= 0 ? '+' : ''}{sim.lookahead}): the room wants different players, so yours come back anyway.</li>
+          {(sim.smart_room || []).map(([label, ours, adp]) => <li key={label}>{label}: season value still wins, +{ours} vs +{adp}.</li>)}
+          <li>Caveat: the simulation treats our projections as the truth. Real edge is smaller; the order of the rules held in every room tried.</li>
+        </ul>
+      </Section>
+
+      <Section title="The room lets these slide" subtitle="Our season rank at least 15 picks ahead of Yahoo's ADP: points players the category ranking undervalues. Still take them in value order, but don't panic if one looks early: the room is not on him.">
+        <PlayerList rows={data.sleepers || []} good />
+      </Section>
+
+      <Section title="The room's picks, not ours" subtitle="Yahoo's ADP at least 20 picks before our season rank: category players (defence, efficiency, few shots). Let someone else spend the pick.">
+        <PlayerList rows={data.avoid || []} />
+      </Section>
+
+      <p className="text-xs text-gray-500 mb-6">Built {data.generated}. During the draft, <code>python pull_yahoo.py draft --league &lt;Yahoo league&gt; --apply --watch 20</code> copies Yahoo's picks onto the board (needs Firefox signed in to Yahoo).</p>
+    </div>
+  );
+}
+
 function DraftDay() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -169,11 +256,12 @@ function DraftDay() {
   }, []);
 
   // Players the room will likely pay most past your max: put them up on your nomination turns.
-  const nominate = useMemo(() => (data ? data.players.map(p => ({ ...p, room: opening(p.likely) })).filter(p => p.room > p.max)
+  const nominate = useMemo(() => (data?.players ? data.players.map(p => ({ ...p, room: opening(p.likely) })).filter(p => p.room > p.max)
     .sort((a, b) => (b.room - b.max) - (a.room - a.max)).slice(0, 12) : []), [data]);
 
   if (error) return <div className="bg-gray-800 rounded-lg p-6 text-gray-300">{error}</div>;
   if (!data) return <div className="bg-gray-800 rounded-lg p-6 text-gray-400">Loading the draft plan...</div>;
+  if (data.type === 'snake') return <SnakeDraftDay data={data} />;
 
   const spots = data.spots || 160;
   const unpriced = (data.unpriced || ['A-TO', '3PM', 'TB']).join(', ');

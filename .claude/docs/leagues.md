@@ -23,14 +23,20 @@ stats) is shared by all leagues.
   Fantrax views; seen ids in gitignored `.cache/fantrax_transactions_seen.json`), then makes each team's roster
   exactly Fantrax's by team id (a player moving between teams keeps his draft price; an empty answer never wipes
   a roster). Hourly task, see ops.md.
-  `pull_yahoo.py` (Yahoo OAuth: the owner's app keys in `.env`, `auth` once, refresh token in
-  gitignored `yahoo_token.json`; XML API, `nba.l.<number>` = the current season's league): teams
+  `pull_yahoo.py` (XML API v2, `nba.l.<number>` = the current season's league; two transports: Yahoo OAuth
+  with the owner's app keys in `.env` + gitignored `yahoo_token.json`, else, or when Yahoo refuses the token
+  (401/403: the developer program hadn't approved the app, 2026-10), the same API on Yahoo's site host
+  `pub-api-ro.fantasysports.yahoo.com` with the owner's Firefox login, saved to gitignored `yahoo_web.cookie` and
+  re-read from Firefox once on a 401; sign in to Yahoo in Firefox): teams
   linked by Yahoo team id (first sync by name), each roster made exactly Yahoo's, every rostered or
   available player's eligibility into `league_player_flags.positions`, Yahoo's can't-cut list into
   `undroppable` (a hand-set flag is never cleared, only reported). Its starting slots are compared
   with `roster.slots` and reported, never written. Names match through `projections.norm_name`.
-  Parsers are tested on Yahoo-shaped XML (`test_pull_yahoo.py`); draft results and transactions
-  aren't read (rosters are the current truth; no pick order is stored).
+  Parsers are tested on Yahoo-shaped XML (`test_pull_yahoo.py`); transactions aren't read. `draft` writes Yahoo's
+  round-1 order (teams' `draft_position`, empty until Yahoo sets it shortly before the draft) to settings
+  `draft.order` (team abbreviations) and puts each drafted player on his team (Yahoo wins; no pick number is
+  stored); `--watch N` polls. `adp` writes Yahoo's pre-draft rank (`OR`) and ADP for the top 300 to
+  `.cache/yahoo_adp_<league>.json` (the snake room model, draft-strategy.md).
 - **Which league a request is about.** `X-League` header (the frontend's switcher, stored in
   localStorage `fantasy.league`), else `?league=`, else the active league. Switching in the UI
   also activates the league, so CLI scripts (`lineup_optimizer.py`, default `--league`) follow

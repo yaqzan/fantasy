@@ -358,6 +358,22 @@ Scripts and player-level numbers: `.horizon/guillotine-2026/` (`prep.py`, `gsim.
 - Caveat: everyone is bought at the likely price (no bargains, no winner's curse); WSOP's draft_sim found the no-star
   roster gains 0.2-0.3 categories a week when bargains exist, so the star edge is overstated by some amount.
 
+## Snake draft, points league (Courtside Tamasha 2026-27, Yahoo, 2026-10-16)
+Scripts and player lists: `.horizon/courtside-2026/` (`prep.py`, `sim.py`, `plan.py`, `data/draft_2025.txt`).
+- **Season value is the draft order.** Daily lineups, 9 slots, 13 spots, 5 adds a week: 13 players x ~3.4 games is
+  ~44 games for 63 slot-days, so nearly every game a rostered player plays counts and the weekly adds stream the
+  rest. Value = (FPTS/g - streamer) x projected games; streamer = mean FPTS/g of ranks 131-150 (29.9 on 2026-27).
+- **The room drafts on Yahoo's ADP.** Courtside's 2025 draft: pick - ADP sd ~0.2 x ADP (4 picks in round 1, 9-12 in
+  rounds 2-8), mean -1 to -2, a few big reaches. Yahoo's default rank is category-built: it overrates defenders and
+  efficient bigs and underrates high-usage guards (names: `.horizon/courtside-2026/` plan output).
+- **Simulated (sim.py, 3,000 drafts, the room around ADP with that spread, score = season value of all 13):** season
+  value +216 FPTS a week over the average team, the app's per-game rank +185, drafting like the room +131. One-pick
+  lookahead (take someone else when a target will likely last) +217: no gain, the room wants other players. Half or
+  all of the room drafting on points: +127 / +121 vs +55 / +53 for ADP. Projections taken as true, so sizes are high.
+- Board (snake plan, `draft_day_<league>.json` type `snake`): Season / ADP / Next turn (chance he lasts to my next
+  pick, normal around ADP with that sd, `frontend/src/snake.js`); tags "room waits N" (ADP 15+ picks after our rank)
+  and "room's pick" (20+ before). Slot: `draft.order` from Yahoo, else picked in the strip (localStorage).
+
 ## Caveats
 - Market z use last season's stats; 2026 z use blended projections. Rookies have no prior.
 - TB and TF projections are our model's (per shot / per minute); Fantrax projects neither.
@@ -377,8 +393,9 @@ Scripts and player-level numbers: `.horizon/guillotine-2026/` (`prep.py`, `gsim.
 The app's draft-night cheat sheet (rebuilt 2026-10-03): the plan by phase of the draft (aim curve, what the room does, what to do), a nominate list (likely price furthest past the max), the stars, how to read the board, bench share and targets, the tier-return chart and what was tested. The max-bid lookup and player table were dropped: the board does that live. It reads
 `/api/draft-day`, which serves a gitignored `draft_day.json` (repo root) written by
 `.horizon/wsop-auction-2026/draft_day.py`; without the file the tab shows the 404 message. The page
-is public (owner's choice, 2026-09-30); the player data stays out of git. One file, one league: since 2026-10-12
-it is the Guillotine league's (`.horizon/guillotine-2026/draft_day_g.py`; WSOP's is kept in
+is public (owner's choice, 2026-09-30); the player data stays out of git. Per league: `draft_day_<league id>.json`,
+else `draft_day.json` when its `league` matches (`backend/app.py` `draft_day_file`); a `type: snake` file renders the
+snake page and board (above). `draft_day.json` is the Guillotine league's (`.horizon/guillotine-2026/draft_day_g.py`; WSOP's is kept in
 `.horizon/wsop-auction-2026/out/draft_day_wsop.json`). Texts that differ by league come from the file, with
 WSOP's as the fallback: `header`, `spots` (phase pick ranges), `unpriced` (amber-dot categories, also the
 board's legend), `tier_series`, `stars_note`, optional `bench_gain` and a `guillotine` section.

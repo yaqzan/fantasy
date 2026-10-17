@@ -59,7 +59,14 @@ try:
 except Exception as e:
     print(f"Database connection failed: {e}")
 
-DRAFT_DAY_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'draft_day.json')
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DRAFT_DAY_FILE = os.path.join(ROOT_DIR, 'draft_day.json')
+
+
+def draft_day_file(league_id):
+    """The league's draft plan: draft_day_<league>.json, else draft_day.json when it names this league."""
+    own = os.path.join(ROOT_DIR, f'draft_day_{league_id}.json')
+    return own if os.path.isfile(own) else DRAFT_DAY_FILE
 
 
 def current_league():
@@ -83,12 +90,14 @@ def _week_json(start, end):
     return {'start': start.isoformat(), 'end': end.isoformat()} if start else None
 
 
-def _draft_plan_league():
-    """The league draft_day.json was built for, or None."""
-    if not os.path.isfile(DRAFT_DAY_FILE):
+def _draft_plan(league_id):
+    """The league's draft plan (owner research data, gitignored), or None."""
+    path = draft_day_file(league_id)
+    if not os.path.isfile(path):
         return None
-    with open(DRAFT_DAY_FILE, encoding='utf-8') as f:
-        return json.load(f).get('league')
+    with open(path, encoding='utf-8') as f:
+        plan = json.load(f)
+    return plan if plan.get('league') == league_id else None
 
 
 def league_config(league):
@@ -106,7 +115,7 @@ def league_config(league):
         'league': league.to_dict(),
         'categories': category_meta(league.categories),
         'current_week': _week_json(*current_week[:2]), 'next_week': _week_json(*next_week),
-        'capabilities': {**league.capabilities(), 'draft_plan': _draft_plan_league() == league.id},
+        'capabilities': {**league.capabilities(), 'draft_plan': _draft_plan(league.id) is not None},
         # Nobody rostered yet: the draft hasn't happened (draft mode's default for leagues without a date).
         'rostered': FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id.in_(team_ids)).count()
         if team_ids else 0,
@@ -123,10 +132,10 @@ def league_config(league):
 def get_draft_day():
     """The Draft Day tab's numbers (targets, max bids, past-auction evidence). Owner data: a gitignored
     draft_day.json written by the owner's research scripts; 404 when this install has none."""
-    if not os.path.isfile(DRAFT_DAY_FILE):
-        return jsonify({'error': "no draft_day.json on this server: the Draft Day tab needs the owner's research data"}), 404
-    with open(DRAFT_DAY_FILE, encoding='utf-8') as f:
-        return jsonify(json.load(f))
+    plan = _draft_plan(current_league().id)
+    if plan is None:
+        return jsonify({'error': "no draft plan for this league on this server: the Draft Day tab needs the owner's research data"}), 404
+    return jsonify(plan)
 
 
 @fantasy_api.route('/leagues', methods=['GET'])

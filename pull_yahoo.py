@@ -10,9 +10,16 @@ and YAHOO_CLIENT_SECRET (plus YAHOO_REDIRECT_URI if you registered another addre
     python pull_yahoo.py auth --code <code>    # the code= value of the localhost address Yahoo sends you to
                                                # (that page won't load); saves yahoo_token.json (gitignored)
 
+No app keys (Yahoo's developer program can take weeks): with no yahoo_token.json, or a token Yahoo refuses, every call goes to
+the same v2 API on Yahoo's own web host (pub-api-ro.fantasysports.yahoo.com) with the owner's Firefox
+login, saved to yahoo_web.cookie (gitignored) and re-read from Firefox once when Yahoo answers 401.
+Sign in to Yahoo in Firefox ("keep me signed in") first.
+
 Then, for a league whose settings say platform = yahoo and platform_league_id = <Yahoo league number>:
 
     python pull_yahoo.py sync --league <Yahoo league number> [--apply]
+    python pull_yahoo.py draft --league <number> [--apply] [--watch 20]   # draft order + picks onto the board
+    python pull_yahoo.py adp --league <number>                            # Yahoo's rank + ADP -> .cache/
 
 Dry run unless --apply. What --apply writes, all scoped to that league:
 - teams: linked by Yahoo team id (`fantasy_teams.platform_team_id`; a team without one links by its
@@ -24,12 +31,15 @@ Dry run unless --apply. What --apply writes, all scoped to that league:
   cleared (reported as a conflict instead).
 The league's starting slots are compared with Yahoo's roster positions and only reported: the
 league settings are the owner's.
+`draft` stores the round-1 order (Yahoo `draft_position`, once set) in settings draft.order and puts
+each drafted player on his team (Yahoo wins for a drafted player; an undrafted hand entry stays).
 Read-only on Yahoo's side.
 """
 import argparse
 import base64
 import json
 import os
+import pickle
 import time
 import xml.etree.ElementTree as ET
 from urllib.parse import urlencode
@@ -42,6 +52,10 @@ TOKEN_FILE = os.path.join(ROOT, 'yahoo_token.json')
 AUTH_URL = 'https://api.login.yahoo.com/oauth2/request_auth'
 TOKEN_URL = 'https://api.login.yahoo.com/oauth2/get_token'
 API = 'https://fantasysports.yahooapis.com/fantasy/v2'
+WEB_API = 'https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2'   # the same API behind Yahoo's site: login cookies
+COOKIE_FILE = os.path.join(ROOT, 'yahoo_web.cookie')
+ADP_DIR = os.path.join(ROOT, '.cache')
+UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0'
 NS = {'y': 'http://fantasysports.yahooapis.com/fantasy/v2/base.rng'}
 PAGE = 25  # Yahoo's maximum players per request
 
@@ -95,8 +109,46 @@ def access_token():
     return token['access_token']
 
 
+_web = None
+
+
+def _firefox_cookies():
+    """The owner's Yahoo login from Firefox, saved to COOKIE_FILE (a pickled list of dicts)."""
+    import browser_cookie3
+    cookies = [dict(name=c.name, value=c.value, domain=c.domain, path=c.path)
+               for c in browser_cookie3.firefox(domain_name='yahoo.com')]
+    with open(COOKIE_FILE, 'wb') as f:
+        pickle.dump(cookies, f)
+    return cookies
+
+
+def _web_session(fresh=False):
+    global _web
+    if _web is None or fresh:
+        if fresh or not os.path.exists(COOKIE_FILE):
+            cookies = _firefox_cookies()
+        else:
+            with open(COOKIE_FILE, 'rb') as f:
+                cookies = pickle.load(f)
+        _web = requests.Session()
+        _web.headers['User-Agent'] = UA
+        for c in cookies:
+            _web.cookies.set(c['name'], c['value'], domain=c['domain'], path=c.get('path', '/'))
+    return _web
+
+
 def fetch(path):
-    reply = requests.get(f'{API}/{path}', headers={'Authorization': f'Bearer {access_token()}'}, timeout=60)
+    reply = None
+    if os.path.exists(TOKEN_FILE):
+        reply = requests.get(f'{API}/{path}', headers={'Authorization': f'Bearer {access_token()}'}, timeout=60)
+    # No app keys, or a token Yahoo refuses (403 "not authorized" while the developer program hasn't
+    # approved the app, 2026-10): Yahoo's web host with the Firefox login; an expired one is re-read once.
+    if reply is None or reply.status_code in (401, 403):
+        reply = _web_session().get(f'{WEB_API}/{path}', timeout=60)
+        if reply.status_code == 401:
+            reply = _web_session(fresh=True).get(f'{WEB_API}/{path}', timeout=60)
+        if reply.status_code == 401:
+            raise SystemExit('Yahoo says not logged in: sign in to Yahoo in Firefox ("keep me signed in") and rerun')
     if reply.status_code != 200:
         raise SystemExit(f'Yahoo {path}: {reply.status_code} {reply.text[:300]}')
     return ET.fromstring(reply.content)
@@ -139,6 +191,38 @@ def parse_slots(root):
             continue
         slots += ['UTIL' if position == 'Util' else position] * count
     return slots
+
+
+def parse_draft(root):
+    """(order, picks) from /league/<key>;out=teams,draftresults. order: Yahoo team ids by draft
+    position (empty until Yahoo sets it); picks: [{pick, round, team_id, player_key}] made so far."""
+    positions = {}
+    for team in root.iter(f"{{{NS['y']}}}team"):
+        pos = _text(team, 'y:draft_position')
+        if pos:
+            positions[int(pos)] = _text(team, 'y:team_id')
+    picks = []
+    for dr in root.iter(f"{{{NS['y']}}}draft_result"):
+        key = _text(dr, 'y:player_key')
+        if key:
+            picks.append({'pick': int(_text(dr, 'y:pick')), 'round': int(_text(dr, 'y:round') or 0),
+                          'team_id': _text(dr, 'y:team_key').rsplit('.t.', 1)[-1], 'player_key': key})
+    return [positions[p] for p in sorted(positions)], sorted(picks, key=lambda p: p['pick'])
+
+
+def parse_adp(root):
+    """[{name, team, positions, rank, adp, drafted}] from /league/<key>/players;sort=OR;out=draft_analysis."""
+    out = []
+    for p in root.iter(f"{{{NS['y']}}}player"):
+        adp = _text(p, 'y:draft_analysis/y:average_pick')
+        drafted = _text(p, 'y:draft_analysis/y:percent_drafted')
+        rank = next((_text(r, 'y:rank_value') for r in p.findall('y:player_ranks/y:player_rank', NS)
+                     if _text(r, 'y:rank_type') == 'OR'), '')
+        out.append({**parse_player(p), 'team': _text(p, 'y:editorial_team_abbr'),
+                    'rank': int(rank) if rank.isdigit() else None,
+                    'adp': float(adp) if adp not in ('', '-') else None,
+                    'drafted': float(drafted) if drafted not in ('', '-') else None})
+    return out
 
 
 # ------------------------------------------------------------------ sync
@@ -249,16 +333,119 @@ def sync(yahoo_league, apply):
     print(f'{changes} change(s)' + ('' if apply else ' (dry run; pass --apply)'))
 
 
+def _league(yahoo_league):
+    from leagues import list_leagues
+    league = next((lg for lg in list_leagues() if lg.platform == 'yahoo' and lg.platform_league_id == str(yahoo_league)), None)
+    if league is None:
+        raise SystemExit(f'no Yahoo league here has platform_league_id {yahoo_league} (League settings)')
+    return league
+
+
+_names = {}     # Yahoo player key -> name, kept across --watch polls
+
+
+def player_names(key, player_keys):
+    missing = [k for k in player_keys if k not in _names]
+    for i in range(0, len(missing), PAGE):
+        root = fetch(f'league/{key}/players;player_keys={",".join(missing[i:i + PAGE])}')
+        for p in root.iter(f"{{{NS['y']}}}player"):
+            _names[_text(p, 'y:player_key')] = _text(p, 'y:name/y:full')
+    return {k: _names.get(k, k) for k in player_keys}
+
+
+def sync_draft(yahoo_league, apply):
+    """Yahoo's draft order into settings draft.order, and its picks onto the draft board (team by Yahoo
+    team id). Yahoo is the result, so a pick it lists replaces what the board has for that player;
+    players Yahoo hasn't seen drafted are left alone (hand entries stay)."""
+    from fantasy_database import DB, FantasyTeam, FantasyTeamPlayer, Player
+    from leagues import update_league
+    from projections import name_index, norm_name
+
+    league = _league(yahoo_league)
+    key = f'nba.l.{yahoo_league}'
+    order, picks = parse_draft(fetch(f'league/{key};out=teams,draftresults'))
+    teams = {t.platform_team_id: t for t in FantasyTeam.select().where(FantasyTeam.league == league.id) if t.platform_team_id}
+    team_ids = [t.id for t in FantasyTeam.select().where(FantasyTeam.league == league.id)]
+    changes = 0
+    if order:
+        abvs = [teams[t].abv if t in teams else f'?{t}' for t in order]
+        if abvs != league.settings['draft']['order']:
+            changes += 1
+            print(f"  draft order: {' '.join(abvs)}" + (' (unknown Yahoo team ids: run sync first)' if any(a.startswith('?') for a in abvs) else ''))
+            if apply and not any(a.startswith('?') for a in abvs):
+                update_league(league.id, settings={**league.settings, 'draft': {**league.settings['draft'], 'order': abvs}})
+    elif not picks:
+        print('  no draft order on Yahoo yet')
+    names = player_names(key, [p['player_key'] for p in picks])
+    index = name_index()
+    for p in picks:
+        name = names[p['player_key']]
+        team = teams.get(p['team_id'])
+        player = Player.get_or_none(Player.id == index.get(norm_name(name)))
+        if team is None or player is None:
+            print(f"  #{p['pick']} {name}: SKIPPED, " + ('no team here with Yahoo id ' + p['team_id'] if team is None else 'no such player here'))
+            continue
+        held = FantasyTeamPlayer.get_or_none((FantasyTeamPlayer.player_id == player.id)
+                                             & FantasyTeamPlayer.fantasy_team_id.in_(team_ids))
+        if held and held.fantasy_team_id_id == team.id:
+            continue
+        changes += 1
+        print(f"  #{p['pick']} (R{p['round']}) {player.name} -> {team.name}"
+              + (f'  (board had {held.fantasy_team_name})' if held else ''))
+        if apply:
+            with DB.atomic():
+                FantasyTeamPlayer.delete().where((FantasyTeamPlayer.player_id == player.id)
+                                                 & FantasyTeamPlayer.fantasy_team_id.in_(team_ids)).execute()
+                FantasyTeamPlayer.create(player_id=player, fantasy_team_id=team, player_name=player.name,
+                                         fantasy_team_name=team.name)
+    print(f"{time.strftime('%H:%M:%S')} {len(picks)} picks, {changes} new/changed"
+          + ('' if apply else ' (dry run; pass --apply)'))
+
+
+def pull_adp(yahoo_league, count=300):
+    """Yahoo's pre-draft rank (what its draft room lists first) and average draft position for the top
+    `count` players -> .cache/yahoo_adp_<league>.json, the room model for a snake draft."""
+    key = f'nba.l.{yahoo_league}'
+    rows = []
+    for start in range(0, count, PAGE):
+        rows += parse_adp(fetch(f'league/{key}/players;sort=OR;start={start};count={PAGE};out=draft_analysis,ranks'))
+    os.makedirs(ADP_DIR, exist_ok=True)
+    path = os.path.join(ADP_DIR, f'yahoo_adp_{yahoo_league}.json')
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump({'pulled': time.strftime('%Y-%m-%d %H:%M'), 'players': rows}, f, ensure_ascii=False, indent=0)
+    print(f'{len(rows)} players -> {path}; top 5: ' + ', '.join(f"{r['name']} (#{r['rank']}, ADP {r['adp']})" for r in rows[:5]))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Yahoo Fantasy league import (dry run unless --apply).')
-    parser.add_argument('what', choices=['auth', 'sync'])
+    parser.add_argument('what', choices=['auth', 'sync', 'draft', 'adp'])
     parser.add_argument('--code', help='auth: the code Yahoo showed after approving')
     parser.add_argument('--league', help='sync: the Yahoo league number (settings platform_league_id)')
-    parser.add_argument('--apply', action='store_true', help='sync: write the changes')
+    parser.add_argument('--apply', action='store_true', help='sync, draft: write the changes')
+    parser.add_argument('--watch', type=int, metavar='SECONDS', help='draft: repeat every N seconds until Ctrl+C')
+    parser.add_argument('--log', metavar='FILE', help='append all output to FILE (background runs)')
     args = parser.parse_args()
+    if args.log:
+        import sys
+        sys.stdout = sys.stderr = open(args.log, 'a', encoding='utf-8', buffering=1)
     if args.what == 'auth':
         auth(args.code)
-    else:
-        if not args.league:
-            parser.error('sync needs --league')
+    elif not args.league:
+        parser.error(f'{args.what} needs --league')
+    elif args.what == 'sync':
         sync(args.league, args.apply)
+    elif args.what == 'adp':
+        pull_adp(args.league)
+    else:
+        while True:
+            try:
+                sync_draft(args.league, args.apply)
+            except (requests.RequestException, ET.ParseError) as e:   # one bad poll shouldn't end a draft-long watch
+                print(f"{time.strftime('%H:%M:%S')} Yahoo unreachable: {e}")
+            except SystemExit as e:                                 # nor a lapsed login: Firefox may be signed in by the next poll
+                if not args.watch:
+                    raise
+                print(f"{time.strftime('%H:%M:%S')} {e}")
+            if not args.watch:
+                break
+            time.sleep(args.watch)

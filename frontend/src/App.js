@@ -79,9 +79,10 @@ function App() {
   };
   const [draftPlanData, setDraftPlanData] = useState(null);
   useEffect(() => {
-    getDraftDay().then(setDraftPlanData).catch(() => setDraftPlanData(null));
-  }, []);
-  // The Draft Day plan is built for one league (capability draft_plan).
+    setDraftPlanData(null);
+    if (leagueId) getDraftDay().then(setDraftPlanData).catch(() => setDraftPlanData(null));
+  }, [leagueId]);
+  // Each league has its own Draft Day plan, or none (capability draft_plan).
   const draftPlan = draftMode && caps.draft_plan && draftPlanData?.league === leagueId ? draftPlanData : null;
 
   const TABS = ALL_TABS.filter(([key, , inSeason]) => !(draftMode && inSeason) && (key !== 'draft' || caps.draft_plan) && (key !== 'teams' || isPhone));

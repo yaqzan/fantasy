@@ -106,8 +106,10 @@ DEFAULT_SETTINGS = {
                                       # empty = all UTIL (no positions)
     },
     'draft': {'type': 'auction', 'budget': 200, 'date': '',
-              'price_exponent': 1.0},     # auction $ follow value over replacement ** this;
+              'price_exponent': 1.0,      # auction $ follow value over replacement ** this;
                                           # fit to the league's past drafts (1 = linear)
+              'order': []},               # snake: team abbreviations in round-1 order (even rounds reverse);
+                                          # pull_yahoo.py draft fills it once the platform sets it
     'waivers': {'claims_per_week': 1,
                 'faab_budget': 0,             # free agent auction budget for the season (0 = no FAAB)
                 'faab_per_stage': 0},         # FAAB wins allowed per elimination stage (0 = no limit)
@@ -208,6 +210,7 @@ def validate_settings(settings):
         raise ValueError('the price exponent must be a number')
     if not 0.2 <= s['draft']['price_exponent'] <= 5:
         raise ValueError('the price exponent must be between 0.2 and 5')
+    s['draft']['order'] = [str(abv).strip() for abv in s['draft']['order'] or [] if str(abv).strip()]
     s['roster']['daily_lineups'] = bool(s['roster']['daily_lineups'])
     if s['num_teams'] < 2:
         raise ValueError('a league needs at least 2 teams')
