@@ -98,6 +98,15 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   bias makes year-3 error worse (MAE 2.23 -> 2.26); among draftable year-3 players (projected
   value above the ~110th player) the bias is -0.21 (n=33). An owner adjustment (`production`) is
   the place for a view on one player.
+- **Breakout lines** (2026-10-16, `breakout_shape.py` -> `out/breakout_shape.md`): what a +2 z year-2/3 breakout
+  looks like stat by stat (286 cases, per game after / before): minutes x1.32, PTS x1.52, AST x1.52, 3PM x1.60,
+  STL x1.39, REB x1.35, BLK x1.32, TOV x1.35; FG% .445 -> .467, FT% .739 -> .772. Per minute it is usage (PTS, AST,
+  3PM, FTA +17-21%), not boards or blocks (+1-3%). A z of WSOP-8 value came with 2.41 FPTS a game (Yahoo weights).
+  `player_stats._what_if` scales a year-2/3 player's projection along that shape (multiplier ** t), t solved so his
+  value in the league rises by `BREAKOUT_Z` (2) or, for third-years, `YEAR3_BIAS_Z` (.53); in a points league by
+  that x `FPTS_PER_Z` fantasy points (+4.8 a game for a breakout). `what_if` on `/api/fantasy` and
+  `/api/projections/players`: `{breakout: $, corrected: $, lines: {proj, breakout, corrected}}`; the Projections
+  tab shows the lines (click a player, or "Year 2-3 only"), the auction board the $ tags.
 - **Web breakout / MIP reports vs ours (checked 2026-10-03):** the summer's role changes (trades,
   new starters) are already in the expert lines' minutes, so a breakout list adds narrative, not
   information. MIP rewards a points jump; our value is per-game category z, so a scorer who leaps on

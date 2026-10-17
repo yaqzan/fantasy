@@ -14,7 +14,7 @@ from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer,
 from projections import season_label
 from player_stats import (league_player_stats, calculate_auction_values, calculate_team_totals, week_schedule,
                           team_games, player_week_games, best_starters, games_floor, auction_value_at,
-                          TEAM_DICT, STAT_SUFFIXES, YEAR3_BIAS_Z, BREAKOUT_Z)
+                          TEAM_DICT, STAT_SUFFIXES, what_if_line)
 from fantasy_config import TEAMNAMES, FPOINTS_SCORING
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
                                  league_team_ids, get_undroppable_players, set_league_flags)
@@ -298,12 +298,7 @@ def get_fantasy_players():
             'injured_return': (player.injured_return if player and player.injured == 1 else None),
             'injured_games': ((player.injured_games_to_miss or None) if player and player.injured == 1 else None),
             'nba_year': stats.get('NBA_YEAR'),
-            # Second- and third-year players: the projection $ after a breakout; third-years also with
-            # their average projection miss added back (second-years are projected about right).
-            'what_if': ({'corrected': (auction_value_at(stats_all, league, player_name, YEAR3_BIAS_Z)
-                                       if stats.get('NBA_YEAR') == 3 else None),
-                         'breakout': auction_value_at(stats_all, league, player_name, BREAKOUT_Z)}
-                        if stats.get('NBA_YEAR') in (2, 3) and stats.get('ELIGIBLE_proj') else None),
+            'what_if': _what_if_json(stats_all, league, player_name),
             'is_undroppable': player_name in undroppable,
             'drafted': team_id is not None,
             'fantasy_team': fantasy_teams.get(team_id),
@@ -313,6 +308,21 @@ def get_fantasy_players():
 
     players_data.sort(key=lambda x: x['overall_rank'] if x['overall_rank'] else 999)
     return jsonify({'players': players_data, 'total': len(players_data), 'config': league_config(league)})
+
+
+def _what_if_json(player_stats, league, name):
+    """Second- and third-year players: the projection $ and per-game line after a breakout; third-years
+    also with their average projection miss added back (second-years are projected about right).
+    {'breakout': $, 'corrected': $ or None, 'lines': {'proj', 'breakout', 'corrected'}} or None."""
+    stats = player_stats[name]
+    scenarios = stats.get('WHAT_IF_proj')
+    if not scenarios:
+        return None
+    out = {'breakout': None, 'corrected': None, 'lines': {'proj': what_if_line(stats, league)}}
+    for scenario, (line, gained) in scenarios.items():
+        out[scenario] = auction_value_at(player_stats, league, name, gained)
+        out['lines'][scenario] = what_if_line(line, league)
+    return out
 
 
 def _custom_ranks(player_stats, suffix):
@@ -709,6 +719,7 @@ def get_player_projections():
                      'type': line['type'], 'expert_weight': line['expert_weight'],
                      'rank': stats['RANK_proj'], 'auction_value': stats.get('AUCTION_VALUE_proj', 1),
                      'fpts': stats.get('FPTS_proj') if league.is_points else None,
+                     'what_if': _what_if_json(player_stats, league, name),
                      'line': {k: round(line[k], 2) for k in shown},
                      'sources': {s: {k: round(r[k], 2) if r.get(k) is not None else None for k in shown}
                                  for s, r in by_player.get(player.id, {}).items()},

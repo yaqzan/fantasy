@@ -36,6 +36,16 @@ PROJECTION_MIN_GAMES = 20   # projected games to be in the pool the projection t
 SEASON_GAMES = 82
 YEAR3_BIAS_Z = 0.53
 BREAKOUT_Z = 2.0
+# What a breakout looks like stat by stat: per-game after / before for the 286 players who gained 2+ z
+# of per-game value entering year 2 or 3 (2012-13..2025-26, .claude/docs/projections.md). Minutes and
+# usage rise; points, assists and threes most, rebounds and blocks least, FG% and FT% a little. A what-if
+# line scales the projection by multiplier ** t, t solved so his value rises by the scenario's z.
+BREAKOUT_SHAPE = {'MIN': 1.320, 'PTS': 1.524, 'REB': 1.351, 'AST': 1.516, 'STL': 1.394, 'BLK': 1.319,
+                  'FG3M': 1.600, 'TOV': 1.353, 'FGM': 1.500, 'FGA': 1.430, 'FTM': 1.595, 'FTA': 1.527}
+BREAKOUT_FOLLOW = {'BLKA': 'FGA', 'PF': 'MIN', 'TECH': 'MIN', 'DD2': 'PTS', 'TD3': 'PTS'}
+# Points leagues score one uncapped FPTS z, so a z of category value is converted: in those year-2/3
+# pairs a z of WSOP-8 per-game value came with 2.41 fantasy points a game (Yahoo weights).
+FPTS_PER_Z = 2.41
 PROJECTED_STATS = {'FGA': 'fga', 'FGM': 'fgm', 'FTA': 'fta', 'FTM': 'ftm', 'FG3M': 'fg3m', 'PTS': 'pts', 'AST': 'ast',
                    'REB': 'reb', 'STL': 'stl', 'BLK': 'blk', 'TOV': 'tov', 'BLKA': 'blka', 'DD2': 'dd2', 'TD3': 'td3',
                    'PF': 'pf', 'TECH': 'tech'}
@@ -455,7 +465,7 @@ def _qualified_pool(player_stats):
     return qualified or set(player_stats)
 
 
-def _category_values(player_stats, category, n, pool):
+def _category_values(player_stats, category, n, pool, rates=None):
     """{player: the number category `category` is scored on in timeframe `n`}.
 
     Counting stats and wins: the per-game value. Ratio categories: impact, attempts per game x
@@ -473,6 +483,8 @@ def _category_values(player_stats, category, n, pool):
     in_pool = [p for p in pool if p in raw]
     pool_attempts = sum(attempts[p] for p in in_pool)
     pool_rate = sum(raw[p] * attempts[p] for p in in_pool) / pool_attempts if pool_attempts else 0.0
+    if rates is not None:
+        rates[category] = pool_rate
     prior = 0 if n == '_proj' else spec.get('prior', 0)  # projections come already regressed
     values = {}
     for p, rate in raw.items():
@@ -482,25 +494,30 @@ def _category_values(player_stats, category, n, pool):
     return values
 
 
-def _z_scores(player_stats, categories, inverse, n, eligible, pool_size):
+def _z_scores(player_stats, categories, inverse, n, eligible, pool_size, scales=None):
     """{player: {category: z}}, each z capped at +/-Z_CAP, measured against the scaling pool.
 
     The pool starts as every eligible player and becomes the top `pool_size` of them by summed z,
     re-ranked POOL_PASSES times: value is relative to the players who get rostered over a season
     (SCALING_POOL_FACTOR x the roster spots), not to hundreds of bench players (the average scorer
     among everyone is at 10 PPG, the average drafted one at 17). A single category (points leagues) isn't capped: there is nothing for one
-    freak number to outweigh, and a star's whole lead is what he is worth."""
+    freak number to outweigh, and a star's whole lead is what he is worth.
+    `scales`: a dict filled with the last pass's {category: (mu, sd, sign, cap, pool rate)}, so one
+    changed line can be scored on the same scale (_line_value)."""
     cap = Z_CAP if len(categories) > 1 else float('inf')
     pool = sorted(eligible)
     z = {}
     for _ in range(POOL_PASSES):
         z = {p: {} for p in player_stats}
         for category in categories:
-            values = _category_values(player_stats, category, n, pool)
+            rates = {}
+            values = _category_values(player_stats, category, n, pool, rates)
             ref = [values[p] for p in pool if p in values]
             mu = mean(ref) if ref else 0.0
             sd = pstdev(ref) if len(ref) > 1 else 0.0
             sign = -1.0 if category in inverse else 1.0
+            if scales is not None:
+                scales[category] = (mu, sd, sign, cap, rates.get(category))
             for p in player_stats:
                 if p not in values:
                     z[p][category] = -Z_CAP
@@ -508,6 +525,66 @@ def _z_scores(player_stats, categories, inverse, n, eligible, pool_size):
                     z[p][category] = max(-cap, min(cap, sign * (values[p] - mu) / sd)) if sd else 0.0
         pool = sorted(eligible, key=lambda p: sum(z[p].values()), reverse=True)[:pool_size]
     return z
+
+
+def _line_value(stats, scales, n='_proj'):
+    """Summed z of one player's line on the scales _z_scores recorded (the pool unchanged)."""
+    total = 0.0
+    for category, (mu, sd, sign, cap, pool_rate) in scales.items():
+        value = stats.get(category + n)
+        if value is None:
+            total -= Z_CAP
+            continue
+        spec = CATEGORY_CATALOG[category]
+        if pool_rate is not None:  # ratio: impact (projections carry no extra prior)
+            value = sum(coef * (stats.get(f'{stat}{n}') or 0) for stat, coef in spec['attempts']) * (value - pool_rate)
+        total += max(-cap, min(cap, sign * (value - mu) / sd)) if sd else 0.0
+    return total
+
+
+def _breakout_line(stats, t, league):
+    """His projection scaled along BREAKOUT_SHAPE by multiplier ** t, ratios and FPTS rebuilt."""
+    line = dict(stats)
+    for key in list(PROJECTED_STATS) + ['MIN']:
+        if f'{key}_proj' in line:
+            line[f'{key}_proj'] = (line[f'{key}_proj'] or 0.0) * BREAKOUT_SHAPE[BREAKOUT_FOLLOW.get(key, key)] ** t
+    _ratios(line, '_proj')
+    if league.is_points:
+        line['FPTS_proj'] = sum((line.get(f'{stat}_proj') or 0) * w for stat, w in league.point_weights.items())
+    return line
+
+
+def _what_if(stats, delta, scales, league):
+    """(line, value gained): his projection after a breakout worth `delta` z of per-game value (in
+    a points league: delta x FPTS_PER_Z fantasy points a game), solved by bisection on t."""
+    base = _line_value(stats, scales)
+    if league.is_points:
+        sd = scales['FPTS'][1]
+        target = delta * FPTS_PER_Z / sd if sd else 0.0
+    else:
+        target = delta
+    lo, hi = 0.0, 4.0
+    if _line_value(_breakout_line(stats, hi, league), scales) - base < target:
+        lo = hi
+    else:
+        for _ in range(30):
+            mid = (lo + hi) / 2
+            if _line_value(_breakout_line(stats, mid, league), scales) - base < target:
+                lo = mid
+            else:
+                hi = mid
+    line = _breakout_line(stats, hi if lo < hi else lo, league)
+    return line, _line_value(line, scales) - base
+
+
+def what_if_line(line, league):
+    """The per-game numbers shown for a what-if (or the projection itself)."""
+    out = {k.lower(): round(line.get(f'{k}_proj') or 0.0, 1) for k in ('MIN', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'FG3M', 'TOV')}
+    out['fg_pct'] = round(line.get('FG%_proj') or 0.0, 3)
+    out['ft_pct'] = round(line.get('FT%_proj') or 0.0, 3)
+    if league.is_points:
+        out['fpts'] = round(line.get('FPTS_proj') or 0.0, 1)
+    return out
 
 
 def _category_display(z):
@@ -563,7 +640,8 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
         if n == '_proj' and not projected:
             continue  # no projections for this season yet
         eligible = projected if n == '_proj' else qualified
-        z_all = _z_scores(player_stats, categories, inverse, n, eligible, pool_size)
+        scales = {}
+        z_all = _z_scores(player_stats, categories, inverse, n, eligible, pool_size, scales)
         z_scored = (z_all if len(scored) == len(categories)
                     else _z_scores(player_stats, scored, inverse, n, eligible, pool_size))
         for p, stats in player_stats.items():
@@ -572,6 +650,14 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
             stats[f'VALUE{n}'] = sum(z_all[p][c] for c in categories)
             stats[f'ELIGIBLE{n}'] = p in eligible
             stats[f'Z-VALUE{n}'] = sum(z_scored[p][c] for c in scored)
+        if n == '_proj':
+            # Second- and third-year players: their projection after a +BREAKOUT_Z breakout and, for
+            # third-years, with the average YEAR3_BIAS_Z projection miss added back.
+            for stats in player_stats.values():
+                if stats.get('NBA_YEAR') in (2, 3) and stats.get('ELIGIBLE_proj'):
+                    stats['WHAT_IF_proj'] = {name: _what_if(stats, delta, scales, league) for name, delta in
+                                             (('breakout', BREAKOUT_Z), ('corrected', YEAR3_BIAS_Z))
+                                             if name == 'breakout' or stats['NBA_YEAR'] == 3}
 
         for rank_key, value_key, score_key in ((f'RANK{n}', f'VALUE{n}', f'SCORE{n}'),
                                                (f'Z-RANK{n}', f'Z-VALUE{n}', f'Z-SCORE{n}')):

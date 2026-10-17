@@ -11,6 +11,14 @@ const SOURCE_NAMES = {
 const LINE_STATS = [['gp', 'GP', 0], ['min', 'MIN', 1], ['pts', 'PTS', 1], ['reb', 'REB', 1], ['ast', 'AST', 1],
   ['fg3m', '3PM', 1], ['stl', 'STL', 1], ['blk', 'BLK', 1], ['tov', 'TOV', 1]];
 const sourceName = (key) => SOURCE_NAMES[key] || key;
+// What-if lines (second- and third-year players): per game, percentages as .xxx.
+const WHAT_IF_STATS = [['min', 'MIN', 1], ['pts', 'PTS', 1], ['reb', 'REB', 1], ['ast', 'AST', 1], ['fg3m', '3PM', 1],
+  ['stl', 'STL', 1], ['blk', 'BLK', 1], ['tov', 'TOV', 1], ['fg_pct', 'FG%', 3], ['ft_pct', 'FT%', 3]];
+const WHAT_IF_ROWS = [
+  ['proj', 'Projection', 'text-gray-300', 'The blended projection'],
+  ['breakout', '🚀 Breakout', 'text-emerald-300', 'After a +2 z breakout (per-game value; in a points league +4.8 FPTS a game), along the shape real year-2/3 breakouts took: minutes x1.32 and usage up, points, assists and threes most, rebounds and blocks least, FG% and FT% a little. About 30% of second- and third-year players do it.'],
+  ['corrected', 'Yr 3 correction', 'text-sky-300', 'Third-year players: the projection plus the average amount projections have under-rated players entering year 3 (+0.53 z). It failed out of sample as a rule, so it is shown, not applied.'],
+];
 const fmt = (v, digits) => (v === null || v === undefined ? '-' : Number(v).toFixed(digits));
 
 // Team wins: every source, the accuracy-weighted index, and the owner's adjustment on top.
@@ -100,6 +108,7 @@ const PlayerLines = ({ caps }) => {
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(null);
   const [drafts, setDrafts] = useState({});
+  const [youngOnly, setYoungOnly] = useState(false);
 
   const load = useCallback((q) => {
     getPlayerProjections(q).then(setData).catch(e => setError(errorMessage(e)));
@@ -131,10 +140,17 @@ const PlayerLines = ({ caps }) => {
         Each player's line is the experts' average blended with our model (more expert weight for rookies and young
         players, more model for veterans and players who changed teams). Rank{auction ? ' and $ are' : ' is'} this league's{points ? ', from its point weights (FPTS per game)' : ''}. Adjust
         production (all counting stats and minutes, in %) or games if you see it differently: adjustments are NBA-wide, so they
-        change every league. Click a player to compare sources.
+        change every league. Click a player to compare sources; second- and third-year players (🚀) also show what
+        a breakout would look like.
       </p>
-      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search a player"
-             className="mb-3 px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm w-64" />
+      <div className="flex flex-wrap items-center gap-4 mb-3">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search a player"
+               className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-white text-sm w-64" />
+        <label className="flex items-center gap-1.5 text-sm text-gray-300" title="Second- and third-year players, the ones with a breakout line">
+          <input type="checkbox" checked={youngOnly} onChange={(e) => setYoungOnly(e.target.checked)} />
+          🚀 Year 2-3 only
+        </label>
+      </div>
       {error && <div className="mb-3 p-3 rounded bg-red-900/40 border border-red-700 text-red-200 text-sm">{error}</div>}
       {!data ? <div className="text-gray-400 text-sm py-6">Loading player projections...</div> : (
         <div className="overflow-x-auto bg-gray-800 rounded-lg shadow-xl">
@@ -151,13 +167,18 @@ const PlayerLines = ({ caps }) => {
               </tr>
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
-              {data.players.map(p => (
+              {data.players.filter(p => !youngOnly || p.what_if).map(p => (
                 <React.Fragment key={p.id}>
                   <tr className={`hover:bg-gray-700 ${p.adjustment ? 'bg-nba-orange/5' : ''}`}>
                     <td className="table-cell text-center text-gray-300">{p.rank}</td>
                     <td className="table-cell cursor-pointer" onClick={() => setOpen(open === p.id ? null : p.id)}>
                       <div className="font-medium text-white">{p.name}</div>
-                      <div className="text-xs text-gray-400">{p.team} · {p.position} · {p.type} · {Object.keys(p.sources).length} sources</div>
+                      <div className="text-xs text-gray-400">
+                        {p.team} · {p.position} · {p.type} · {Object.keys(p.sources).length} sources
+                        {p.what_if && <span className="ml-1.5 text-emerald-300" title="Click for his breakout line">
+                          🚀 {points ? `${fmt(p.what_if.lines.breakout.fpts, 1)} FPTS` : `${fmt(p.what_if.lines.breakout.pts, 1)} PTS`}{auction ? ` · $${p.what_if.breakout}` : ''}
+                        </span>}
+                      </div>
                     </td>
                     {LINE_STATS.map(([k, , d]) => <td key={k} className="table-cell text-center text-gray-200">{fmt(p.line[k], d)}</td>)}
                     {points && <td className="table-cell text-center text-white font-semibold">{fmt(p.fpts, 1)}</td>}
@@ -192,6 +213,22 @@ const PlayerLines = ({ caps }) => {
                             ))}
                           </tbody>
                         </table>
+                        {p.what_if && (
+                          <table className="text-xs mt-2">
+                            <tbody>
+                              {WHAT_IF_ROWS.filter(([k]) => p.what_if.lines[k]).map(([k, label, color, title]) => (
+                                <tr key={k} title={title}>
+                                  <td className={`pr-4 ${color}`}>{label}</td>
+                                  {WHAT_IF_STATS.map(([s, slabel, d]) => (
+                                    <td key={s} className="px-2 text-gray-400">{slabel} {fmt(p.what_if.lines[k][s], d)}</td>
+                                  ))}
+                                  {points && <td className="px-2 text-white">FPTS {fmt(p.what_if.lines[k].fpts, 1)}</td>}
+                                  {auction && <td className="px-2 text-green-400">${k === 'proj' ? p.auction_value : p.what_if[k]}</td>}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
                       </td>
                     </tr>
                   )}
