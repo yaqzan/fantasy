@@ -93,6 +93,9 @@ const sortNotes = (notes = []) => {
 // gained ~85 FPTS a week; waiting on a sleeper (one-pick lookahead) added nothing on top.
 const SLEEPER = 15;
 const REACH = 20;
+// The Δ column (ADP - our rank): green when the room waits on him, red when it reaches; strong past the tag lines.
+const gapClass = (gap) => (gap == null ? '' : gap >= SLEEPER ? 'text-emerald-300 font-bold' : gap >= 5 ? 'text-emerald-400'
+  : gap <= -REACH ? 'text-rose-300 font-bold' : gap <= -5 ? 'text-rose-400' : 'text-gray-400');
 
 const TAG = 'inline-block rounded px-1 py-[2px] text-[10.5px] leading-none font-medium whitespace-nowrap';
 const TH = 'sticky z-20 bg-gray-900 px-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-700 whitespace-nowrap select-none';
@@ -282,6 +285,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
       case 'total': return seasonTotal(player);
       case 'adp': { const r = snakeInfo(player).room; return r == null ? null : -r; }
       case 'here': return snakeInfo(player).here;
+      case 'gap': return snakeInfo(player).gap;
       default: return null;
     }
   };
@@ -488,7 +492,8 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                 <Head k="fpg" className="text-right border-l border-gray-700 !px-1 sm:!px-2" title="Fantasy points a game in this league's scoring (selected stats)">FPTS/g</Head>
                 <Head k="total" className="text-right !px-1 sm:!px-2" title="FPTS a game x projected games. The # order is season value: FPTS over a streamer x games, what the simulated drafts rewarded.">Season</Head>
                 <Head k="gp" className="text-right !px-1 sm:!px-2" title="Projected games this season (amber under 60). Hover a number for last season's.">GP</Head>
-                {snake && <Head k="here" className="text-right !px-1 sm:!px-2" title="Chance he is still there at your next pick, the room drafting around his Yahoo ADP. Low: take him now or lose him.">Next</Head>}
+                {snake && <Head k="here" className="text-right !px-1 sm:!px-2" title="Chance he is still there at your next pick, the room drafting around his Yahoo ADP. Low: take him now or lose him.">Next<span className="hidden sm:inline"> %</span></Head>}
+                {snake && <Head k="gap" className="text-right !px-1 sm:!px-2" title="Yahoo ADP minus our season-value rank. +: the room takes him later than we rank him (he can wait, or he's a bargain where he falls). −: the room reaches for him before we would.">Δ</Head>}
                 {snake && <Head k="adp" className="text-right !px-1 sm:!px-2" title="Yahoo's average draft position; this room drafted within about 20% of it last year. Players past Yahoo's ADP list show its rank.">ADP</Head>}
                 {!snake && (caps.auction
                   ? <Head k="value" className="text-right" title="The app's auction $ on the selected stats">Value</Head>
@@ -574,9 +579,9 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                         {rank}
                         {moved !== 0 && <div className={`text-[10px] ${moved > 0 ? 'text-green-400' : 'text-red-400'}`}>{moved > 0 ? '+' : ''}{moved}</div>}
                       </div>
-                      <div className="w-[8rem] sm:w-[14.5rem]">
+                      <div className={`${pointsLayout ? 'w-[7rem]' : 'w-[8rem]'} sm:w-[14.5rem]`}>
                         <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-gray-100 max-w-[7rem] sm:max-w-[11.5rem] truncate leading-tight" title={player.name}>{player.name}</span>
+                          <span className={`font-semibold text-gray-100 ${pointsLayout ? 'max-w-[6.25rem]' : 'max-w-[7rem]'} sm:max-w-[11.5rem] truncate leading-tight`} title={player.name}>{player.name}</span>
                           {p.isStar && <span className="text-[10px] text-nba-orange" title="Star: priced at his break-even, not the share rule">★</span>}
                           {player.is_injured && (
                             <span className={`${TAG} bg-red-600 text-white`}>
@@ -605,8 +610,12 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                     </div>
                   </td>
 {pointsLayout ? (<>
-                    <td className={`${cell} ${rowBg} ${NUM} !px-1 sm:!px-2 border-l border-l-gray-700 text-[14px] sm:text-[15px] font-bold text-white`}>
-                      {fpg(player) != null ? fpg(player).toFixed(1) : '-'}
+                    <td className={`${cell} ${rowBg} p-0.5 border-l border-l-gray-700`}
+                        title={stat(player, 'FPTS', 'score') != null ? `Score ${stat(player, 'FPTS', 'score')} of 100 (50 = the average of the player pool)` : undefined}>
+                      <div className="h-7 min-w-[2.6rem] px-1 rounded-sm flex items-center justify-end tabular-nums text-[14px] sm:text-[15px]"
+                           style={{ ...heat(stat(player, 'FPTS', 'score')), fontWeight: 700 }}>
+                        {fpg(player) != null ? fpg(player).toFixed(1) : '-'}
+                      </div>
                     </td>
                     <td className={`${cell} ${rowBg} ${NUM} !px-1 sm:!px-2 text-[13px] sm:text-sm text-gray-100 font-semibold`}
                         title={season?.value[player.name] != null ? `${season.value[player.name].toLocaleString()} FPTS over a streamer (${season.streamer.toFixed(1)} a game) across his games: season value #${rank}` : undefined}>
@@ -619,7 +628,14 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                     </td>
                     {snake && (
                       <td className={`${cell} ${rowBg} ${NUM} !px-1 sm:!px-2 font-semibold`} style={{ color: sn.here == null ? undefined : sn.here >= 0.7 ? AIM : sn.here >= 0.35 ? MAX : ROOM_OVER }}>
-                        {sn.here == null ? <span className="text-gray-600">-</span> : `${Math.round(sn.here * 100)}%`}
+                        {sn.here == null ? <span className="text-gray-600">-</span> : <>{Math.round(sn.here * 100)}<span className="hidden sm:inline">%</span></>}
+                      </td>
+                    )}
+                    {snake && (
+                      <td className={`${cell} ${rowBg} ${NUM} !px-1 sm:!px-2 text-[13px] sm:text-sm ${gapClass(sn.gap)}`}
+                          title={sn.gap == null ? undefined : `Yahoo's drafters take him around pick ${Math.round(sn.room)}; our season value has him #${sn.ours}. `
+                            + (sn.gap > 0 ? `The room waits ${sn.gap} picks longer than we would.` : sn.gap < 0 ? `The room takes him ${-sn.gap} picks earlier than we would.` : 'Same place.')}>
+                        {sn.gap == null ? <span className="text-gray-600">-</span> : sn.gap > 0 ? `+${Math.min(99, sn.gap)}` : sn.gap < 0 ? `−${Math.min(99, -sn.gap)}` : '0'}
                       </td>
                     )}
                     {snake && (
