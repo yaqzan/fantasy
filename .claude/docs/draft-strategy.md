@@ -363,6 +363,10 @@ Scripts and player lists: `.horizon/courtside-2026/` (`prep.py`, `sim.py`, `plan
 - **Season value is the draft order.** Daily lineups, 9 slots, 13 spots, 5 adds a week: 13 players x ~3.4 games is
   ~44 games for 63 slot-days, so nearly every game a rostered player plays counts and the weekly adds stream the
   rest. Value = (FPTS/g - streamer) x projected games; streamer = mean FPTS/g of ranks 131-150 (29.9 on 2026-27).
+- **Preseason (2026-10-17, draft day):** `prep.py` now orders by the preseason-adjusted projection after the top 30
+  (frozen on the plain projection: preseason doesn't help rank the top 30, projections.md "Preseason signal"); `--plain`
+  restores the old order. Yahoo's autopick list = that order (`out/yahoo_prerank_preseason.txt`, injured-but-unflagged
+  players removed by hand), imported through the editprerank page.
 - **The room drafts on Yahoo's ADP.** Courtside's 2025 draft: pick - ADP sd ~0.2 x ADP (4 picks in round 1, 9-12 in
   rounds 2-8), mean -1 to -2, a few big reaches. Yahoo's default rank is category-built: it overrates defenders and
   efficient bigs and underrates high-usage guards (names: `.horizon/courtside-2026/` plan output).
