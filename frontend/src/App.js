@@ -165,15 +165,43 @@ function App() {
     }
   };
 
-  // Draft mode: picks also arrive from outside the page (pull_fantrax.py / pull_yahoo.py draft --watch), so
+  // Live draft: picks also arrive from outside the page (pull_fantrax.py / pull_yahoo.py draft --watch), so
   // reload the board: every minute in an auction, every 15 s in a snake (60-second picks; the Yahoo sync polls
-  // every 20 s; a reload is ~0.3 s). Prices, values and position fit recompute from the fresh rosters.
+  // every 20 s; a reload is ~0.3 s). Runs in draft mode or whenever the league has a draft plan (Draft mode
+  // off on a phone otherwise showed stale picks). Prices, values and position fit recompute from the fresh rosters.
+  const liveDraft = draftMode || Boolean(caps.draft_plan);
   useEffect(() => {
-    if (!draftMode || !leagueId) return undefined;
+    if (!liveDraft || !leagueId) return undefined;
     const timer = setInterval(() => { if (!document.hidden) loadData(false); }, caps.auction ? 60000 : 15000);
     return () => clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftMode, leagueId, caps.auction]);
+  }, [liveDraft, leagueId, caps.auction]);
+
+  // Pull down at the top of the page to reload (touch only; installed web apps have no browser refresh).
+  const [pull, setPull] = useState(0);
+  useEffect(() => {
+    let startY = null;
+    let dist = 0;
+    const onStart = (e) => { startY = window.scrollY <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null; dist = 0; };
+    const onMove = (e) => {
+      if (startY === null) return;
+      dist = Math.max(0, e.touches[0].clientY - startY);
+      setPull(Math.min(dist, 90));
+    };
+    const onEnd = () => {
+      if (startY !== null && dist > 70) loadData(false);
+      startY = null; dist = 0; setPull(0);
+    };
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd);
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (loading) {
     return (
@@ -238,6 +266,11 @@ function App() {
     <div className="min-h-screen bg-gray-900">
       {header}
       {leagueModalView}
+      {pull > 0 && (
+        <div className="text-center text-xs text-gray-400 py-1" style={{ height: pull / 3 }}>
+          {pull > 70 ? 'Release to refresh' : 'Pull to refresh'}
+        </div>
+      )}
       <main key={leagueId} className="max-w-full mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-8">
         {loadError && (
           <div className="mb-4 p-3 rounded bg-red-900/40 border border-red-700 text-red-200 text-sm">{loadError}</div>
