@@ -171,3 +171,19 @@ team wins (`team_strength`). NBA-wide, shared by every league.
 - **Check a new source before blending it**: median per-game ratio to ESPN per stat and games.
   CBS 2026-27 came out at .84 points / 1.12 games (totals over too many games) and is in
   `NOT_BLENDED`; the others sit within ~7% (ESPN is the most optimistic, as in the backtests).
+- **Preseason signal (backtest 2026-10-17, `.horizon/preseason-2026/`: `backtest.py`, `holdout.py`; not wired into the app yet).**
+  stats.nba.com `LeagueGameLog` `Pre Season` has every season (one call each; 2019-20's also holds the July 2020
+  bubble scrimmages: keep 45 days from the first game). 4,285 player-seasons 2013-14..2025-26 (500+ regular-season
+  minutes), baseline = `project_season` fit before each target. Update: `rate = proj + m/(m+k) x (pre/(1+offset) - proj)`,
+  m = preseason minutes (attempts for FG%/FT%). Preseason runs hot, so the offset comes off first: TOV +28-32%,
+  FTA +24-30%, STL +20%, vet 3PM +14%, the rest +2-9%; FG%/FT% -0.6 to -0.9 points. k (minutes) by NBA year:
+  | | PTS | REB | AST | STL | BLK | 3PM | TOV | FGA | FTA | FG% (att) | FT% (att) |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | years 1-3 | 200 | 120 | 120 | 500 | 190 | 180 | 300 | 130 | 300 | 170 | 70 |
+  | year 4+ | 350 | 450 | 300 | 1400 | 800 | 350 | 650 | 250 | 550 | 550 | 160 |
+  A young player's 100 preseason minutes move his REB/AST projection ~45% of the way; a veteran's ~18% (STL ~7%).
+  Out of sample (fit 2013-20, scored 2021-25) the error removed vs the projection alone: young REB 35%, AST 30%,
+  BLK 27%, FGA 23%, PTS 20%, 3PM 20%, TOV 12%, FG% 7%, STL 5%; veterans 2-16% (FGA 16, AST 11, REB 12, PTS 9, STL/BLK/FG% 2-3).
+  Minutes: preseason MPG is not the role: starters play 8-11 fewer (projected 32+: -11.2), deep bench +5. Against
+  the expected preseason MPG (13.3 + 0.31 x projected MPG) the surprise carries g/(g+5) games' weight and removes
+  8% of the minutes error out of sample (young 7%, vets 9%); weakest part, and a star resting looks like a role loss.
