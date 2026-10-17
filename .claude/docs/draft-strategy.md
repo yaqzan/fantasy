@@ -370,9 +370,12 @@ Scripts and player lists: `.horizon/courtside-2026/` (`prep.py`, `sim.py`, `plan
   value +216 FPTS a week over the average team, the app's per-game rank +185, drafting like the room +131. One-pick
   lookahead (take someone else when a target will likely last) +217: no gain, the room wants other players. Half or
   all of the room drafting on points: +127 / +121 vs +55 / +53 for ADP. Projections taken as true, so sizes are high.
-- Board (snake plan, `draft_day_<league>.json` type `snake`): Season / ADP / Next turn (chance he lasts to my next
-  pick, normal around ADP with that sd, `frontend/src/snake.js`); tags "room waits N" (ADP 15+ picks after our rank)
-  and "room's pick" (20+ before). Slot: `draft.order` from Yahoo, else picked in the strip (localStorage).
+- Board, points leagues in draft mode (owner, 2026-10-16: OVR is the categories' summary, FPTS already is one): no OVR
+  or category strip; columns by importance FPTS/g, Season (FPTS/g x games), GP, then with a snake plan
+  (`draft_day_<league>.json` type `snake`) Next (chance he lasts to my next pick, normal around ADP with that sd,
+  `frontend/src/snake.js`) and ADP. `#` = season value rank (over a streamer). The first four fit 375px (phone padding
+  4px, rookies' "new" tag desktop only). Tags "room waits N" (ADP 15+ picks after our rank) and "room's pick" (20+
+  before). Slot: `draft.order` from Yahoo, else picked in the strip (localStorage).
 
 ## Caveats
 - Market z use last season's stats; 2026 z use blended projections. Rookies have no prior.

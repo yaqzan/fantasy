@@ -246,8 +246,14 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
   // My next turn after the one being made now: on the clock, the one after it.
   const nextTurn = myPicks.find(n => n > pickNow) ?? null;
   const thisTurn = myPicks.find(n => n >= pickNow) ?? null;
-  const season = snake && config?.capabilities?.scoring === 'points'
+  const season = caps.scoring === 'points'
     ? seasonValues(allPlayers, p => stat(p, 'FPTS', 'value'), games, numTeams * rounds) : null;
+  // Points leagues draft on FPTS alone (OVR is the categories' summary, and FPTS already is one): their
+  // columns are FPTS a game, season FPTS, games, then the snake's pick odds and ADP; the first four fit a phone.
+  // An auction plan (bid ruler) keeps the category layout.
+  const pointsLayout = caps.scoring === 'points' && !(draftPlan && !snake);
+  const fpg = (player) => stat(player, 'FPTS', 'value');
+  const seasonTotal = (player) => { const f = fpg(player); const g = games(player); return f != null && g != null ? Math.round(f * g) : null; };
   const snakeInfo = (player) => {
     const adp = snake?.adp?.[player.name] ?? null;
     const yrank = snake?.yahoo_rank?.[player.name] ?? null;
@@ -272,6 +278,8 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
       // players to nominate: the room's likely price furthest past my max (they drain the room's money, not mine)
       case 'nominate': return player.drafted || p.gap == null || p.gap >= 0 ? null : -p.gap;
       case 'gp': return games(player);
+      case 'fpg': return fpg(player);
+      case 'total': return seasonTotal(player);
       case 'adp': { const r = snakeInfo(player).room; return r == null ? null : -r; }
       case 'here': return snakeInfo(player).here;
       default: return null;
@@ -305,9 +313,9 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
         <span className="text-gray-300 font-medium tabular-nums">{sorted.length} players</span>
         {snake && (
           <>
-            <span><b className="text-white">Season</b> FPTS over a streamer across his projected games: the order to draft in</span>
+            <span><b className="text-white">#</b> season value: FPTS over a streamer x games, the order to draft in</span>
             <span><b className="text-gray-200">ADP</b> where Yahoo's drafters take him (this room follows it, ±20%)</span>
-            <span><b style={{ color: AIM }}>Next turn</b> chance he is still there at your next pick</span>
+            <span><b style={{ color: AIM }}>Next</b> chance he is still there at your next pick</span>
           </>
         )}
         {draftPlan && !snake && (
@@ -441,6 +449,13 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
           <thead>
             <tr>
               <th className={`${TH} top-0 h-6 left-0 z-30`} />
+{pointsLayout ? (
+                <th className={`${TH} top-0 h-6 text-left border-l border-gray-700`} colSpan={snake ? 5 : 4}>
+                  {statType === 'proj' || statType === 'projected' ? 'Projected' : 'Stats'}{snake && <span className="ml-3 text-nba-orange font-semibold">· Pick</span>}
+                </th>
+              ) : null}
+              {pointsLayout && <th className={`${TH} top-0 h-6`} />}
+              {!pointsLayout && (<>
               <th className={`${TH} top-0 h-6 text-left ${draftPlan ? 'border-l border-gray-700' : ''}`}>
                 {snake && <span className="text-nba-orange font-semibold">Pick</span>}
                 {draftPlan && !snake && (
@@ -461,6 +476,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                 {statType === 'proj' || statType === 'projected' ? 'Projected per game' : 'Per game'}
               </th>
               <th className={`${TH} top-0 h-6 border-l border-gray-700`} colSpan={2} />
+              </>)}
             </tr>
             <tr>
               <th className={`${TH} top-6 h-8 left-0 z-30 text-left`}>
@@ -468,6 +484,16 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                 <span className={`cursor-pointer hover:text-white ml-4 ${sort === 'name' ? 'text-white' : ''}`} onClick={() => sortBy('name')}
                       title={draftPlan ? "Tags: the rule that applies to him and how this room prices his kind (discounts players over 30, pays up for young ones). Rocket: his max if he breaks out (second- and third-year players). Yr 3: his max with the average third-year correction." : undefined}>Player</span>
               </th>
+              {pointsLayout ? (<>
+                <Head k="fpg" className="text-right border-l border-gray-700 !px-1 sm:!px-2" title="Fantasy points a game in this league's scoring (selected stats)">FPTS/g</Head>
+                <Head k="total" className="text-right !px-1 sm:!px-2" title="FPTS a game x projected games. The # order is season value: FPTS over a streamer x games, what the simulated drafts rewarded.">Season</Head>
+                <Head k="gp" className="text-right !px-1 sm:!px-2" title="Projected games this season (amber under 60). Hover a number for last season's.">GP</Head>
+                {snake && <Head k="here" className="text-right !px-1 sm:!px-2" title="Chance he is still there at your next pick, the room drafting around his Yahoo ADP. Low: take him now or lose him.">Next</Head>}
+                {snake && <Head k="adp" className="text-right !px-1 sm:!px-2" title="Yahoo's average draft position; this room drafted within about 20% of it last year. Players past Yahoo's ADP list show its rank.">ADP</Head>}
+                {!snake && (caps.auction
+                  ? <Head k="value" className="text-right" title="The app's auction $ on the selected stats">Value</Head>
+                  : <th className={`${TH} top-6 h-8 text-right`} title={`The draft round his rank goes in (${numTeams} teams)`}>Rd</th>)}
+              </>) : (<>
               {snake ? (
                 <th className={`${TH} top-6 h-8 border-l border-gray-700`}>
                   <div className="grid grid-cols-3 gap-2 min-w-[12rem] sm:min-w-[15rem] text-right">
@@ -517,6 +543,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                 );
               })}
               <Head k="gp" className="text-right border-l border-gray-700" title="Projected games this season (amber under 60). Hover a number for last season's.">GP</Head>
+              </>)}
               <th className={`${TH} top-6 h-8`} />
             </tr>
           </thead>
@@ -526,8 +553,8 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
               const notes = sortNotes(draftPlan?.notes?.[player.name]);
               const mine = player.fantasy_team?.abbreviation && player.fantasy_team.abbreviation === myTeam;
               const gone = player.drafted && !mine;
-              const rank = snake ? rankOf(player) : getRank(player);
-              const moved = !snake && customScores[player.name] ? getOverallRank(player) - rank : 0;
+              const rank = season ? rankOf(player) : getRank(player);
+              const moved = !season && customScores[player.name] ? getOverallRank(player) - rank : 0;
               const sn = snake ? snakeInfo(player) : null;
               const score = Math.round(getScore(player));
               const scoreMoved = customScores[player.name] ? score - Math.round(getZScore(player)) : 0;
@@ -577,6 +604,35 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                       </div>
                     </div>
                   </td>
+{pointsLayout ? (<>
+                    <td className={`${cell} ${rowBg} ${NUM} !px-1 sm:!px-2 border-l border-l-gray-700 text-[14px] sm:text-[15px] font-bold text-white`}>
+                      {fpg(player) != null ? fpg(player).toFixed(1) : '-'}
+                    </td>
+                    <td className={`${cell} ${rowBg} ${NUM} !px-1 sm:!px-2 text-[13px] sm:text-sm text-gray-100 font-semibold`}
+                        title={season?.value[player.name] != null ? `${season.value[player.name].toLocaleString()} FPTS over a streamer (${season.streamer.toFixed(1)} a game) across his games: season value #${rank}` : undefined}>
+                      {seasonTotal(player) != null ? seasonTotal(player).toLocaleString() : '-'}
+                    </td>
+                    <td className={`${cell} ${rowBg} ${NUM} !px-1 sm:!px-2 ${gp != null && gp < 60 ? 'text-amber-400 font-semibold' : 'text-gray-300'}`}
+                        title={player.projected_only ? 'No NBA games last season (rookie, or out all year): valued on his projection only'
+                          : `${player.games_played} games last season${player.small_sample ? ': a small sample, his numbers may not hold' : ''}`}>
+                      {gp ?? '-'}{player.projected_only && <span className="hidden sm:inline text-sky-400 text-[10px] ml-0.5">new</span>}
+                    </td>
+                    {snake && (
+                      <td className={`${cell} ${rowBg} ${NUM} !px-1 sm:!px-2 font-semibold`} style={{ color: sn.here == null ? undefined : sn.here >= 0.7 ? AIM : sn.here >= 0.35 ? MAX : ROOM_OVER }}>
+                        {sn.here == null ? <span className="text-gray-600">-</span> : `${Math.round(sn.here * 100)}%`}
+                      </td>
+                    )}
+                    {snake && (
+                      <td className={`${cell} ${rowBg} ${NUM} !px-1 sm:!px-2 text-gray-300`} title={sn.adp == null && sn.yrank != null ? `No Yahoo ADP: Yahoo rank ${sn.yrank}` : undefined}>
+                        {sn.adp != null ? sn.adp.toFixed(1) : sn.yrank != null ? <span className="text-gray-500">#{sn.yrank}</span> : '-'}
+                      </td>
+                    )}
+                    {!snake && (
+                      <td className={`${cell} ${rowBg} ${NUM} text-gray-200 font-semibold`}>
+                        {caps.auction ? `$${p.value}` : Math.ceil((rank || 0) / numTeams) || '-'}
+                      </td>
+                    )}
+                  </>) : (<>
                   {snake ? (
                     <td className={`${cell} ${rowBg} px-1.5 sm:px-2 py-1 border-l border-l-gray-700`}>
                       <div className="grid grid-cols-3 gap-2 min-w-[12rem] sm:min-w-[15rem] text-right tabular-nums items-baseline">
@@ -653,6 +709,7 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                         : `${player.games_played} games last season${player.small_sample ? ': a small sample, his numbers may not hold' : ''}`}>
                     {gp ?? '-'}{player.projected_only && <span className="text-sky-400 text-[10px] ml-0.5">new</span>}
                   </td>
+                  </>)}
                   <td className={`${cell} ${rowBg} px-2 py-1 text-right whitespace-nowrap`}>
                     {caps.auction && (
                       <input
