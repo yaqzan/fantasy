@@ -373,9 +373,10 @@ Scripts and player lists: `.horizon/courtside-2026/` (`prep.py`, `sim.py`, `plan
 - Board, points leagues in draft mode (owner, 2026-10-16: OVR is the categories' summary, FPTS already is one): no OVR
   or category strip; columns by importance FPTS/g (keeps its score heat), Season (FPTS/g x games), GP, then with a
   snake plan (`draft_day_<league>.json` type `snake`) Next (chance he lasts to my next pick, normal around ADP with
-  that sd, `frontend/src/snake.js`), Δ (Yahoo ADP - our rank: + green = the room waits, - red = it reaches; capped
-  +/-99) and ADP. `#` = season value rank (over a streamer). The first five fit 375px (phone: 4px padding, 7rem names,
-  Next without "%", rookies' "new" tag desktop only). Tags "room waits N" (ADP 15+ picks after our rank) and "room's pick" (20+
+  that sd, `frontend/src/snake.js`). ADP and Δ (Yahoo ADP - our rank: + green = the room waits, - red = it reaches;
+  capped +/-99) are narrow columns beside `#` inside the pinned cell (owner's experiment, 2026-10-16). `#` = season value
+  rank (over a streamer). Every header sorts (again or `#`: back to rank). All of it fits 375px (phone: 4px padding,
+  6.5rem names, Season without the comma, Next without "%", rookies' "new" tag desktop only). Tags "room waits N" (ADP 15+ picks after our rank) and "room's pick" (20+
   before). Slot: `draft.order` from Yahoo, else picked in the strip (localStorage).
 
 ## Caveats
