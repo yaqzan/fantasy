@@ -302,6 +302,18 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
     }
   };
   const rankOf = (player) => (season ? season.rank[player.name] : getRank(player)) || 999;
+  // Points leagues: the season rank a year-2/3 player's what-if line would earn (projections.md "Breakout lines":
+  // +2 z along the shape real breakouts took; third-years also the average year-3 projection miss, +0.53 z).
+  const seasonSorted = season ? Object.values(season.value).sort((a, b) => b - a) : [];
+  const rankAt = (fptsPerGame, gpl) => {
+    if (!season || fptsPerGame == null || gpl == null) return null;
+    const v = (fptsPerGame - season.streamer) * gpl;
+    let lo = 0; let hi = seasonSorted.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (seasonSorted[mid] > v) lo = mid + 1; else hi = mid; }
+    return lo + 1;
+  };
+  const lineText = (l) => `${l.min} min, ${l.pts} pts, ${l.reb} reb, ${l.ast} ast, ${l.stl} stl, ${l.blk} blk, ${l.fg3m} 3pm, ${l.tov} TO, `
+    + `${(l.fg_pct ?? 0).toFixed(3).replace(/^0/, '')} FG, ${(l.ft_pct ?? 0).toFixed(3).replace(/^0/, '')} FT: ${l.fpts} FPTS`;
   const byRank = (a, b) => rankOf(a) - rankOf(b);
 
   // Position fit against my roster, recomputed when a pick lands (~0.5 s, off the render).
@@ -669,6 +681,19 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
                             <span key={n.t} className={`${TAG} ${n.k === 'good' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-gray-700 text-gray-200'}`}>{n.t}</span>
                           ))}
                           {whatIf && <span className={`${TAG} bg-emerald-500/15 text-emerald-300`} title={`${player.nba_year === 3 ? 'Third' : 'Second'}-year player: max bid if he breaks out`}>🚀 ${shareMax(whatIf.breakout)}</span>}
+                          {pointsLayout && !player.drafted && player.what_if?.lines?.breakout?.fpts != null && (() => {
+                            const L = player.what_if.lines;
+                            const gpl = games(player);
+                            const yr3 = player.nba_year === 3 && L.corrected;
+                            return (
+                              <span className={`${TAG} bg-emerald-500/15 text-emerald-300`}
+                                    title={`${yr3 ? 'Third' : 'Second'}-year player. Projection: ${lineText(L.proj)} (#${rank}).\n`
+                                      + `If he breaks out (+2 z; ${yr3 ? '28% of third-years' : '32% of second-years'} did since 2012): ${lineText(L.breakout)}, season rank #${rankAt(L.breakout.fpts, gpl)}.`
+                                      + (yr3 ? `\nAverage third year (projections miss them by +0.53 z, not applied: it fails out of sample): ${lineText(L.corrected)}, #${rankAt(L.corrected.fpts, gpl)}.` : '')}>
+                                🚀 {L.breakout.fpts.toFixed(1)} · #{rankAt(L.breakout.fpts, gpl)}
+                              </span>
+                            );
+                          })()}
                           {whatIf && whatIf.corrected != null && <span className={`${TAG} bg-sky-500/15 text-sky-300`} title="Third-year player: max bid with the average third-year correction">yr 3 ${shareMax(whatIf.corrected)}</span>}
                           {notes.risks.map(r => <span key={r} className={`${TAG} bg-amber-500/15 text-amber-300`}>{r}</span>)}
                           {player.name === bestFit && (

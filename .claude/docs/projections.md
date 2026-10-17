@@ -106,7 +106,9 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   value in the league rises by `BREAKOUT_Z` (2) or, for third-years, `YEAR3_BIAS_Z` (.53); in a points league by
   that x `FPTS_PER_Z` fantasy points (+4.8 a game for a breakout). `what_if` on `/api/fantasy` and
   `/api/projections/players`: `{breakout: $, corrected: $, lines: {proj, breakout, corrected}}`; the Projections
-  tab shows the lines (click a player, or "Year 2-3 only"), the auction board the $ tags.
+  tab shows the lines (click a player, or "Year 2-3 only"), the auction board the $ tags, the points draft board a
+  "🚀 FPTS/g · #rank" tag (breakout FPTS a game and the season-value rank it would earn; hover: projection, breakout and,
+  for third-years, average-year-3 lines with their ranks).
 - **Web breakout / MIP reports vs ours (checked 2026-10-03):** the summer's role changes (trades,
   new starters) are already in the expert lines' minutes, so a breakout list adds narrative, not
   information. MIP rewards a points jump; our value is per-game category z, so a scorer who leaps on
