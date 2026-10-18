@@ -625,3 +625,8 @@ in amber, the rest (star: wait for ~10% off / pass; the overpaid tier; one $60+ 
 (rocket = after a +2 z breakout; `yr 3` = third-years with their average +0.53 z projection miss
 added back; `/api/fantasy` `what_if`, `player_stats.auction_value_at`; what-if only, no value changes).
 Fantasy points stay hidden only in draft mode; dropping them for category leagues is a later job.
+- **Result (draft done 2026-10-17, `.horizon/courtside-2026/data/draft_2026.json`, picks pulled from Yahoo draftresults):** by season
+  value over a streamer (preseason-adjusted basis) our team finished 1st of 14 (8,496 vs 8,013 for 2nd); average pick vs our rank
+  +22 (next best +4). Value came from rounds 5-13: guards and wings taken at or after their ADP (+13 to +42 ranks), an injured
+  star centre at #157 (+82). The one miss was a round-7 big (our #119 taken at #96, -23). The room reached on unranked players
+  (one team averaged -67), so the late rounds were deep. Raw season FPTS was 4th: value over a streamer, not volume, put us first.
