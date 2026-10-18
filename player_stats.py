@@ -114,6 +114,7 @@ def _add_projections(player_stats, preseason, team_win):
     for player in rostered:
         line = lines[player.id]
         team_name = TEAM_DICT.get(player.team, player.team)
+        no_games = player.name not in player_stats   # rookie, or missed last season: no stats of his own
         stats = player_stats.setdefault(player.name, {'TEAM': team_name, 'Pos': player.pos,
                                                       'Positions': nba_positions(player), 'GP': 0})
         current = (not preseason and first_game is not None and player.api_updated_at is not None
@@ -132,6 +133,9 @@ def _add_projections(player_stats, preseason, team_win):
             _ratios(stats, n)
         stats['PRE_G'], stats['PRE_MIN'] = (pre['g'], pre['min']) if pre else (0, 0)
         stats['GP_proj'] = stats['GP_pre'] = line['gp'] or 0.0   # preseason moves rates and minutes, not games
+        if no_games:  # the 'projected' blend (half season, half last 10) has nothing to blend: use the projection
+            for key in [k for k in stats if k.endswith('_proj')]:
+                stats[f'{key[:-5]}_projected'] = stats[key]
         if line.get('exp') is not None:
             stats['NBA_YEAR'] = line['exp'] + 1   # 3 = entering his third season
 
