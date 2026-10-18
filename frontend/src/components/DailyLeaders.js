@@ -13,6 +13,62 @@ const shiftDate = (iso, days) => {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 };
+// Month grid that picks on tap (the native date dialog needs an OK press on phones).
+// Days outside min..max (the season) are greyed and dead.
+const pad2 = (n) => String(n).padStart(2, '0');
+const DatePopover = ({ value, today, min, max, onPick, onClose }) => {
+  const [ym, setYm] = useState(() => {
+    const [y, m] = (value || today || new Date().toISOString().slice(0, 10)).split('-').map(Number);
+    return { y, m: m - 1 };
+  });
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const first = new Date(Date.UTC(ym.y, ym.m, 1));
+  const lead = first.getUTCDay();
+  const count = new Date(Date.UTC(ym.y, ym.m + 1, 0)).getUTCDate();
+  const iso = (d) => `${ym.y}-${pad2(ym.m + 1)}-${pad2(d)}`;
+  const step = (n) => setYm(({ y, m }) => { const t = new Date(Date.UTC(y, m + n, 1)); return { y: t.getUTCFullYear(), m: t.getUTCMonth() }; });
+  const monthKey = `${ym.y}-${pad2(ym.m + 1)}`;
+  const canPrev = !min || monthKey > min.slice(0, 7);
+  const canNext = !max || monthKey < max.slice(0, 7);
+  const cells = [...Array(lead).fill(null), ...Array.from({ length: count }, (_, i) => i + 1)];
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-50 w-72 max-w-[92vw] rounded-lg bg-gray-800 border border-gray-600 shadow-2xl p-2" role="dialog" aria-label="Pick a date">
+        <div className="flex items-center justify-between mb-1">
+          <button onClick={() => step(-1)} disabled={!canPrev} aria-label="Previous month"
+                  className="w-11 h-11 text-lg text-gray-300 hover:text-white disabled:opacity-30">‹</button>
+          <span className="text-sm font-medium text-white">
+            {first.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
+          </span>
+          <button onClick={() => step(1)} disabled={!canNext} aria-label="Next month"
+                  className="w-11 h-11 text-lg text-gray-300 hover:text-white disabled:opacity-30">›</button>
+        </div>
+        <div className="grid grid-cols-7 text-center text-[11px] text-gray-400 mb-1">
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i}>{d}</span>)}
+        </div>
+        <div className="grid grid-cols-7 gap-y-0.5">
+          {cells.map((d, i) => {
+            if (!d) return <span key={i} />;
+            const v = iso(d);
+            const off = (min && v < min) || (max && v > max);
+            return (
+              <button key={i} disabled={off} onClick={() => onPick(v)}
+                      className={`h-10 rounded-full text-sm tabular-nums touch-manipulation ${
+                        v === value ? 'bg-nba-orange text-onaccent font-semibold'
+                          : off ? 'text-gray-600'
+                          : `hover:bg-gray-700 ${v === today ? 'text-nba-orange font-semibold' : 'text-white'}`}`}>{d}</button>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+};
 const clock = (iso) => (iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
 
 const GameChip = ({ game, selected, dimmed, onToggle }) => {
@@ -107,15 +163,10 @@ const DailyLeaders = ({ config }) => {
   const shown = data?.date || day;
   const [minDay, maxDay] = data?.season_range || [];
   // Tap the date for the native calendar (min/max keep it inside the season); hold it for today.
-  const pickerRef = useRef(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const holdTimer = useRef(null);
   const held = useRef(false);
   const endHold = () => clearTimeout(holdTimer.current);
-  const openPicker = () => {
-    const el = pickerRef.current;
-    if (!el) return;
-    try { el.showPicker(); } catch (e) { el.focus(); el.click(); }
-  };
   const startHold = () => {
     held.current = false;
     holdTimer.current = setTimeout(() => {
@@ -189,13 +240,15 @@ const DailyLeaders = ({ config }) => {
               </>;
             })() : '…'}
           </span>
-          <input ref={pickerRef} type="date" aria-label="Pick a date" value={shown || ''}
-                 min={minDay} max={maxDay}
-                 onClick={(e) => { if (held.current) { held.current = false; e.preventDefault(); return; } openPicker(); }}
-                 onPointerDown={startHold} onPointerUp={endHold} onPointerLeave={endHold} onPointerCancel={endHold}
-                 onContextMenu={(e) => e.preventDefault()}
-                 onChange={(e) => { if (e.target.value) setDay(e.target.value); }}
-                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-manipulation" />
+          <button aria-label="Pick a date" aria-expanded={pickerOpen}
+                  onClick={() => { if (held.current) { held.current = false; return; } setPickerOpen(o => !o); }}
+                  onPointerDown={startHold} onPointerUp={endHold} onPointerLeave={endHold} onPointerCancel={endHold}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="absolute inset-0 w-full h-full cursor-pointer touch-manipulation" />
+          {pickerOpen && shown && (
+            <DatePopover value={shown} today={data?.today} min={minDay} max={maxDay}
+                         onPick={(v) => { setDay(v); setPickerOpen(false); }} onClose={() => setPickerOpen(false)} />
+          )}
           </div>
           <button onClick={() => shown && (!maxDay || shown < maxDay) && setDay(shiftDate(shown, 1))}
                   className="px-3 sm:px-3 py-2.5 min-w-[2.75rem] text-gray-300 hover:text-white rounded-r-md touch-manipulation" aria-label="Next day">›</button>
