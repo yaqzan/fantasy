@@ -5,17 +5,19 @@ Rows of averages: Projection; Preseason at his projected minutes (per-minute rat
 MPG, the pace idea of Daily Leaders: preseason minutes are rotations, not roles); Adjusted (the
 '_pre' timeframe: the projection moved by the preseason, preseason.py); Season, Last 10,
 Last 5 once regular-season games exist (a window only when he has played more games than it).
+Then one row per past season (last HISTORY_SEASONS, from player_seasons totals / games played).
 Deltas are against the season once he has DELTA_SEASON_GAMES games, else against the projection.
 Each game is scored exactly as Daily Leaders scores it (daily_leaders.score_line): summed category z
 in category leagues, fantasy points in points leagues."""
 from datetime import date
 
 from daily_leaders import _ratio, game_value, league_scale, league_stats, owners, score_line
-from fantasy_database import Game, GameLine, Player, PreseasonLine, Team
+from fantasy_database import Game, GameLine, Player, PlayerSeason, PreseasonLine, Team
 from game_log import season_label
 from leagues import CATEGORY_CATALOG, category_meta, fantasy_points
 
 DELTA_SEASON_GAMES = 10
+HISTORY_SEASONS = 5
 NBA_TO_TEAMS_ABV = {'BKN': 'BRK', 'CHA': 'CHO', 'PHX': 'PHO'}
 TEAMS_TO_NBA_ABV = {v: k for k, v in NBA_TO_TEAMS_ABV.items()}
 POINTS_COLUMNS = ['FPTS', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'FG3M', 'TOV']
@@ -165,6 +167,16 @@ def card(league, player_id=None, name=None):
             if 'BLKA' in values and values['BLKA'] is None:  # the NBA gives totals only: the player's stored ones
                 values['BLKA'] = stats.get(f'BLKA{suffix}')
             rows.append({'key': key, 'label': label, 'note': f'{n} g' if key == 'season' else None, 'values': values})
+
+    for s in (PlayerSeason.select().where((PlayerSeason.player_id == player.id) & (PlayerSeason.season < season)
+                                          & (PlayerSeason.gp > 0)).order_by(PlayerSeason.season.desc()).limit(HISTORY_SEASONS)):
+        line = {'MIN': s.min, 'PTS': s.pts, 'REB': s.reb, 'AST': s.ast, 'STL': s.stl, 'BLK': s.blk, 'TOV': s.tov,
+                'PF': s.pf, 'FGM': s.fgm, 'FGA': s.fga, 'FG3M': s.fg3m, 'FTM': s.ftm, 'FTA': s.fta,
+                'TECH': s.tech or 0, 'BLKA': s.blka, 'W': s.w, 'PLUS_MINUS': 0, 'DD2': s.dd2, 'TD3': s.td3}
+        line = {k: v / s.gp for k, v in line.items()}  # totals -> one average game; pooled ratios are unchanged
+        line['_unknown'] = {'TECH'} if s.tech is None else set()
+        rows.append({'key': f'y{s.season}', 'label': s.season, 'note': f'{s.gp} g · {s.team or ""}'.rstrip(' ·'),
+                     'values': _average(cats, [line], league)})
 
     team = owners(league).get(player.id)
     nxt = None
