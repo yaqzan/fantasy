@@ -94,13 +94,13 @@ function Chip({ className = '', children, title }) {
 const STICKY = 'sticky left-0 z-[1] bg-gray-800';
 
 // Averages and game log share one column layout (label, Min, categories) so the columns line up.
-const tableStyle = (n) => ({ minWidth: `calc(8.5rem + 2.75rem + ${n} * 3.25rem)` });
+const tableStyle = (n) => ({ minWidth: `calc(7.5rem + 2.25rem + ${n} * 2.75rem)` });
 function Cols({ n, extra = 0 }) {
   return (
     <colgroup>
-      <col style={{ width: '8.5rem' }} /><col style={{ width: '2.75rem' }} />
-      {Array.from({ length: n }, (_, i) => <col key={i} style={{ width: '3.25rem' }} />)}
-      {extra > 0 && <col style={{ width: '3rem' }} />}
+      <col style={{ width: '7.5rem' }} /><col style={{ width: '2.25rem' }} />
+      {Array.from({ length: n }, (_, i) => <col key={i} style={{ width: '2.75rem' }} />)}
+      {extra > 0 && <col style={{ width: '2.5rem' }} />}
     </colgroup>
   );
 }
@@ -119,8 +119,8 @@ function Averages({ card, columns }) {
       <thead>
         <tr>
           <th className={`${STICKY} bg-th text-left pl-3 pr-2 py-1.5`} />
-          <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-1.5 py-1.5">Min</th>
-          {columns.map(c => <th key={c.key} className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-1.5 py-1.5" title={c.name}>{c.label}</th>)}
+          <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0.5 py-1.5">Min</th>
+          {columns.map(c => <th key={c.key} className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0.5 py-1.5" title={c.name}>{c.label}</th>)}
         </tr>
       </thead>
       <tbody>
@@ -130,9 +130,9 @@ function Averages({ card, columns }) {
               <span className="text-gray-300 text-[11px]">{r.label}</span>
               {r.note && <span className="block text-[10px] text-gray-500 leading-tight">{r.note}</span>}
             </td>
-            <td className="text-center px-1.5 py-1.5 text-gray-400">{r.values.MIN ? Math.round(r.values.MIN) : '–'}</td>
+            <td className="text-center px-0.5 py-1.5 text-gray-400">{r.values.MIN ? Math.round(r.values.MIN) : '–'}</td>
             {columns.map(c => (
-              <td key={c.key} className="text-center px-1.5 py-1.5 whitespace-nowrap">
+              <td key={c.key} className="text-center px-0.5 py-1.5 whitespace-nowrap">
                 <span className={r.key === card.delta_base ? 'text-white font-semibold' : 'text-white'}>{fmtAvg(c, r.values[c.key])}</span>
                 {base && r !== base ? <Delta c={c} v={r.values[c.key]} base={base.values[c.key]} />
                   : <span className="block text-[10px] leading-tight">&nbsp;</span>}
@@ -164,14 +164,14 @@ function GameLog({ card, columns, points }) {
         <span className="text-gray-500 text-[10px] ml-1">{g.opp || ''}</span>
         <span className={`text-[10px] ml-1 ${g.w ? 'text-green-400' : 'text-red-400'}`}>{g.w ? 'W' : 'L'}</span>
       </td>
-      <td className="text-center px-1.5 py-1 text-gray-400">{g.min}</td>
+      <td className="text-center px-0.5 py-1 text-gray-400">{g.min}</td>
       {columns.map(c => (
-        <td key={c.key} className={`text-center px-1.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white' : 'text-gray-200'} ${points ? '' : zTint(g.z?.[c.key])}`}
+        <td key={c.key} className={`text-center px-0.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white' : 'text-gray-200'} ${points ? '' : zTint(g.z?.[c.key])}`}
             title={!points && g.z?.[c.key] != null ? `z ${signed(g.z[c.key])}` : undefined}>
           {g.cells[c.key]}
         </td>
       ))}
-      {!points && <td className={`text-center px-1.5 py-1 font-semibold text-white border-l border-gray-700 ${zTint(g.value / 3)}`}>{signed(g.value.toFixed(1))}</td>}
+      {!points && <td className={`text-center px-0.5 py-1 font-semibold text-white border-l border-gray-700 ${zTint(g.value / 3)}`}>{signed(g.value.toFixed(1))}</td>}
     </tr>
   );
   const header = (label, n) => (
@@ -183,9 +183,9 @@ function GameLog({ card, columns, points }) {
       <thead>
         <tr>
           <th className={`${STICKY} bg-th text-onth text-left pl-3 pr-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide`}>Game</th>
-          <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-1.5">Min</th>
+          <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0.5">Min</th>
           {columns.map(c => <th key={c.key} className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-1.5" title={c.name}>{c.label}</th>)}
-          {!points && <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-1.5 border-l border-gray-700" title="Summed category z, as on Daily Leaders">Z</th>}
+          {!points && <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0.5 border-l border-gray-700" title="Summed category z, as on Daily Leaders">Z</th>}
         </tr>
       </thead>
       <tbody>
