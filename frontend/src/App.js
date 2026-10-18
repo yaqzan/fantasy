@@ -285,12 +285,12 @@ function App() {
         {/* Phones: the tabs scroll sideways in one row; the draft-mode pill stays put */}
         <div className="mb-2 sm:mb-6">
           <div className="border-b border-gray-700 flex items-center gap-3">
-            <nav className="-mb-px flex-1 min-w-0 flex items-center gap-5 sm:gap-8 overflow-x-auto hide-scrollbar">
+            <nav className="-mb-px flex-1 min-w-0 flex items-center gap-1 sm:gap-4 overflow-x-auto hide-scrollbar">
               {TABS.map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => setActiveTab(key)}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
+                  className={`py-3 px-2 border-b-2 font-medium text-sm whitespace-nowrap flex-shrink-0 touch-manipulation ${
                     activeTab === key
                       ? 'border-nba-orange text-nba-orange'
                       : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'

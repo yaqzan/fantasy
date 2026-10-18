@@ -173,15 +173,14 @@ const DailyLeaders = ({ config }) => {
         <h2 className="hidden sm:block text-2xl font-bold text-white mr-4">Daily Leaders</h2>
         <div className="relative shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
           <button onClick={() => shown && (!minDay || shown > minDay) && setDay(shiftDate(shown, -1))}
-                  className="px-2 sm:px-2.5 py-1.5 text-gray-300 hover:text-white rounded-l-md" aria-label="Previous day">‹</button>
-          {/* Tap: the calendar, limited to the season (preseason to playoffs). Hold: back to today. */}
-          <button onClick={() => { if (held.current) { held.current = false; return; } openPicker(); }}
-                  onPointerDown={startHold} onPointerUp={endHold} onPointerLeave={endHold} onPointerCancel={endHold}
-                  onContextMenu={(e) => e.preventDefault()}
-                  title={data && shown !== data.today ? 'Tap: pick a date. Hold: back to today' : 'Tap: pick a date'}
-                  className={`py-1.5 font-medium min-w-[4.75rem] sm:min-w-[6.5rem] text-center select-none touch-manipulation ${
-                    data && shown === data.today ? 'text-nba-orange sm:text-white' : 'text-white'}`}
-                  style={{ WebkitTouchCallout: 'none' }}>
+                  className="px-3 sm:px-3 py-2.5 min-w-[2.75rem] text-gray-300 hover:text-white rounded-l-md touch-manipulation" aria-label="Previous day">‹</button>
+          {/* Tap: the calendar, limited to the season (preseason to playoffs). Hold: back to today.
+              The transparent date input sits ON the label and takes the tap itself (a real touch
+              on the input opens the picker on phones; showPicker() covers desktop). */}
+          <div className="relative flex items-center"
+               title={data && shown !== data.today ? 'Tap: pick a date. Hold: back to today' : 'Tap: pick a date'}>
+          <span className={`py-2.5 font-medium min-w-[4.75rem] sm:min-w-[6.5rem] text-center select-none ${
+                    data && shown === data.today ? 'text-nba-orange sm:text-white' : 'text-white'}`}>
             {shown ? (() => {
               const d = new Date(`${shown}T12:00:00`);
               return <>
@@ -189,13 +188,17 @@ const DailyLeaders = ({ config }) => {
                 <span className="hidden sm:inline">{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
               </>;
             })() : '…'}
-          </button>
-          <input ref={pickerRef} type="date" tabIndex={-1} aria-label="Pick a date" value={shown || ''}
+          </span>
+          <input ref={pickerRef} type="date" aria-label="Pick a date" value={shown || ''}
                  min={minDay} max={maxDay}
+                 onClick={(e) => { if (held.current) { held.current = false; e.preventDefault(); return; } openPicker(); }}
+                 onPointerDown={startHold} onPointerUp={endHold} onPointerLeave={endHold} onPointerCancel={endHold}
+                 onContextMenu={(e) => e.preventDefault()}
                  onChange={(e) => { if (e.target.value) setDay(e.target.value); }}
-                 className="absolute inset-0 w-full h-full opacity-0 pointer-events-none" />
+                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer touch-manipulation" />
+          </div>
           <button onClick={() => shown && (!maxDay || shown < maxDay) && setDay(shiftDate(shown, 1))}
-                  className="px-2 sm:px-2.5 py-1.5 text-gray-300 hover:text-white rounded-r-md" aria-label="Next day">›</button>
+                  className="px-3 sm:px-3 py-2.5 min-w-[2.75rem] text-gray-300 hover:text-white rounded-r-md touch-manipulation" aria-label="Next day">›</button>
         </div>
         {data && shown !== data.today && (
           <button onClick={() => setDay(data.today)} className="hidden sm:block text-xs text-nba-orange px-1">Today</button>
