@@ -15,7 +15,7 @@ from datetime import date
 from fantasy_database import FantasyTeam, FantasyTeamPlayer
 from player_stats import (league_player_stats, week_schedule, player_week_games, best_starters, team_week_totals,
                           AVAILABILITY,
-                          average_week_totals, category_win_chances, category_margins, games_floor, STAT_SUFFIXES)
+                          average_week_totals, category_win_chances, category_margins, games_floor, STAT_SUFFIXES, default_stat_type)
 from fantasy_team_helper import (get_all_my_team_players, get_available_players, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_team_by_abv)
 
@@ -30,6 +30,8 @@ NEXT_CLAIM_POOL = 30  # later claims only retry the best candidates of the claim
 
 
 def timeframe_suffix(timeframe):
+    """The key suffix of a stats choice. Callers pass the league's `default_stat_type`; never rely on this
+    fallback: 'projected' is recent form, not the projection model."""
     return STAT_SUFFIXES.get(timeframe or 'projected', '_projected')
 
 
@@ -317,16 +319,17 @@ def plan_stage(league, timeframe='projected', beam=4, alternatives=5):
             'expected_total': round(total, 2), 'weeks': plan, 'final_roster': final}
 
 
-def main(league=None, timeframe='projected', moves=False, plan=False):
+def main(league=None, timeframe=None, moves=False, plan=False):
     """Print this week's matchup for a league (default: the active one).
 
     :param str league: league id
-    :param str timeframe: projected, season, 5, 10 or proj
+    :param str timeframe: pre, proj, projected (recent form), season, 5 or 10; default: the league's
     :param bool moves: also find the best pickups for the week's claims
     :param bool plan: the claims for each remaining week of the guillotine stage
     """
     from leagues import get_league, CATEGORY_CATALOG
     config = get_league(league)
+    timeframe = timeframe or default_stat_type(config)
     if plan:
         result = plan_stage(config, timeframe)
         if 'error' in result:

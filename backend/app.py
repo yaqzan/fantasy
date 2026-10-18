@@ -14,7 +14,7 @@ from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer,
 from projections import season_label
 from player_stats import (league_player_stats, calculate_auction_values, calculate_team_totals, week_schedule,
                           team_games, player_week_games, best_starters, games_floor, auction_value_at,
-                          TEAM_DICT, STAT_SUFFIXES, what_if_line)
+                          TEAM_DICT, STAT_SUFFIXES, what_if_line, default_stat_type)
 from fantasy_config import TEAMNAMES, FPOINTS_SCORING
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
                                  league_team_ids, get_undroppable_players, set_league_flags)
@@ -103,7 +103,7 @@ def _draft_plan(league_id):
 def league_config(league):
     """League rules the frontend renders from (categories, roster, draft). Before the league's
     first week the stats are last season's, and the full season is the basis to draft on; after,
-    the projection (half season, half last 10 games)."""
+    'projected' (recent form: half the season, half the last 10 games); see player_stats.default_stat_type."""
     schedule = league.schedule
     team_ids = league_team_ids(league)
     preseason = bool(schedule) and date.today().isoformat() < schedule[0][0]
@@ -120,7 +120,7 @@ def league_config(league):
         'rostered': FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id.in_(team_ids)).count()
         if team_ids else 0,
         # Before the season: this season's projection when there is one, else last season.
-        'default_stat_type': ('proj' if has_projections else 'season') if preseason else 'projected',
+        'default_stat_type': default_stat_type(league),
         'projection_season': season_label() if has_projections else None,
         # The 'pre' stats choice: the projection moved by this season's preseason games (preseason.py).
         'has_preseason': has_projections and PreseasonLine.select().where(PreseasonLine.season == season_label()).exists(),
@@ -345,7 +345,7 @@ def calculate_custom_zscores():
     """Overall scores with some categories punted, for the chosen stat timeframe"""
     data = request.get_json() or {}
     league = current_league()
-    suffix = STAT_SUFFIXES.get(data.get('stat_type', 'projected'), '_projected')
+    suffix = STAT_SUFFIXES.get(data.get('stat_type') or default_stat_type(league), '_projected')
     player_stats = league_player_stats(league, data.get('punt_categories', []))
     ranks = _custom_ranks(player_stats, suffix)
     return jsonify({'custom_scores': {name: {'custom_z_score': round(stats.get(f'Z-SCORE{suffix}', 0), 1),
@@ -365,7 +365,7 @@ def calculate_custom_auction_values():
         return jsonify({'error': 'price_exponent must be a number'}), 400
     if not 0.2 <= price_exponent <= 5:
         return jsonify({'error': 'price_exponent must be between 0.2 and 5'}), 400
-    suffix = STAT_SUFFIXES.get(data.get('stat_type', 'projected'), '_projected')
+    suffix = STAT_SUFFIXES.get(data.get('stat_type') or default_stat_type(league), '_projected')
     player_stats = league_player_stats(league, punt)
     # Punting: auction values follow the value over the categories still played.
     calculate_auction_values(player_stats, league, price_exponent,
@@ -550,7 +550,7 @@ def get_team_standings():
     only games NBA teams actually play, daily-lineup leagues counting the best `active` players of
     each day (bench players fill empty days) and weekly-lineup leagues their starters' games."""
     league = current_league()
-    suffix = STAT_SUFFIXES.get(request.args.get('stat_type', 'projected'), '_projected')
+    suffix = STAT_SUFFIXES.get(request.args.get('stat_type') or default_stat_type(league), '_projected')
     healthy_only = request.args.get('healthy_only', 'true').lower() == 'true'
     view = 'week' if request.args.get('view') == 'week' else 'per_game'
     player_stats = league_player_stats(league)
@@ -622,7 +622,7 @@ def analyze():
     from lineup_optimizer import get_matchup
     league = current_league()
     week_start, week_end, opponent = _requested_week(league, request.args.get('week_start'))
-    result = get_matchup(league, request.args.get('timeframe', 'projected'), week_start, week_end, opponent,
+    result = get_matchup(league, request.args.get('timeframe') or default_stat_type(league), week_start, week_end, opponent,
                          adds=request.args.getlist('add'), drops=request.args.getlist('drop'),
                          moves=request.args.get('moves', 'false').lower() == 'true')
     if 'error' in result:
@@ -636,7 +636,7 @@ def stage_plan():
     """Guillotine: the claims for each remaining week of the current stage (lineup_optimizer.plan_stage)."""
     from lineup_optimizer import plan_stage
     league = current_league()
-    result = plan_stage(league, request.args.get('timeframe', 'projected'))
+    result = plan_stage(league, request.args.get('timeframe') or default_stat_type(league))
     if 'error' in result:
         return jsonify(result), 422
     return jsonify(result)
@@ -774,7 +774,7 @@ def pickups():
     except ValueError:
         return jsonify({'error': 'limit must be a whole number'}), 400
     result = get_pickup_candidates(league, week_start, week_end, opponent,
-                                   request.args.get('timeframe', 'projected'), limit=limit)
+                                   request.args.get('timeframe') or default_stat_type(league), limit=limit)
     if 'error' in result:
         return jsonify(result), 422
     abbreviations = _team_abbreviations()

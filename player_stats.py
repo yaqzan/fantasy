@@ -13,7 +13,8 @@ from leagues import CATEGORY_CATALOG, slot_reach
 TIME_PERIODS = ['', '_5', '_10']
 TIMEFRAMES = ['', '_5', '_10', '_projected', '_proj', '_pre']  # '_proj': this season's projection (projections.py)
 PROJ_FRAMES = ('_proj', '_pre')  # '_pre': the projection moved by his preseason games (preseason.py)
-# The frontend's stats choices -> key suffix. 'projected': half season, half last 10 games.
+# The frontend's stats choices -> key suffix. 'projected' is RECENT FORM (half this season, half last 10
+# games), not the projection model: 'proj' is the model, 'pre' the model moved by preseason games.
 STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected', 'proj': '_proj', 'pre': '_pre'}
 Z_CAP = 3.0       # a category's z-score is capped at +/-Z_CAP before categories are summed
 POOL_PASSES = 3   # re-rank passes that settle the pool the z-scores are measured against
@@ -79,6 +80,22 @@ def is_preseason(today=None):
     today = today or date.today()
     first = season_first_game(today)
     return first is not None and today < first
+
+
+def default_stat_type(league):
+    """The stats choice a league opens on, and what an API call without one uses. Before its first week:
+    'pre' (the projection moved by preseason games) once preseason games are in, else 'proj' (this
+    season's projection), else last season's. From its first week: 'projected' (recent form: half the
+    season, half the last 10 games)."""
+    from fantasy_database import PlayerProjection, PreseasonLine
+    from projections import season_label
+    schedule = league.schedule
+    if not (schedule and date.today().isoformat() < schedule[0][0]):
+        return 'projected'
+    season = season_label()
+    if not PlayerProjection.select().where(PlayerProjection.season == season).exists():
+        return 'season'
+    return 'pre' if PreseasonLine.select().where(PreseasonLine.season == season).exists() else 'proj'
 
 
 def nba_positions(player):

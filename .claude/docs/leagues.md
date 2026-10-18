@@ -164,9 +164,13 @@ stats) is shared by all leagues.
   (`num_teams x roster.size`) costs $1; the rest of `num_teams x budget` goes by (value -
   first undrafted player's value) ^ `draft.price_exponent`, rounded to whole dollars that add up
   to the budget. `/api/fantasy` prices every timeframe (`auction_value_<period>`) so the table's
-  $ always sits on the same stats as its rank; before a league's first week the UI defaults to
-  this season's projection (`proj`; last full season if none exist), after it to `projected`
-  (half season, half last 10 games) (`config.default_stat_type`). Players under
+  $ always sits on the same stats as its rank. **Three different "projections"** (don't mix them up):
+  `proj` = our projection model, `pre` = the model moved by preseason games (best before the season),
+  `projected` = RECENT FORM (half the season's average, half the last 10 games; labelled that way in the
+  UI). `player_stats.default_stat_type(league)` picks the default (`pre` > `proj` > `season` before the
+  first week, `projected` after) for `config.default_stat_type` and for every API call without a
+  timeframe. A player with no games (rookie, missed last season) has no recent form, so his `_projected`
+  is his `_proj`. Players under
   `games_floor` are flagged `small_sample`. Fit the exponent to the league's past auction prices by rank (least squares
   over the drafted players); the owner's league stores its fit (a gitignored
   `draft_history_price_curve.json` holds the price curve it came from).
