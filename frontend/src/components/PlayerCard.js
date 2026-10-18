@@ -93,6 +93,18 @@ function Chip({ className = '', children, title }) {
 
 const STICKY = 'sticky left-0 z-[1] bg-gray-800';
 
+// Averages and game log share one column layout (label, Min, categories) so the columns line up.
+const tableStyle = (n) => ({ minWidth: `calc(8.5rem + 2.75rem + ${n} * 3.25rem)` });
+function Cols({ n, extra = 0 }) {
+  return (
+    <colgroup>
+      <col style={{ width: '8.5rem' }} /><col style={{ width: '2.75rem' }} />
+      {Array.from({ length: n }, (_, i) => <col key={i} style={{ width: '3.25rem' }} />)}
+      {extra > 0 && <col style={{ width: '3rem' }} />}
+    </colgroup>
+  );
+}
+
 const isHistory = (r) => r.key.startsWith('y');
 
 function Averages({ card, columns }) {
@@ -102,10 +114,12 @@ function Averages({ card, columns }) {
   const rows = card.averages.filter(r => !isHistory(r) || older || r === history[0]);
   const hidden = history.length - 1;
   return (
-    <table className="w-full border-collapse tabular-nums text-xs">
+    <table className="w-full table-fixed border-collapse tabular-nums text-xs" style={tableStyle(columns.length)}>
+      <Cols n={columns.length} />
       <thead>
         <tr>
           <th className={`${STICKY} bg-th text-left pl-3 pr-2 py-1.5`} />
+          <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-1.5 py-1.5">Min</th>
           {columns.map(c => <th key={c.key} className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-1.5 py-1.5" title={c.name}>{c.label}</th>)}
         </tr>
       </thead>
@@ -116,6 +130,7 @@ function Averages({ card, columns }) {
               <span className="text-gray-300 text-[11px]">{r.label}</span>
               {r.note && <span className="block text-[10px] text-gray-500 leading-tight">{r.note}</span>}
             </td>
+            <td className="text-center px-1.5 py-1.5 text-gray-400">{r.values.MIN ? Math.round(r.values.MIN) : '–'}</td>
             {columns.map(c => (
               <td key={c.key} className="text-center px-1.5 py-1.5 whitespace-nowrap">
                 <span className={r.key === card.delta_base ? 'text-white font-semibold' : 'text-white'}>{fmtAvg(c, r.values[c.key])}</span>
@@ -163,7 +178,8 @@ function GameLog({ card, columns, points }) {
     <tr><td colSpan={columns.length + 3} className={`${STICKY} bg-gray-800 pl-3 pt-3 pb-1 text-left text-[10px] uppercase tracking-wider text-gray-500`}>{label} · {n} games</td></tr>
   );
   return (
-    <table className="w-full border-collapse tabular-nums text-xs">
+    <table className="w-full table-fixed border-collapse tabular-nums text-xs" style={tableStyle(columns.length)}>
+      <Cols n={columns.length} extra={points ? 0 : 1} />
       <thead>
         <tr>
           <th className={`${STICKY} bg-th text-onth text-left pl-3 pr-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide`}>Game</th>

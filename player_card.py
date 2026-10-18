@@ -52,7 +52,7 @@ def _average(cats, lines, league, minutes=None):
     total = {k: sum(l.get(k) or 0 for l in lines) for k in SUMMED}
     unknown = set().union(*(l['_unknown'] for l in lines))
     per = (minutes / total['MIN']) if minutes and total['MIN'] else 1 / len(lines)
-    out = {}
+    out = {'MIN': minutes or total['MIN'] / len(lines)}
     for cat in cats:
         spec = CATEGORY_CATALOG.get(cat, {})
         if cat in unknown:
@@ -146,7 +146,7 @@ def card(league, player_id=None, name=None):
     rows = []
     if any(stats.get(f'{c}_proj') is not None for c in cats):
         rows.append({'key': 'proj', 'label': 'Projection', 'note': f'{proj_min:.0f} min' if proj_min else None,
-                     'values': {c: stats.get(f'{c}_proj') for c in cats}})
+                     'values': {'MIN': proj_min or None, **{c: stats.get(f'{c}_proj') for c in cats}}})
     if pre_lines:
         pre_min = sum(l['MIN'] for l in pre_lines)
         rows.append({'key': 'pre', 'label': 'Preseason',
@@ -158,7 +158,7 @@ def card(league, player_id=None, name=None):
         rows.append({'key': 'adj', 'label': 'Adjusted', 'note': f"{stats.get('MIN_pre') or 0:.0f} min",
                      'title': 'The projection moved by his preseason, weighted by how much preseason has predicted '
                               'the season (projections.md "Preseason signal")',
-                     'values': {c: stats.get(f'{c}_pre') for c in cats}})
+                     'values': {'MIN': stats.get('MIN_pre') or None, **{c: stats.get(f'{c}_pre') for c in cats}}})
     n = len(rs_lines)
     if n:
         windows = [('season', 'Season', None, '')] + [(f'l{w}', f'Last {w}', w, f'_{w}') for w in (10, 5) if n > w]
