@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, inGame, toggleGame, cellText, zTint, keepRow, isPickup, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, inGame, toggleGame, cellText, zTint, keepRow, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -123,7 +123,8 @@ const GameProgress = ({ p }) => {
 
 const DailyLeaders = ({ config }) => {
   const points = config?.capabilities?.scoring === 'points';
-  const [{ owner: ownerFilter, sort: pickedSort }, setView] = useLeagueViewState(config?.league?.id, 'daily', { owner: 'all' });
+  const [{ owner: savedOwner, sort: pickedSort }, setView] = useLeagueViewState(config?.league?.id, 'daily', { owner: 'all' });
+  const ownerFilter = savedOwner === 'pickups' ? 'free' : savedOwner; // the old Pickups chip is Available now
   const [day, setDay] = useState(null);      // null = the server's default (today once games tip)
   const [gameId, setGameId] = useState(null); // a tapped scoreboard: only its players
   const [data, setData] = useState(null);
@@ -179,10 +180,9 @@ const DailyLeaders = ({ config }) => {
   const game = (data?.games || []).find(g => g.id === gameId) || null;
   const pool = (data?.players || []).filter(p => inGame(game, p));
   const rows = sortRows(ownerFilter, pool.filter(p => keepRow(ownerFilter, p)), sort);
-  const byPace = ownerFilter === 'pickups' || sort === 'pace';
+  const byPace = sort === 'pace';
   const ranks = byPace ? paceRanks(pool) : null;
-  const counts = pool.reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }),
-                             { pickups: pool.filter(isPickup).length });
+  const counts = pool.reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }), {});
 
   const signed = (v) => (points ? v.toFixed(1) : `${v > 0 ? '+' : ''}${v.toFixed(1)}`);
   const status = data && (

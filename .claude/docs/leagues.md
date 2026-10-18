@@ -248,9 +248,7 @@ stats) is shared by all leagues.
   up / 5% down; the points league runs narrower (SD 0.75, ~4% flagged: its 6.0x FPTS noise looks
   high for preseason minutes, recheck in season). *Minutes* (green `27m`): >= 1.25x and +5 over
   projected minutes (15-18% of preseason lines; rotations). *Streak* (🔥/🧊): last-10 SCORE vs
-  season SCORE, +/-8 (0.8 SD of value), off in preseason and under 10 games. *Pickups* chip: free
-  agents (never a negative-Val night in category leagues) with pace up, or minutes up at pace >= 0.5, or hot; sorted by pace (9-23 a night; minutes
-  alone made it 28-46).
+  season SCORE, +/-8 (0.8 SD of value), off in preseason and under 10 games. The *Pickups* chip was merged into *Available* (2026-10-17, owner): one free-agent chip, ordered by the Best/Pace toggle; a saved `pickups` filter reads as Available. `isPickup` (pace up, or minutes up at pace >= 0.5, or hot; never a negative-Val night) is no longer shown.
   **Preseason** is per game, from ESPN's season type (1 pre, 2 regular, 3 playoffs, 5 play-in);
   the stored schedule agrees (`season_first_game`: 2026-10-20). Starters sit second halves, so
   minutes are rotations and raw Val favours reserves: no minutes flag, arrows hollow (△▽), default

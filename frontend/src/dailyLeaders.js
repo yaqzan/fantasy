@@ -44,7 +44,7 @@ export const zTint = (z) => {
 };
 
 // [key, label, phone label]
-export const OWNER_FILTERS = [['all', 'All', 'All'], ['pickups', 'Pickups', 'Pickups'], ['free', 'Available', 'Free'], ['mine', 'My team', 'Mine']];
+export const OWNER_FILTERS = [['all', 'All', 'All'], ['free', 'Available', 'Avail'],['mine', 'My team', 'Mine']];
 
 // A free agent with a positive signal: ahead of his per-minute pace, well over his usual minutes
 // while at least half an SD ahead of pace (extra minutes alone flagged a quarter of preseason
