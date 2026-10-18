@@ -93,8 +93,14 @@ function Chip({ className = '', children, title }) {
 
 const STICKY = 'sticky left-0 z-[1] bg-gray-800';
 
+const isHistory = (r) => r.key.startsWith('y');
+
 function Averages({ card, columns }) {
+  const [older, setOlder] = useState(false);
   const base = card.averages.find(r => r.key === card.delta_base);
+  const history = card.averages.filter(isHistory);
+  const rows = card.averages.filter(r => !isHistory(r) || older || r === history[0]);
+  const hidden = history.length - 1;
   return (
     <table className="w-full border-collapse tabular-nums text-xs">
       <thead>
@@ -104,7 +110,7 @@ function Averages({ card, columns }) {
         </tr>
       </thead>
       <tbody>
-        {card.averages.map(r => (
+        {rows.map(r => (
           <tr key={r.key} className="border-t border-gray-700">
             <td className={`${STICKY} pl-3 pr-2 py-1.5 text-left whitespace-nowrap`} title={r.title || undefined}>
               <span className="text-gray-300 text-[11px]">{r.label}</span>
@@ -119,6 +125,15 @@ function Averages({ card, columns }) {
             ))}
           </tr>
         ))}
+        {hidden > 0 && (
+          <tr className="border-t border-gray-700">
+            <td colSpan={columns.length + 1} className={`${STICKY} bg-gray-800 pl-3 py-1.5 text-left`}>
+              <button type="button" onClick={() => setOlder(o => !o)} className="text-[11px] text-gray-400 hover:text-white">
+                {older ? '▴ Hide older seasons' : `▾ ${hidden} older season${hidden > 1 ? 's' : ''}`}
+              </button>
+            </td>
+          </tr>
+        )}
       </tbody>
     </table>
   );
@@ -191,10 +206,15 @@ function PlayerCard({ target, open, onClose }) {
   }, [onClose]);
 
   // Phones: drag the header down to dismiss (the sheet follows the finger; 80px closes it).
-  const onTouchStart = (e) => { drag.current = e.touches[0].clientY; cardRef.current?.setAttribute('data-dragging', ''); };
+  // The body swipes too, but only from its top (scrolled down, a swipe down scrolls up instead).
+  const onTouchStart = (e) => {
+    if (e.currentTarget.scrollTop > 0) { drag.current = null; return; }
+    drag.current = e.touches[0].clientY;
+  };
   const onTouchMove = (e) => {
     if (drag.current === null) return;
     const dy = Math.max(0, e.touches[0].clientY - drag.current);
+    if (dy > 0) cardRef.current?.setAttribute('data-dragging', '');
     cardRef.current?.style.setProperty('--pc-drag', `${dy}px`);
   };
   const onTouchEnd = (e) => {
@@ -240,7 +260,8 @@ function PlayerCard({ target, open, onClose }) {
                     className="-mr-1 px-1 text-2xl leading-none text-gray-400 hover:text-white">×</button>
           </div>
         </div>
-        <div className="flex-1 overflow-auto overscroll-contain thin-scrollbar">
+        <div className="flex-1 overflow-auto overscroll-contain thin-scrollbar"
+             onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
           {error && <p className="p-4 text-sm text-red-400">{error}</p>}
           {!card && !error && <div className="p-6 flex justify-center"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-nba-orange" /></div>}
           {card && (
