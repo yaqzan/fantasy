@@ -133,10 +133,18 @@ const DailyLeaders = ({ config }) => {
   const [error, setError] = useState(null);
   const timer = useRef(null);
 
+  const [justChecked, setJustChecked] = useState(false); // a manual refresh that found nothing newer
+  const fetchedAt = useRef(null);
   const load = useCallback(async (refresh = false) => {
     try {
       refresh ? setRefreshing(true) : setLoading(true);
-      setData(await getDailyLeaders(day, refresh));
+      const fresh = await getDailyLeaders(day, refresh);
+      if (refresh && fresh.fetched_at === fetchedAt.current) {
+        setJustChecked(true);
+        setTimeout(() => setJustChecked(false), 4000);
+      }
+      fetchedAt.current = fresh.fetched_at;
+      setData(fresh);
       setError(null);
     } catch (e) {
       setError(errorMessage(e));
@@ -193,8 +201,8 @@ const DailyLeaders = ({ config }) => {
         : data.games.length ? 'Final' : 'No games'}
       {data.next_refresh_at && (
         <button onClick={() => load(true)} disabled={refreshing} aria-label="Refresh"
-                className="text-nba-orange disabled:opacity-50 px-1" title="Refetch now (at most every 2 minutes)">
-          {refreshing ? '…' : '↻'}
+                className="text-nba-orange disabled:opacity-50 px-1" title="Refetch now (the server fetches at most every 2 minutes, so a second click soon after changes nothing)">
+          {refreshing ? '…' : justChecked ? <span className="text-gray-400 text-[11px]">Up to date</span> : '↻'}
         </button>
       )}
     </span>
