@@ -3,6 +3,7 @@ import DraftModal from './DraftModal';
 import { PlayerName } from './PlayerCard';
 import usePlayerValues from '../usePlayerValues';
 import { weekRange } from '../weeks';
+import { orderColumns } from '../dailyLeaders';
 
 // The in-season player table (draft mode renders DraftBoard instead).
 // priceExponent: null means the league's own draft.price_exponent (the server's default values).
@@ -13,7 +14,7 @@ const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:m
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
   // The league's categories, in display order, with labels and percent/inverse flags.
   const categoryMeta = config?.categories || [];
-  const CATEGORIES = categoryMeta.map(c => c.key);
+  const CATEGORIES = orderColumns(categoryMeta).map(c => c.key); // Daily Leaders' column order
   const CATEGORY_NAMES = Object.fromEntries(categoryMeta.map(c => [c.key, c.label]));
   const CATEGORY_FULL = Object.fromEntries(categoryMeta.map(c => [c.key, c.name || c.label]));
   const PERCENTAGE_CATEGORIES = categoryMeta.filter(c => c.percent).map(c => c.key);
@@ -250,7 +251,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 return (
                   <th
                     key={category}
-                    className={`table-header !px-1 ${isPunted ? 'opacity-40' : ''}`}
+                    className={`table-header !px-1 whitespace-nowrap ${isPunted ? 'opacity-40' : ''}`}
                   >
                     <div className="flex items-center justify-center space-x-1">
                       {caps.punts && (
@@ -263,7 +264,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                         />
                       )}
                       <div
-                        className="flex items-center cursor-pointer hover:bg-gray-600 px-2 rounded"
+                        className="flex items-center whitespace-nowrap cursor-pointer hover:bg-gray-600 px-1 rounded"
                         title={`${CATEGORY_FULL[category]} (click to sort)`}
                         onClick={() => handleSort(`stats.${category}.value`)}
                       >
