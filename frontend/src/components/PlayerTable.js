@@ -456,7 +456,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                               title={[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined
                                 ? `${player[i ? 'next_week_games' : 'current_week_games']} games ${weekRange(week)}` : null).filter(Boolean).join(' · ')}>
                           {' | '}{[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined
-                            ? player[i ? 'next_week_games' : 'current_week_games'] : null).filter(v => v !== null).join('+')} GP
+                            ? player[i ? 'next_week_games' : 'current_week_games'] : null).filter(v => v !== null).join(' + ')} GP
                         </span>
                       )}
                     </div>
