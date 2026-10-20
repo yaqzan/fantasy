@@ -379,16 +379,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   Player <SortIcon columnKey="name" />
                 </div>
               </th>
-              {caps.auction ? (
-                <th
-                  className="table-header cursor-pointer hover:bg-gray-600 w-16"
-                  onClick={() => handleSort('auction_value')}
-                >
-                  <div className="flex items-center">
-                    Value <SortIcon columnKey="auction_value" />
-                  </div>
-                </th>
-              ) : (
+              {/* Auction $ values are a draft tool: this table is the in-season view, so an auction league gets no column */}
+              {!caps.auction && (
                 <th className="table-header w-12" title={`The draft round his rank goes in (${numTeams} teams)`}>Rd</th>
               )}
               {CATEGORIES.map(category => {
@@ -475,11 +467,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     </div>
                   </div>
                 </td>
-                {caps.auction ? (
-                  <td className="table-cell text-gray-300 font-medium">
-                    ${getAuctionValue(player)}
-                  </td>
-                ) : (
+                {!caps.auction && (
                   <td className="table-cell text-gray-400">
                     {Math.ceil((customScores[player.name]?.custom_z_rank || getOverallRank(player) || 0) / numTeams) || '-'}
                   </td>

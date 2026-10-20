@@ -93,7 +93,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
             </div>
           )}
 
-          {caps.auction && (
+          {caps.auction && draftMode && (
             <div
               className={`${lever} items-center space-x-2`}
               title={`Auction $ follow each player's value above replacement, raised to this power. 1 splits money in proportion to value; higher pays stars more. This league's default: ${leagueExponent}`}
