@@ -398,7 +398,7 @@ const DailyLeaders = ({ config }) => {
                     </td>
                     {columns.map(c => {
                       // Label small on top, value under it. No cell fill: a stat that moved the needle (1 SD+)
-                      // is coloured and glows (zAura), so a taken row's bad night still shows through its dimming.
+                      // is tinted on a gradient and glows at the high end (zAura), so a taken row's bad night still shows through its dimming.
                       const aura = p.dnp ? null : zAura(p.z?.[c.key]);
                       return (
                         <td key={c.key}
@@ -406,7 +406,7 @@ const DailyLeaders = ({ config }) => {
                             title={p.z?.[c.key] != null ? `${c.name || c.label}: z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : c.name}>
                           <div className={`leading-none ${fade}`}>
                             <div className="text-[9px] uppercase tracking-wide opacity-50 mb-0.5">{c.label}</div>
-                            <div className="text-sm" style={aura ? { color: aura.color, textShadow: aura.glow, fontWeight: aura.bold ? 600 : 500 } : undefined}>
+                            <div className="text-sm" style={aura ? { color: aura.color, textShadow: aura.glow, fontWeight: aura.weight } : undefined}>
                               {p.dnp ? '–' : cellText(c.key, p)}
                             </div>
                           </div>
