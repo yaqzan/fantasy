@@ -561,6 +561,13 @@ def _tint_box_columns(players, weights):
     def paid(p, stats):
         return sum((p.get(s) or 0) * weights.get(s, 0) for s in stats)
     pool = [p for p in players if (p.get('MIN') or 0) >= TINT_MIN_MINUTES]
+    if len(pool) >= TINT_MIN_POOL:   # the total too: p['value_z'] colours the FPTS cell
+        vals = [p['value'] for p in pool]
+        mean = sum(vals) / len(vals)
+        sd = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5
+        if sd:
+            for p in players:
+                p['value_z'] = round((p['value'] - mean) / sd, 2)
     for col, stats in BOX_COLUMN_STATS.items():
         if not any(weights.get(s) for s in stats) or len(pool) < TINT_MIN_POOL:
             continue

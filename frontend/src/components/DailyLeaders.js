@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, inGame, toggleGame, cellText, zTint, keepRow, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zTint, keepRow, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -360,10 +360,10 @@ const DailyLeaders = ({ config }) => {
                     <td className={`sticky z-10 text-center px-0.5 tabular-nums whitespace-nowrap border-r border-gray-700 ${VALUE_W} ${bg} ${
                       points ? 'text-[13px] sm:text-base font-bold' : 'text-[11px] sm:text-sm font-semibold'}`}>
                       {points ? (p.dnp ? <span className={`${fade} text-gray-500`}>–</span> : (
-                        <span className={`${fade} text-white`}>
+                        <span className={`${fade} ${fptsClass(p.value_z)}`}>
                           {signed(p.value)}
                           {byPace ? (
-                            <span className={`block leading-none text-[10px] sm:text-[11px] font-semibold ${p.pace >= 1.5 ? 'text-sky-400' : p.pace <= -1.5 ? 'text-amber-400' : 'text-gray-400'}`}
+                            <span className={`block leading-none text-[10px] sm:text-xs font-semibold ${paceDeltaClass(p.pace)}`}
                                   title="SDs ahead of his own per-minute norm">
                               {p.pace == null ? '–' : `${p.pace > 0 ? '+' : ''}${p.pace.toFixed(1)}`}
                             </span>

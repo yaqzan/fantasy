@@ -95,6 +95,21 @@ export const valueClass = (value, points) => {
   return 'text-white';
 };
 
+// Points leagues: FPTS coloured by where the night sits in the day's rotation (value_z, SDs from the
+// mean of 10+ minute lines), same steps as valueClass; plain until the server has enough lines.
+export const fptsClass = (z) => {
+  if (z == null) return 'text-white';
+  if (z >= 2) return 'text-green-300';
+  if (z >= 1) return 'text-green-400';
+  if (z <= -2) return 'text-red-300';
+  if (z <= -1) return 'text-red-400';
+  return 'text-white';
+};
+
+// Pace delta under FPTS (or in its place on the Pace sort): sky ahead of his norm, amber behind,
+// from half an SD; grey inside that.
+export const paceDeltaClass = (pace) => (pace >= 0.5 ? 'text-sky-400' : pace <= -0.5 ? 'text-amber-400' : 'text-gray-400');
+
 // The pace mark: how far ahead of (or behind) his own per-minute norm he is. Its own colours (sky up,
 // amber down) so it never reads as the night's quality, which is Val's job; strength in three steps
 // (faint, full, doubled); grey when it disagrees with the night (ahead of a low norm on a night

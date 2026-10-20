@@ -2,27 +2,6 @@ import React, { useState } from 'react';
 import Logo from './Logo';
 import { THEMES, applyTheme, getTheme } from '../theme';
 
-// One line of the league's rules, e.g. "11 cats · 10 spots (6 active, daily) · $200 auction Oct 3".
-const leagueSummary = (league) => {
-  if (!league) return '';
-  const s = league.settings;
-  const parts = [
-    s.scoring?.type === 'points' ? 'points' : `${s.categories.length} cats`,
-    `${s.num_teams} teams`,
-    `${s.roster.size} spots (${s.roster.active} active${s.roster.slots?.length ? ' in slots' : ''}, ${s.roster.daily_lineups ? 'daily' : 'weekly'})`,
-  ];
-  if (s.draft.type !== 'auction') parts.push(`${s.draft.type} draft`);
-  if (s.draft.type === 'auction') {
-    let draft = `$${s.draft.budget} auction`;
-    if (s.draft.date) {
-      const d = new Date(s.draft.date);
-      if (!isNaN(d)) draft += ` ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-    }
-    parts.push(draft);
-  }
-  return parts.join(' · ');
-};
-
 // Guillotine leagues: "Stage 2/7 · wk 1 of 3 · 12 teams, 2 out · trades open".
 const stageSummary = (stage) => {
   if (stage.finished) return 'Guillotine over';
@@ -90,9 +69,6 @@ const Header = ({ leagues = [], currentLeague, onSwitchLeague, onEditLeague, onN
 
           <div className="hidden sm:flex items-center gap-2 ml-auto">
             <ThemePicker />
-            {currentLeague && (
-              <span className="hidden lg:inline text-gray-300 text-xs mr-2">{leagueSummary(currentLeague)}</span>
-            )}
             {stage}
           </div>
           {leagues.length > 0 && (
