@@ -183,7 +183,7 @@ const DailyLeaders = ({ config }) => {
       if (data) setDay(data.today);
     }, 450);
   };
-  const columns = orderColumns(points ? BOX_COLUMNS : (data?.categories || config?.categories || []).map(c => ({ key: c.key, label: c.label })));
+  const columns = orderColumns(points ? BOX_COLUMNS : (data?.categories || config?.categories || []).map(c => ({ key: c.key, label: c.label, name: c.name })));
   const sort = pickedSort || defaultSort(data?.preseason);
   const game = (data?.games || []).find(g => g.id === gameId) || null;
   const pool = (data?.players || []).filter(p => inGame(game, p));
@@ -336,7 +336,7 @@ const DailyLeaders = ({ config }) => {
                       : "Summed category z: how far this game moved a week's matchup, category by category"}>
                   {points ? 'FPTS' : byPace ? 'Pace' : 'Best'}
                 </th>
-                {columns.map(c => <th key={c.key} className={`table-header text-center whitespace-nowrap tracking-normal sm:tracking-wider ${STAT_W}`}>{c.label}</th>)}
+                {columns.map(c => <th key={c.key} title={c.name} className={`table-header text-center whitespace-nowrap tracking-normal sm:tracking-wider ${STAT_W}`}>{c.label}</th>)}
               </tr>
             </thead>
             <tbody>

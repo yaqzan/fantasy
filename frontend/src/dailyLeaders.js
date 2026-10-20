@@ -3,9 +3,9 @@
 
 // Box-score columns for points leagues (their only category is FPTS).
 export const BOX_COLUMNS = [
-  { key: 'PTS', label: 'PTS' }, { key: 'REB', label: 'REB' }, { key: 'AST', label: 'AST' },
-  { key: 'STL', label: 'STL' }, { key: 'BLK', label: 'BLK' }, { key: 'FG3M', label: '3PM' },
-  { key: 'FG', label: 'FG' }, { key: 'FT', label: 'FT' }, { key: 'TOV', label: 'TO' },
+  { key: 'PTS', label: 'PTS', name: 'Points' }, { key: 'REB', label: 'REB', name: 'Rebounds' }, { key: 'AST', label: 'AST', name: 'Assists' },
+  { key: 'STL', label: 'STL', name: 'Steals' }, { key: 'BLK', label: 'BLK', name: 'Blocks' }, { key: 'FG3M', label: '3PM', name: 'Three-pointers made' },
+  { key: 'FG', label: 'FG', name: 'Field goals made-attempted' }, { key: 'FT', label: 'FT', name: 'Free throws made-attempted' }, { key: 'TOV', label: 'TO', name: 'Turnovers' },
 ];
 
 // The columns a phone shows without scrolling, in this order; a league without A-TO gets AST in

@@ -15,6 +15,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
   const categoryMeta = config?.categories || [];
   const CATEGORIES = categoryMeta.map(c => c.key);
   const CATEGORY_NAMES = Object.fromEntries(categoryMeta.map(c => [c.key, c.label]));
+  const CATEGORY_FULL = Object.fromEntries(categoryMeta.map(c => [c.key, c.name || c.label]));
   const PERCENTAGE_CATEGORIES = categoryMeta.filter(c => c.percent).map(c => c.key);
   const caps = config?.capabilities || {};
   const [sortConfig, setSortConfig] = useState({ key: 'overall_rank', direction: 'asc' });
@@ -243,7 +244,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   <span className="cursor-pointer hover:text-white" onClick={() => handleSort('name')}>Player <SortIcon columnKey="name" /></span>
                 </div>
               </th>
-              <th className={`table-header text-center px-0.5 border-r border-gray-700 ${caps.scoring === 'points' ? 'sm:w-20 sm:min-w-[5rem]' : 'sm:w-16 sm:min-w-[4rem]'}`}>Status</th>
+              <th title="Available, or the fantasy team that owns him" className={`table-header text-center px-0.5 border-r border-gray-700 ${caps.scoring === 'points' ? 'sm:w-20 sm:min-w-[5rem]' : 'sm:w-16 sm:min-w-[4rem]'}`}>Status</th>
               {CATEGORIES.map(category => {
                 const isPunted = !includedCategories.includes(category);
                 return (
@@ -263,6 +264,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                       )}
                       <div
                         className="flex items-center cursor-pointer hover:bg-gray-600 px-2 rounded"
+                        title={`${CATEGORY_FULL[category]} (click to sort)`}
                         onClick={() => handleSort(`stats.${category}.value`)}
                       >
                         {CATEGORY_NAMES[category]} <SortIcon columnKey={`stats.${category}.value`} />
@@ -271,7 +273,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   </th>
                 );
               })}
-              <th className="table-header w-12">GP</th>
+              <th className="table-header w-12" title="Games he has played this season">GP</th>
               <th className="table-header w-16"></th>
             </tr>
           </thead>
@@ -345,7 +347,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   // Condensed card: the stat's name is in the header, so the cell is just value + percentile.
                   return (
                     <td key={category} className={`px-1 py-1 ${isPunted || taken ? 'opacity-40' : ''}`}
-                        title={`${CATEGORY_NAMES[category]}: percentile ${displayScore}`}>
+                        title={`${CATEGORY_FULL[category]}: percentile ${displayScore}`}>
                       <div className={`px-1.5 py-0.5 rounded border ${getScoreBgColor(displayScore, stat.is_inverse)}`}>
                         <div className="flex items-center justify-between gap-1.5 leading-tight">
                           <span className={`text-sm font-bold tabular-nums ${getStatTextColor(displayScore, stat.is_inverse)}`}>
