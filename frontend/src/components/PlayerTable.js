@@ -89,6 +89,47 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     return 'text-white';                              // Default white
   };
 
+  // Green/Red gradient for score ranks (smaller text, readable but less prominent)
+  const getScoreColor = (score, isInverse = false) => {
+    if (score > 55) {
+      // Green spectrum with readable text
+      if (score >= 90) return 'text-green-400';      // High intensity green
+      if (score >= 80) return 'text-green-500';      // Medium-high intensity green
+      if (score >= 70) return 'text-green-500';      // Medium intensity green
+      if (score >= 60) return 'text-green-500';      // Medium intensity green
+      return 'text-green-500';                       // Medium intensity green
+    } else if (score < 45) {
+      // Red spectrum with readable text
+      if (score <= 10) return 'text-red-400';         // High intensity red
+      if (score <= 20) return 'text-red-500';        // Medium-high intensity red
+      if (score <= 30) return 'text-red-500';        // Medium intensity red
+      if (score <= 40) return 'text-red-500';        // Medium intensity red
+      return 'text-red-500';                         // Medium intensity red
+    }
+    // Score between 45-55 - default color
+    return 'text-white';                              // Default white
+  };
+
+  const getScoreBgColor = (score, isInverse = false) => {
+    if (score > 55) {
+      // Green spectrum with opacity scaling
+      if (score >= 90) return 'bg-green-900/60 border-green-400/80 shadow-lg shadow-green-400/30';     // High opacity green with halo
+      if (score >= 80) return 'bg-green-900/50 border-green-500/70 shadow-md shadow-green-500/25';     // Medium-high opacity green with subtle halo
+      if (score >= 70) return 'bg-green-900/40 border-green-600/60';     // Medium opacity green
+      if (score >= 60) return 'bg-green-900/30 border-green-700/50';     // Medium-low opacity green
+      return 'bg-green-900/20 border-green-900/30';                       // Very low opacity green
+    } else if (score < 45) {
+      // Red spectrum with opacity scaling
+      if (score <= 10) return 'bg-red-900/60 border-red-400/80 shadow-lg shadow-red-400/30';             // High opacity red with halo
+      if (score <= 20) return 'bg-red-900/50 border-red-500/70 shadow-md shadow-red-500/25';            // Medium-high opacity red with subtle halo
+      if (score <= 30) return 'bg-red-900/40 border-red-600/60';         // Medium opacity red
+      if (score <= 40) return 'bg-red-900/30 border-red-700/50';         // Medium-low opacity red
+      return 'bg-red-900/20 border-red-900/30';                          // Very low opacity red
+    }
+    // Score between 45-55 - default background
+    return 'bg-gray-800/10 border-gray-700/20';                          // Very subtle neutral
+  };
+
   // Get aura styling based on hot/cold intensity
   const getHotAura = (diff) => {
     if (diff >= 20) return 'text-orange-300 drop-shadow-[0_0_8px_rgba(251,146,60,0.9)] animate-pulse';
@@ -346,25 +387,19 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   const displayValue = stat[valueKey] !== undefined ? stat[valueKey] : stat.value;
                   const displayScore = stat[scoreKey] !== undefined ? stat[scoreKey] : stat.score;
                   
-                  // The bar reads the percentile (0-100, 50 = average), never the value: same scale for every stat.
-                  // It grows from the centre tick, green right above average, red left below; length and
-                  // brightness both follow how far from 50 he is.
-                  const dev = Math.max(-50, Math.min(50, (displayScore ?? 50) - 50));
-                  const strength = Math.abs(dev) / 50;
+                  // Condensed card: the stat's name is in the header, so the cell is just value + percentile.
                   return (
-                    <td key={category} className={`px-1 py-1 text-center align-middle ${isPunted ? 'opacity-40' : ''}`}
+                    <td key={category} className={`px-1 py-1 ${isPunted ? 'opacity-40' : ''}`}
                         title={`${CATEGORY_NAMES[category]}: percentile ${displayScore}`}>
-                      <div className={`text-sm font-semibold tabular-nums leading-tight ${getStatTextColor(displayScore, stat.is_inverse)}`}>
-                        {category === 'PLUS_MINUS' && displayValue > 0 ? '+' : ''}{displayValue}{PERCENTAGE_CATEGORIES.includes(category) ? '%' : ''}
-                      </div>
-                      <div className="relative mx-auto mt-1 h-[3px] w-14 rounded-full bg-gray-700/60">
-                        <span className="absolute left-1/2 top-[-1px] h-[5px] w-px bg-gray-500" />
-                        <span className="absolute top-0 h-full rounded-full"
-                              style={{
-                                width: `${strength * 50}%`,
-                                ...(dev >= 0 ? { left: '50%' } : { right: '50%' }),
-                                background: dev >= 0 ? `rgba(74,222,128,${0.35 + 0.65 * strength})` : `rgba(248,113,113,${0.35 + 0.65 * strength})`,
-                              }} />
+                      <div className={`px-1.5 py-0.5 rounded border ${getScoreBgColor(displayScore, stat.is_inverse)}`}>
+                        <div className="flex items-center justify-between gap-1.5 leading-tight">
+                          <span className={`text-sm font-bold tabular-nums ${getStatTextColor(displayScore, stat.is_inverse)}`}>
+                            {category === 'PLUS_MINUS' && displayValue > 0 ? '+' : ''}{displayValue}{PERCENTAGE_CATEGORIES.includes(category) ? '%' : ''}
+                          </span>
+                          <span className={`text-[11px] opacity-75 tabular-nums ${getScoreColor(displayScore, stat.is_inverse)}`}>
+                            {displayScore}
+                          </span>
+                        </div>
                       </div>
                     </td>
                   );
