@@ -22,7 +22,7 @@ import requests
 from leagues import CATEGORY_CATALOG, fantasy_points
 
 ESPN = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba'
-REFRESH_SECONDS = 60        # a live slate is refetched this often (experiment 2026-10-20, was 5 min: a 15-game night is ~2,750 ESPN calls, ~0.9 s CPU per 5 games)
+REFRESH_SECONDS = 75        # a live slate is refetched this often (was 5 min until 2026-10-20: a 15-game night is ~2,200 ESPN calls at 75 s, ~550 at 300; ~0.9 s CPU per 5 games)
 IDLE_REFRESH_SECONDS = 3 * 3600  # a slate with nothing started yet (tip-off times can move)
 NEAR_TIP_REFRESH_SECONDS = 3600  # ... hourly once the first tip is less than that away
 OVERDUE_SECONDS = 2 * 60    # a page request fetches itself when the poller is this late (stalled, machine slept)
@@ -66,7 +66,14 @@ def _session():
 _http = _session()
 
 
+_calls = {}   # Eastern date -> ESPN calls made from here (retries not counted): tune REFRESH_SECONDS against the ~2,500 a day guess
+
+
 def _get(path, **params):
+    today = nba_today()
+    _calls[today] = _calls.get(today, 0) + 1
+    for old in [d for d in _calls if d < today - timedelta(days=7)]:
+        del _calls[old]
     resp = _http.get(f'{ESPN}/{path}', params=params, timeout=15)
     resp.raise_for_status()
     return resp.json()
@@ -643,7 +650,7 @@ def daily_leaders(league, day=None, force=False):
         'fetched_at': fetched.isoformat(),
         'next_refresh_at': (lambda t: datetime.fromtimestamp(max(t, time.time())).astimezone().isoformat() if t is not None else None)(
             due_at(s) if day in _polled_days() else (s['fetched'] + REFRESH_SECONDS if pending else None)),
-        'refresh_seconds': REFRESH_SECONDS, 'live': live,
+        'refresh_seconds': REFRESH_SECONDS, 'live': live, 'espn_calls_today': _calls.get(nba_today(), 0),
         'games': s['scoreboard'], 'players': players,
         'scoring': 'points' if league.is_points else 'categories',
         'preseason': any(g.get('preseason') for g in s['scoreboard']),

@@ -208,8 +208,9 @@ stats) is shared by all leagues.
   minus defensive 3-seconds, never "technical free throw"). Players match NBA ids by
   `projections.norm_name` (185/185 on 2026-10-08). **Refresh:** a background poller thread
   (`start_poller`, started by `backend/app.py` outside pytest) refetches today, and yesterday until
-  its late games are final, every 60 s while a game is on (`REFRESH_SECONDS`; an experiment since 2026-10-20,
-  was 5 min: watch ESPN errors/429s, revert to 300 if it throttles; a game counts as
+  its late games are final, every 75 s while a game is on (`REFRESH_SECONDS`; 2026-10-20, was 5 min; sized so a
+  15-game night is ~2,200 calls, under the ~2,500/day guess; `espn_calls_today` in the API response counts
+  the real ones, tune against it; watch for 429s, revert to 300 if it throttles; a game counts as
   on once its start time passes, whatever ESPN says), at the first tip-off, every 3 h before it
   (hourly in the last 3 h, so a game moved earlier shows up within the hour), never once all games
   are stored final. The 3-h check can't swallow a game: the tip time always cuts it short. If the
@@ -217,9 +218,9 @@ stats) is shared by all leagues.
   of those is due (`due_at`; 30 s..3 h), not on a fixed tick: a simulated 8-game day wakes 79 times
   (a 60-s tick: 1,440), 7 pm-1 am every 5 min, otherwise every 3 h. A refetch costs ~0.9 s CPU
   per 5 games (play-by-play parsing). The page is ready when opened; page requests read the cache
-  (they fetch only a day nobody cached, or another date) and the Refresh button has a 60-s floor. Only unfinished games are refetched; one
+  (they fetch only a day nobody cached, or another date) and the Refresh button has a 60-s floor (`FORCE_FLOOR_SECONDS`). Only unfinished games are refetched; one
   failed game keeps its last lines and retries next pass. ESPN publishes no limit (hobbyist docs
-  guess ~2,500 calls/day); a 15-game night is ~550 at 5 min, ~2,750 at 60 s (worst case; finished games drop out). It does drop TLS handshakes now and
+  guess ~2,500 calls/day); a 15-game night is ~550 at 5 min, ~2,200 at 75 s (scaled from the 5-min figure; finished games drop out). It does drop TLS handshakes now and
   then (SSL EOF on 2 of 6 calls, 2026-10-09), hence the kept-alive session with backoff retries.
   Default day: yesterday until noon Eastern (`SCOREBOARD_FLIP_HOUR`), then today.
   **Game progress / on court:** the same `summary` call carries `plays`, so no extra request: the
