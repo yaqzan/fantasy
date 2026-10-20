@@ -43,20 +43,19 @@ export const zTint = (z) => {
   return a >= 2 ? 'bg-red-500/40 text-white' : a >= 1 ? 'bg-red-500/25' : 'bg-red-500/10';
 };
 
-// A Daily Leaders stat tile: the whole cell is the tile (no inner box), coloured only for a stat that moved
-// the needle, 1 SD or more in the league's categories, in three steps (the top one with a soft inner glow).
-// Returns [cell classes, text tone, glow].
-export const zTile = (z) => {
-  if (z === null || z === undefined || Math.abs(z) < 1) return ['', '', false];
+// A Daily Leaders stat's aura: no cell fill, the value itself is coloured and glows, only for a stat that
+// moved the needle (1 SD or more of category z), in three steps. Returns null for a quiet stat, else
+// { color, glow, bold } for an inline style.
+export const zAura = (z) => {
+  if (z === null || z === undefined || Math.abs(z) < 1) return null;
+  const rgb = z > 0 ? '74,222,128' : '248,113,113';
   const a = Math.abs(z);
-  if (z > 0) {
-    if (a >= 2) return ['bg-green-500/35', 'text-green-200 font-semibold', true];
-    if (a >= 1.5) return ['bg-green-500/22', 'text-green-300', false];
-    return ['bg-green-500/12', 'text-green-300', false];
-  }
-  if (a >= 2) return ['bg-red-500/35', 'text-red-200 font-semibold', true];
-  if (a >= 1.5) return ['bg-red-500/22', 'text-red-300', false];
-  return ['bg-red-500/12', 'text-red-300', false];
+  const step = a >= 2 ? 3 : a >= 1.5 ? 2 : 1;
+  return {
+    color: `rgb(${rgb})`,
+    glow: ['', `0 0 6px rgba(${rgb},.35)`, `0 0 8px rgba(${rgb},.55)`, `0 0 12px rgba(${rgb},.75)`][step],
+    bold: step === 3,
+  };
 };
 
 // [key, label, phone label]

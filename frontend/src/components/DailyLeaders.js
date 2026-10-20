@@ -3,7 +3,7 @@ import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
 import OwnerChip from './OwnerChip';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zTile, keepRow, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zAura, keepRow, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -397,19 +397,18 @@ const DailyLeaders = ({ config }) => {
                       </span>}
                     </td>
                     {columns.map(c => {
-                      // The whole cell is the tile: label small on top, value under it, tinted only from 1 SD.
-                      // My rows: the tint is a translucent layer over the yellow, so both show. Taken rows fade
-                      // only the text so the tint still says why a night ranked low.
-                      const [tint, textTone, glow] = p.dnp ? ['', '', false] : zTile(p.z?.[c.key]);
+                      // Label small on top, value under it. No cell fill: a stat that moved the needle (1 SD+)
+                      // is coloured and glows (zAura), so a taken row's bad night still shows through its dimming.
+                      const aura = p.dnp ? null : zAura(p.z?.[c.key]);
                       return (
                         <td key={c.key}
-                            className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 relative ${mine ? 'bg-row-mine' : tint}`}
+                            className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 ${mine ? 'bg-row-mine' : ''}`}
                             title={p.z?.[c.key] != null ? `${c.name || c.label}: z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : c.name}>
-                          {mine && tint && <span className={`absolute inset-0 ${tint}`} />}
-                          {glow && <span className={`absolute inset-0 pointer-events-none ${p.z[c.key] > 0 ? 'shadow-[inset_0_0_10px_rgba(74,222,128,0.35)]' : 'shadow-[inset_0_0_10px_rgba(248,113,113,0.35)]'}`} />}
-                          <div className={`relative leading-none ${fade}`}>
+                          <div className={`leading-none ${fade}`}>
                             <div className="text-[9px] uppercase tracking-wide opacity-50 mb-0.5">{c.label}</div>
-                            <div className={`text-sm ${textTone}`}>{p.dnp ? '–' : cellText(c.key, p)}</div>
+                            <div className="text-sm" style={aura ? { color: aura.color, textShadow: aura.glow, fontWeight: aura.bold ? 600 : 500 } : undefined}>
+                              {p.dnp ? '–' : cellText(c.key, p)}
+                            </div>
                           </div>
                         </td>
                       );
