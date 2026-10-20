@@ -44,18 +44,18 @@ export const zTint = (z) => {
 };
 
 // A Daily Leaders stat's aura: no cell fill, the value itself is tinted and, at the high end, glows. It is a
-// gradient, not steps: the tint grows smoothly from AURA_FROM SD (barely) to AURA_FULL SD (full green/red),
+// gradient, not steps: the tint grows smoothly from AURA_FROM SD (barely) to AURA_FULL SD (full green/red; an ease-out curve, so a 1 SD stat is already over half tinted),
 // the glow only fades in over the upper half of that range, and the weight firms up near the top.
 // Returns null for an unremarkable stat, else { color, glow, weight } for an inline style.
-const AURA_FROM = 0.3;
-const AURA_FULL = 2.5;
+const AURA_FROM = 0.4;
+const AURA_FULL = 2.0;
 export const zAura = (z) => {
   if (z === null || z === undefined || Math.abs(z) <= AURA_FROM) return null;
   const rgb = z > 0 ? '74,222,128' : '248,113,113';
   const t = Math.min(1, (Math.abs(z) - AURA_FROM) / (AURA_FULL - AURA_FROM));   // 0..1
-  const glow = Math.max(0, (t - 0.45) / 0.55);                                   // 0 until the middle, then up
+  const glow = Math.max(0, (t - 0.5) / 0.5);                                   // 0 until the middle, then up
   return {
-    color: `color-mix(in srgb, rgb(${rgb}) ${Math.round(Math.pow(t, 0.8) * 100)}%, currentColor)`,
+    color: `color-mix(in srgb, rgb(${rgb}) ${Math.round(Math.pow(t, 0.6) * 100)}%, currentColor)`,
     glow: glow > 0 ? `0 0 ${Math.round(4 + 9 * glow)}px rgba(${rgb},${(0.8 * glow).toFixed(2)})` : '',
     weight: t > 0.8 ? 600 : 500,
   };

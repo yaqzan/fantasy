@@ -94,8 +94,8 @@ must keep its `sm:` twin.
   tints stay (only the text fades), so a taken player's bad night shows why it ranked low. My rows lay the
   tint as a translucent overlay on the yellow `bg-row-mine` (two bg classes on one cell: yellow won).
   Stat cells (owner, 2026-10-20; filled tiles and inset cards both read as jarring): tiny label over the value, no fill; the value is tinted on a smooth
-  gradient of category z (`zAura` in `dailyLeaders.js`: barely from 0.3 SD, full green/red at 2.5 SD, no cutoff: 0.8 vs 1.0 SD differ by a shade), the glow fades in
-  over the upper half, weight firms up near the top.
+  gradient of category z (`zAura` in `dailyLeaders.js`: barely from 0.4 SD, full green/red at 2 SD on an ease-out curve: 0.8 SD ~43%, 1 SD ~56%, 1.5 SD ~80%; no cutoff), the glow fades in
+  over the upper half (from ~1.2 SD), weight firms up near the top.
   Points leagues tint their box columns too: `daily_leaders._tint_box_columns` fills `z[column]` = fantasy
   points that column paid (FG/FT: made + attempted weights) vs the day's 10+ minute lines, mean/SD, same
   `zTint` steps; columns the league doesn't score stay plain; needs 8+ such lines.
