@@ -3,6 +3,7 @@ import DraftModal from './DraftModal';
 import { PlayerName } from './PlayerCard';
 import usePlayerValues from '../usePlayerValues';
 import { weekRange } from '../weeks';
+import OwnerChip from './OwnerChip';
 import { orderColumns } from '../dailyLeaders';
 
 // The in-season player table (draft mode renders DraftBoard instead).
@@ -290,12 +291,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                             title={customScores[player.name] ? `Rank ${rank} with your punts (was ${getOverallRank(player)})` : undefined}>
                         {loadingCustomScores ? '…' : rank}
                       </span>
-                      {taken && (
-                        <span className="w-4 h-4 rounded-full border border-gray-500 text-[9px] leading-[14px] text-center font-semibold text-gray-300"
-                              title={player.fantasy_team.owner_name ? `${player.fantasy_team.owner_name} (${player.fantasy_team.name})` : player.fantasy_team.name}>
-                          {(player.fantasy_team.owner_name || player.fantasy_team.name || '?')[0].toUpperCase()}
-                        </span>
-                      )}
+                      {taken && <OwnerChip person={player.fantasy_team.owner_name} team={player.fantasy_team.name} />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1 min-w-0">

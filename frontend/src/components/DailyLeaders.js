@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
+import OwnerChip from './OwnerChip';
 import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zTint, keepRow, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
@@ -350,12 +351,7 @@ const DailyLeaders = ({ config }) => {
                       <div className={`flex items-center gap-1.5 ${fade}`}>
                         <div className="w-5 shrink-0 flex flex-col items-center gap-0.5">
                           <span className="text-gray-500 tabular-nums text-[11px] leading-none">{p.dnp ? '–' : ranks ? ranks[p.espn_id] : p.rank}</span>
-                          {p.owner === 'taken' && (
-                            <span className="w-4 h-4 rounded-full border border-gray-500 text-[9px] leading-[14px] text-center font-semibold text-gray-300"
-                                  title={p.owner_person ? `${p.owner_person} (${p.owner_name})` : p.owner_name}>
-                              {(p.owner_person || p.owner_name || '?')[0].toUpperCase()}
-                            </span>
-                          )}
+                          {p.owner === 'taken' && <OwnerChip person={p.owner_person} team={p.owner_name} />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 min-w-0">

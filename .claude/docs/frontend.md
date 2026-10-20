@@ -76,7 +76,7 @@ must keep its `sm:` twin.
 - Desktop toolbars (owner, 2026-10-20): no "Daily Leaders" title; the date stepper (Daily Leaders) and the search box (Player Rankings) are the same
   18rem x 42px slot at the left of the row, same look, so the first control never moves between tabs; the rest of the row follows at the same x.
 - Player Rankings table (in-season) copies Daily Leaders' geometry so tab switches don't jump (owner, 2026-10-20): bare toolbar row
-  (60px min, same on both tabs), pinned 15rem Player column (rank + the owner's initial chip under it (other teams only; `fantasy_teams.owner_name`, the Yahoo manager nickname filled by `pull_yahoo sync`, else the team name), name, `F · BOS · 2 + 4 GP`; no status text: dimming
+  (60px min, same on both tabs), pinned 15rem Player column (rank + the owner's two-letter chip under it (`OwnerChip`: first and last word's initials, else the first two letters; a muted tint hashed from the name) (other teams only; `fantasy_teams.owner_name`, the Yahoo manager nickname filled by `pull_yahoo sync`, else the team name), name, `F · BOS · 2 + 4 GP`; no status text: dimming
   and the chip say it), 4rem OVR column (5rem in points leagues), stat cards (value + percentile, tinted), stats in `orderColumns` order. Header
   cells never wrap (a taller header row shifts the table). The GP warning (`small_sample`) scales with days since the first game
   (`player_stats.small_sample_floor`, shared by rankings, Lineup Optimizer and Weekly Pickups): week one flags nobody.
