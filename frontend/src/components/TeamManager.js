@@ -21,7 +21,7 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config, asTab = fals
   const [editTeamName, setEditTeamName] = useState('');
   const [editTeamAbbrev, setEditTeamAbbrev] = useState('');
   const [teamBlockWidth, setTeamBlockWidth] = useState('calc(8% - 0.25rem)');
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const containerRef = useRef(null);
 
   // Calculate optimal team block width
@@ -201,17 +201,19 @@ const TeamManager = ({ teams, onTeamUpdate, refreshTrigger, config, asTab = fals
   
 
   return (
-    <div className={asTab ? '' : 'bg-gray-800 rounded-lg shadow-lg p-3 sm:p-6'}>
+    <div className={asTab ? '' : expanded ? 'bg-gray-800 rounded-lg shadow-lg p-3 sm:p-6 mb-8' : 'mb-1'}>
       {!asTab && <div className={`flex items-center justify-between ${expanded ? 'mb-3 sm:mb-4' : ''}`}>
         <button onClick={() => setExpanded(!expanded)} aria-expanded={expanded}
-          className="flex items-center gap-2 text-base sm:text-lg font-semibold text-white">
+          className={expanded ? 'flex items-center gap-2 text-base sm:text-lg font-semibold text-white' : 'flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors'}>
           <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
           Fantasy Teams
           {!expanded && teams.length > 0 && <span className="text-xs font-normal text-gray-400">{teams.length}</span>}
         </button>
-        <button onClick={() => setShowModal(true)} className="btn-secondary text-sm py-1.5 sm:py-2">Add team</button>
+        {expanded
+          ? <button onClick={() => setShowModal(true)} className="btn-secondary text-sm py-1.5 sm:py-2">Add team</button>
+          : <button onClick={() => setShowModal(true)} className="text-xs text-gray-600 hover:text-gray-300 transition-colors">+ Add team</button>}
       </div>}
 
       {!expanded ? null : teams.length === 0 ? (

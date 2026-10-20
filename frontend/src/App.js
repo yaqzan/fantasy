@@ -276,7 +276,7 @@ function App() {
           <div className="mb-4 p-3 rounded bg-red-900/40 border border-red-700 text-red-200 text-sm">{loadError}</div>
         )}
         {!isPhone && (
-          <div className="mb-8">
+          <div>
             <TeamManager teams={fantasyTeams} onTeamUpdate={refreshData} refreshTrigger={players.length} config={config} />
           </div>
         )}
