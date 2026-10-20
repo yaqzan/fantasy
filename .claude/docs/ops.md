@@ -14,9 +14,10 @@
 - **Fantrax rosters task** "Fantasy Fantrax Rosters", hourly, current user (`ops/windows/install-fantrax-task.ps1`):
   `pull_fantrax.py rosters --apply` for every Fantrax league with a `platform_league_id`, log
   `ops/windows/logs/fantrax.log`. Needs Firefox logged in to fantrax.com (the login is re-read from it).
-- **Yahoo draft task** "Fantasy Yahoo Draft", one-off Sat 2026-10-17 17:30, 6 h limit: `pull_yahoo.py draft --league <Courtside's Yahoo number>
-  --apply --watch 20 --log ops/windows/logs/yahoo_draft.log` (Courtside's live snake; needs Firefox signed in to Yahoo).
-  Delete it after the draft.
+- **Yahoo rosters task** "Fantasy Yahoo Rosters", hourly, current user (`ops/windows/install-yahoo-task.ps1 -League <n>`):
+  `pull_yahoo.py sync --league <n> --apply`, log `ops/windows/logs/yahoo.log`. Yahoo has no transaction feed here, so each run
+  makes rosters, positions and can't-cut flags Yahoo's. Needs the Yahoo app keys or Firefox signed in to Yahoo.
+  Live drafts: run `pull_yahoo.py draft --watch 20` by hand (or a one-off task) and kill it after; one ran 3 days past its draft until 2026-10-20.
 - **No other cron jobs for data.** The API process runs a poller thread (`daily_leaders.start_poller`,
   started in `backend/app.py`; sleeps until the next thing is due, see leagues.md "Daily Leaders"):
   ESPN every 5 min while games are on; **ESPN fold**: when ESPN calls a regular-season game final, its
