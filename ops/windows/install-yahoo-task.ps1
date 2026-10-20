@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 
 if (-not $Python) { $Python = (Get-Command python).Source }
 $vbs = Join-Path $PSScriptRoot 'hidden_run.vbs'
-$tr = "wscript.exe //B //Nologo `"$vbs`" `"$Python`" pull_fantrax.py rosters --apply --log ops\windows\logs\fantrax.log"
+$tr = "wscript.exe //B //Nologo `"$vbs`" `"$Python`" pull_yahoo.py sync --league $League --apply --log ops\windows\logs\yahoo.log"
 
 schtasks /create /tn "Fantasy Yahoo Rosters" /sc minute /mo $Minutes /tr $tr /f
 if ($LASTEXITCODE -ne 0) { throw "schtasks failed with exit code $LASTEXITCODE" }
