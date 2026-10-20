@@ -93,7 +93,8 @@ must keep its `sm:` twin.
   contents, not the row: an opacity on the row lets scrolled cells show through the pinned ones. Their category
   tints stay (only the text fades), so a taken player's bad night shows why it ranked low. My rows lay the
   tint as a translucent overlay on the yellow `bg-row-mine` (two bg classes on one cell: yellow won).
-  Stat cells are Player Rankings' cards, value only (`zCard` in `dailyLeaders.js`: four green/red steps by category z from 0.5 SD, glow from 1.5; faint neutral under 0.5; text tone follows).
+  Stat cells are full-bleed tiles (owner, 2026-10-20; the inset card looked like a box inside the table): tiny label over the value, tinted only from 1 SD
+  of category z (`zTile` in `dailyLeaders.js`: three steps, inner glow from 2 SD), so quiet stats stay plain and the tint means "moved the needle".
   Points leagues tint their box columns too: `daily_leaders._tint_box_columns` fills `z[column]` = fantasy
   points that column paid (FG/FT: made + attempted weights) vs the day's 10+ minute lines, mean/SD, same
   `zTint` steps; columns the league doesn't score stay plain; needs 8+ such lines.
