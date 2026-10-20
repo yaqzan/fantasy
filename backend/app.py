@@ -13,7 +13,7 @@ from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer,
                               PlayerProjection, PreseasonLine, ProjectionAdjustment)
 from projections import season_label
 from player_stats import (league_player_stats, calculate_auction_values, calculate_team_totals, week_schedule,
-                          team_games, player_week_games, best_starters, games_floor, auction_value_at,
+                          team_games, player_week_games, best_starters, small_sample_floor, auction_value_at,
                           TEAM_DICT, STAT_SUFFIXES, what_if_line, default_stat_type)
 from fantasy_config import TEAMNAMES, FPOINTS_SCORING
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
@@ -83,7 +83,7 @@ def league_team(league, team_id):
 
 
 def team_json(team):
-    return {'id': team.id, 'name': team.name, 'abbreviation': team.abv, 'eliminated_stage': team.eliminated_stage}
+    return {'id': team.id, 'name': team.name, 'abbreviation': team.abv, 'owner_name': team.owner_name, 'eliminated_stage': team.eliminated_stage}
 
 
 def _week_json(start, end):
@@ -219,7 +219,6 @@ def get_fantasy_players():
     # A $ value per timeframe, so the price always matches the rank it is shown next to.
     for suffix in STAT_SUFFIXES.values():
         calculate_auction_values(player_stats, league, value_key=f'VALUE{suffix}', out_key=f'AUCTION_VALUE{suffix}')
-    floor = games_floor(player_stats)
 
     team_ids = league_team_ids(league)
     fantasy_teams = {t.id: team_json(t) for t in FantasyTeam.select().where(FantasyTeam.league == league.id)}
@@ -243,10 +242,7 @@ def get_fantasy_players():
     players_by_name = {p.name: p for p in Player.select().where(Player.name.in_([name for name, _ in top]))}
     # A small sample is relative to how far into the season it is: one game is the norm in week one (players
     # whose team hasn't played yet still carry last season's GP, so the games played so far can't be read off the players).
-    from player_stats import season_first_game
-    opened = season_first_game()
-    expected_gp = ((date.today() - opened).days * 0.5 + 1) if opened and date.today() >= opened else 0   # a team plays about every 2 days
-    small_floor = min(floor, expected_gp / 2)
+    small_floor = small_sample_floor(player_stats)
 
     players_data = []
     stats_all = player_stats

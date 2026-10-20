@@ -484,6 +484,17 @@ def games_floor(player_stats):
     return max(5, round(0.15 * max((stats.get('GP') or 0 for stats in player_stats.values()), default=0)))
 
 
+def small_sample_floor(player_stats, today=None):
+    """Games under which a player's numbers are a small sample: games_floor, held down by how far into the
+    season it is (a team plays about every 2 days), so in week one nobody is flagged for having played 1.
+    Players whose team hasn't played yet still carry last season's GP, so the season's age is read off
+    the calendar, not off the players."""
+    today = today or date.today()
+    opened = season_first_game(today)
+    expected = ((today - opened).days * 0.5 + 1) if opened and today >= opened else 0
+    return min(games_floor(player_stats), expected / 2)
+
+
 def _qualified_pool(player_stats):
     """Players whose stats may set a category's mean/SD (games_floor), so a 1-2 game call-up
     can't define the scale. Everyone qualifies while nobody has reached the floor yet."""

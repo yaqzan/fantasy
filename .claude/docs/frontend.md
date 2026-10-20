@@ -74,10 +74,10 @@ must keep its `sm:` twin.
   App.js): rosters in a 2-column grid, no fold, no Add team (teams come from the platform syncs; the
   edit pencil stays). Wider screens keep the panel above the tabs.
 - Player Rankings table (in-season) copies Daily Leaders' geometry so tab switches don't jump (owner, 2026-10-20): bare toolbar row
-  (60px min, same on both tabs), pinned 15rem Player column (rank + owner initial chip under it, name, `F · BOS · 2 + 4 GP`; no status text: dimming
+  (60px min, same on both tabs), pinned 15rem Player column (rank + the owner's initial chip under it (other teams only; `fantasy_teams.owner_name`, the Yahoo manager nickname filled by `pull_yahoo sync`, else the team name), name, `F · BOS · 2 + 4 GP`; no status text: dimming
   and the chip say it), 4rem OVR column (5rem in points leagues), stat cards (value + percentile, tinted), stats in `orderColumns` order. Header
   cells never wrap (a taller header row shifts the table). The GP warning (`small_sample`) scales with days since the first game
-  (`app.py`): week one flags nobody.
+  (`player_stats.small_sample_floor`, shared by rankings, Lineup Optimizer and Weekly Pickups): week one flags nobody.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
 - Daily Leaders toolbar: one row on phones: `‹ Wed 14 ›` (orange on today; hold it to jump back; tap it for a month calendar that picks on tap, no OK button (`DatePopover`), limited to `season_range`: regular season widened 30 days before, 70 after, `player_stats.season_window`), Avail / Mine chips (no All, no counts; tap the lit chip to return to everything), Best|Pace. Status text and the Today link are desktop-only.

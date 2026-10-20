@@ -170,9 +170,15 @@ def parse_player(node):
             'undroppable': _text(node, 'y:is_undroppable') == '1'}
 
 
+def _owner(team):
+    """The first manager's nickname on a Yahoo <team>, '' when Yahoo hides it."""
+    nick = _text(team, 'y:managers/y:manager/y:nickname')
+    return '' if nick.startswith('--') else nick
+
+
 def parse_rosters(root):
     """[{team_id, name, players: [parse_player]}] from /league/<key>/teams/roster."""
-    return [{'team_id': _text(team, 'y:team_id'), 'name': _text(team, 'y:name'),
+    return [{'team_id': _text(team, 'y:team_id'), 'name': _text(team, 'y:name'), 'owner': _owner(team),
              'players': [parse_player(p) for p in team.findall('y:roster/y:players/y:player', NS)]}
             for team in root.iter(f"{{{NS['y']}}}team")]
 
@@ -275,6 +281,9 @@ def sync(yahoo_league, apply):
                 print(f'  no team here for Yahoo team {yt["team_id"]} "{yt["name"]}": add it in the Team Manager, '
                       'then set its name to match')
                 continue
+            if apply and yt.get('owner') and team.owner_name != yt['owner']:
+                team.owner_name = yt['owner']
+                team.save()
             if team.platform_team_id != yt['team_id'] or team.name != yt['name']:
                 changes += 1
                 print(f'  {team.abv}: "{team.name}" -> "{yt["name"]}" (Yahoo team {yt["team_id"]})')

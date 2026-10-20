@@ -15,7 +15,7 @@ from datetime import date
 from fantasy_database import FantasyTeam, FantasyTeamPlayer
 from player_stats import (league_player_stats, week_schedule, player_week_games, best_starters, team_week_totals,
                           AVAILABILITY,
-                          average_week_totals, category_win_chances, category_margins, games_floor, STAT_SUFFIXES, default_stat_type)
+                          average_week_totals, category_win_chances, category_margins, small_sample_floor, STAT_SUFFIXES, default_stat_type)
 from fantasy_team_helper import (get_all_my_team_players, get_available_players, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_team_by_abv)
 
@@ -218,7 +218,7 @@ def get_pickup_candidates(league, week_start=None, week_end=None, opponent_abv=N
         return {'error': 'Your roster is full and every player on it is marked undroppable'}
     candidates = week.free_agents(suffix)
     ranked, base = rank_moves(week, roster, theirs, suffix, candidates, undroppable)
-    floor = games_floor(stats)
+    floor = small_sample_floor(stats)
     rows = []
     for m in ranked[:limit]:
         p = stats[m.add]

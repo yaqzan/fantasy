@@ -46,6 +46,8 @@ def upgrade_schema(DB):
         ops.append(migrator.add_column('fantasy_teams', 'league_id', CharField(max_length=64, null=True)))
     if 'eliminated_stage' not in team_cols:
         ops.append(migrator.add_column('fantasy_teams', 'eliminated_stage', IntegerField(null=True)))
+    if 'owner_name' not in team_cols:
+        ops.append(migrator.add_column('fantasy_teams', 'owner_name', CharField(max_length=64, null=True)))
     if 'released_roster' not in team_cols:
         ops.append(migrator.add_column('fantasy_teams', 'released_roster', TextField(null=True)))
     if 'fantrax_team_id' in team_cols and 'platform_team_id' not in team_cols:  # named for Fantrax until Yahoo

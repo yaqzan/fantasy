@@ -290,10 +290,10 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                             title={customScores[player.name] ? `Rank ${rank} with your punts (was ${getOverallRank(player)})` : undefined}>
                         {loadingCustomScores ? '…' : rank}
                       </span>
-                      {player.drafted && (
-                        <span className={`w-4 h-4 rounded-full border text-[9px] leading-[14px] text-center font-semibold ${mine ? 'border-mine text-mine' : 'border-gray-500 text-gray-300'}`}
-                              title={player.fantasy_team?.name || player.fantasy_team?.abbreviation}>
-                          {(player.fantasy_team?.name || player.fantasy_team?.abbreviation || '?')[0].toUpperCase()}
+                      {taken && (
+                        <span className="w-4 h-4 rounded-full border border-gray-500 text-[9px] leading-[14px] text-center font-semibold text-gray-300"
+                              title={player.fantasy_team.owner_name ? `${player.fantasy_team.owner_name} (${player.fantasy_team.name})` : player.fantasy_team.name}>
+                          {(player.fantasy_team.owner_name || player.fantasy_team.name || '?')[0].toUpperCase()}
                         </span>
                       )}
                     </div>

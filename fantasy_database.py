@@ -137,6 +137,7 @@ class FantasyTeam(BaseModel):
     # players it held then (JSON names), kept so an elimination can be undone.
     eliminated_stage = IntegerField(null=True)
     released_roster = TextField(null=True)
+    owner_name = CharField(max_length=64, null=True)  # the manager's name on the platform (Yahoo nickname), for chips
 
     class Meta:
         table_name = 'fantasy_teams'
