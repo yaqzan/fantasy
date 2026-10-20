@@ -529,11 +529,11 @@ def _name_index():
 
 
 def owners(league):
-    """{NBA player id: (team abbreviation, team name)} for the league's rostered players."""
+    """{NBA player id: (team abbreviation, team name, manager name)} for the league's rostered players."""
     from fantasy_database import FantasyTeam, FantasyTeamPlayer
-    rows = (FantasyTeamPlayer.select(FantasyTeamPlayer.player_id, FantasyTeam.abv, FantasyTeam.name)
+    rows = (FantasyTeamPlayer.select(FantasyTeamPlayer.player_id, FantasyTeam.abv, FantasyTeam.name, FantasyTeam.owner_name)
             .join(FantasyTeam).where(FantasyTeam.league == league.id).tuples())
-    return {pid: (abv, name) for pid, abv, name in rows}
+    return {pid: (abv, name, owner) for pid, abv, name, owner in rows}
 
 
 def _result(game, abbr):
@@ -608,6 +608,7 @@ def daily_leaders(league, day=None, force=False):
                 **line, 'player_id': pid, 'value': value, 'z': zs,
                 'owner': ('mine' if team[0] == league.my_team else 'taken') if team else 'free',
                 'owner_abv': team[0] if team else None, 'owner_name': team[1] if team else None,
+                'owner_person': team[2] if team else None,
                 'vs_me': bool(team and versus and team[0] == versus),
                 'game_state': game['state'] if game else None,
                 'game_period': game['period'] if game else None, 'game_clock': game['clock'] if game else None,
@@ -638,7 +639,7 @@ def daily_leaders(league, day=None, force=False):
                 'opp': next((t['abbr'] for t in g['teams'] if t['abbr'] != d['team']), None),
                 'player_id': pid, 'value': 0, 'z': {}, 'rank': None, 'dnp': True, 'dnp_reason': d['reason'],
                 'owner': 'mine' if team[0] == league.my_team else 'taken',
-                'owner_abv': team[0], 'owner_name': team[1], 'vs_me': bool(versus and team[0] == versus),
+                'owner_abv': team[0], 'owner_name': team[1], 'owner_person': team[2], 'vs_me': bool(versus and team[0] == versus),
                 'game_state': 'post', 'game_period': g.get('period'), 'game_clock': g.get('clock'),
                 'game_result': _result(g, d['team']), 'on_court': None, 'preseason': bool(g.get('preseason')),
             })

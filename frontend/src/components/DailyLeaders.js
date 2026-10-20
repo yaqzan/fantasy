@@ -348,8 +348,16 @@ const DailyLeaders = ({ config }) => {
                 return (
                   <tr key={p.espn_id} className="group border-t border-gray-700">
                     <td className={`sticky left-0 z-10 px-2 py-1.5 ${PLAYER_W} ${bg} ${mine ? 'shadow-[inset_3px_0_0_rgb(var(--mine))]' : ''}`}>
-                      <div className={`flex items-baseline gap-1.5 ${fade}`}>
-                        <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right">{p.dnp ? '–' : ranks ? ranks[p.espn_id] : p.rank}</span>
+                      <div className={`flex items-center gap-1.5 ${fade}`}>
+                        <div className="w-5 shrink-0 flex flex-col items-center gap-0.5">
+                          <span className="text-gray-500 tabular-nums text-[11px] leading-none">{p.dnp ? '–' : ranks ? ranks[p.espn_id] : p.rank}</span>
+                          {p.owner === 'taken' && (
+                            <span className="w-4 h-4 rounded-full border border-gray-500 text-[9px] leading-[14px] text-center font-semibold text-gray-300"
+                                  title={p.owner_person ? `${p.owner_person} (${p.owner_name})` : p.owner_name}>
+                              {(p.owner_person || p.owner_name || '?')[0].toUpperCase()}
+                            </span>
+                          )}
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 min-w-0">
                             <PlayerName id={p.player_id} name={p.name} className={`font-medium truncate min-w-0 ${mine ? 'text-mine' : p.vs_me ? 'text-opp' : 'text-white'}`} />
