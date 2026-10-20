@@ -22,12 +22,12 @@ import requests
 from leagues import CATEGORY_CATALOG, fantasy_points
 
 ESPN = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba'
-REFRESH_SECONDS = 5 * 60    # a live slate is refetched this often (~0.9 s CPU per 5 games; ~550 ESPN calls on a 15-game night)
+REFRESH_SECONDS = 60        # a live slate is refetched this often (experiment 2026-10-20, was 5 min: a 15-game night is ~2,750 ESPN calls, ~0.9 s CPU per 5 games)
 IDLE_REFRESH_SECONDS = 3 * 3600  # a slate with nothing started yet (tip-off times can move)
 NEAR_TIP_REFRESH_SECONDS = 3600  # ... hourly once the first tip is less than that away
 OVERDUE_SECONDS = 2 * 60    # a page request fetches itself when the poller is this late (stalled, machine slept)
 MIN_SLEEP, MAX_SLEEP = 30, 3 * 3600  # the poller sleeps until the next thing is due, within these
-FORCE_FLOOR_SECONDS = 120   # the Refresh button can't go faster than this
+FORCE_FLOOR_SECONDS = 60    # the Refresh button can't go faster than this
 SCALE_SECONDS = 60 * 60     # league pools and the name index change slowly
 NBA_TZ = ZoneInfo('America/New_York')  # an NBA "day" is an Eastern-time date
 

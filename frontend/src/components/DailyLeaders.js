@@ -7,7 +7,7 @@ import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsCla
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
 // highlighted, other teams' dimmed, free agents plain. The server refetches ESPN at most every
-// 5 minutes while games are on (a background poller, page open or not); the page re-asks when new data can exist.
+// a minute while games are on (a background poller, page open or not); the page re-asks when new data can exist.
 const shiftDate = (iso, days) => {
   const d = new Date(`${iso}T12:00:00`);
   d.setDate(d.getDate() + days);
@@ -201,7 +201,7 @@ const DailyLeaders = ({ config }) => {
         : data.games.length ? 'Final' : 'No games'}
       {data.next_refresh_at && (
         <button onClick={() => load(true)} disabled={refreshing} aria-label="Refresh"
-                className="text-nba-orange disabled:opacity-50 px-1" title="Refetch now (the server fetches at most every 2 minutes, so a second click soon after changes nothing)">
+                className="text-nba-orange disabled:opacity-50 px-1" title="Refetch now (the server fetches at most once a minute, so a second click soon after changes nothing)">
           {refreshing ? '…' : justChecked ? <span className="text-gray-400 text-[11px]">Up to date</span> : '↻'}
         </button>
       )}
