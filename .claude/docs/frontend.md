@@ -87,6 +87,12 @@ must keep its `sm:` twin.
   contents, not the row: an opacity on the row lets scrolled cells show through the pinned ones. Their category
   tints stay (only the text fades), so a taken player's bad night shows why it ranked low. My rows lay the
   tint as a translucent overlay on the yellow `bg-row-mine` (two bg classes on one cell: yellow won).
+  Points leagues tint their box columns too: `daily_leaders._tint_box_columns` fills `z[column]` = fantasy
+  points that column paid (FG/FT: made + attempted weights) vs the day's 10+ minute lines, mean/SD, same
+  `zTint` steps; columns the league doesn't score stay plain; needs 8+ such lines.
+  Desktop is dense (owner, 2026-10-20): tabs and Fantasy Teams (collapsed by default, a muted one-liner) hug the top;
+  title, date, owner chips, Best|Pace, scoreboard and status share one wrapping row; the scoreboard drops to
+  its own scrolling row only past `INLINE_GAMES` (6) games.
 - Draft board: the key/legend is off on phones; the room strip is one line (top bid, spot bar, aim %,
   room factor once picks have prices, pace only when it warns) with team chips behind "Teams".
 - The board's scroll box fills the rest of the screen on phones (measured in `DraftBoard`), so the

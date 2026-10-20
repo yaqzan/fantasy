@@ -548,6 +548,31 @@ def _opponent_abv(league, day):
     return (week or {}).get('opponent') or None
 
 
+BOX_COLUMN_STATS = {'PTS': ('PTS',), 'REB': ('REB',), 'AST': ('AST',), 'STL': ('STL',), 'BLK': ('BLK',),
+                    'FG3M': ('FG3M',), 'FG': ('FGM', 'FGA'), 'FT': ('FTM', 'FTA'), 'TOV': ('TOV',)}
+TINT_MIN_MINUTES, TINT_MIN_POOL = 10, 8
+
+
+def _tint_box_columns(players, weights):
+    """Points leagues have no category z, so colour each box-score column by what it paid in fantasy
+    points tonight against the rest of the day's rotation (lines of TINT_MIN_MINUTES+): p['z'][column]
+    = (points from that column - pool mean) / pool SD, same scale as the category z tints. Columns the
+    league doesn't score get no entry, so they stay plain."""
+    def paid(p, stats):
+        return sum((p.get(s) or 0) * weights.get(s, 0) for s in stats)
+    pool = [p for p in players if (p.get('MIN') or 0) >= TINT_MIN_MINUTES]
+    for col, stats in BOX_COLUMN_STATS.items():
+        if not any(weights.get(s) for s in stats) or len(pool) < TINT_MIN_POOL:
+            continue
+        vals = [paid(p, stats) for p in pool]
+        mean = sum(vals) / len(vals)
+        sd = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5
+        if not sd:
+            continue
+        for p in players:
+            p['z'][col] = round(max(-3.0, min(3.0, (paid(p, stats) - mean) / sd)), 2)
+
+
 def daily_leaders(league, day=None, force=False):
     from projections import norm_name
     day = day or default_day()
@@ -578,6 +603,8 @@ def daily_leaders(league, day=None, force=False):
                 **signals(line, bases.get(norm_name(line['name'])), league, scale, streaks_on,
                           preseason=bool(game and game.get('preseason'))),
             })
+    if league.is_points:
+        _tint_box_columns(players, league.point_weights)
     players.sort(key=lambda p: p['value'], reverse=True)
     for rank, p in enumerate(players, start=1):
         p['rank'] = rank

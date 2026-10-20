@@ -208,20 +208,32 @@ const DailyLeaders = ({ config }) => {
   // Points leagues: FPTS is the primary column in every sort (wider, bold; pace goes under it in Pace
   // order), paid for by narrower stat columns, which hold plain 1-2 digit counts there:
   // 166 + 48 + 5 x 32 = 374px, against 166 + 38 + 5 x 36 = 384px for categories.
-  const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
+  const INLINE_GAMES = 6;
+  const inlineBoard = (data?.games?.length || 0) > 0 && data.games.length <= INLINE_GAMES;
+  const scoreboard = (
+    <div className="flex gap-1.5 overflow-x-auto thin-scrollbar">
+      {orderGames(data?.games || []).map(g => (
+        <GameChip key={g.id} game={g} selected={g.id === gameId} dimmed={gameId !== null && g.id !== gameId}
+                  onToggle={() => setGameId(id => toggleGame(id, g.id))} />
+      ))}
+    </div>
+  );
+  const PLAYER_W ='w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
   const VALUE_W = points
     ? 'w-[3rem] min-w-[3rem] max-w-[3rem] sm:w-20 sm:min-w-[5rem] sm:max-w-none left-[10.375rem] sm:left-60'
     : 'w-[2.375rem] min-w-[2.375rem] max-w-[2.375rem] sm:w-16 sm:min-w-[4rem] sm:max-w-none left-[10.375rem] sm:left-60';
   const STAT_W = points ? 'min-w-[2rem] px-0.5 sm:min-w-0 sm:px-2' : 'min-w-[2.25rem] px-0.5 sm:min-w-0 sm:px-2';
   return (
-    <div className="py-2 sm:p-6">
+    <div className="py-2 sm:px-2 sm:py-1">
       {/* Phones: date stepper, the three owner chips (tap the lit one to go back to everything)
           and the sort toggle share ONE row (`contents` flattens the two sm: rows into it).
           Status text and Today link are desktop-only: on a phone the date turns orange on
-          today, and tapping the date from another day jumps back to today. */}
-      <div className="flex items-center justify-between gap-0.5 mb-2 sm:block sm:mb-0">
-      <div className="contents sm:flex sm:items-center sm:gap-2 sm:mb-3">
-        <h2 className="hidden sm:block text-2xl font-bold text-white mr-4">Daily Leaders</h2>
+          today, and tapping the date from another day jumps back to today.
+          Desktop: the same pieces plus the scoreboard share one wrapping row; with more games than
+          INLINE_GAMES the scoreboard drops to its own scrolling row below instead. */}
+      <div className="flex items-center justify-between gap-0.5 mb-2 sm:flex sm:flex-wrap sm:justify-start sm:gap-x-3 sm:gap-y-1 sm:mb-1.5">
+      <div className="contents">
+        <h2 className="hidden sm:block text-lg font-bold text-white">Daily Leaders</h2>
         <div className="relative shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
           <button onClick={() => shown && (!minDay || shown > minDay) && setDay(shiftDate(shown, -1))}
                   className="px-3 sm:px-3 py-2.5 min-w-[2.75rem] text-gray-300 hover:text-white rounded-l-md touch-manipulation" aria-label="Previous day">‹</button>
@@ -256,10 +268,10 @@ const DailyLeaders = ({ config }) => {
         {data && shown !== data.today && (
           <button onClick={() => setDay(data.today)} className="hidden sm:block text-xs text-nba-orange px-1">Today</button>
         )}
-        <span className="hidden sm:block ml-auto">{status}</span>
+        <span className="hidden sm:block sm:order-last sm:ml-auto">{status}</span>
       </div>
 
-      <div className="contents sm:flex sm:gap-1 sm:mb-3 sm:overflow-x-auto">
+      <div className="contents">
         {OWNER_FILTERS.map(([key, label, short]) => (
           <button key={key} onClick={() => setView({ owner: ownerFilter === key ? 'all' : key })}
                   aria-pressed={ownerFilter === key}
@@ -268,7 +280,7 @@ const DailyLeaders = ({ config }) => {
             <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="hidden sm:inline opacity-70"> {counts[key]}</span> : ''}
           </button>
         ))}
-        <div className="sm:ml-auto shrink-0 flex rounded-full border border-gray-600 text-xs overflow-hidden"
+        <div className="shrink-0 flex rounded-full border border-gray-600 text-xs overflow-hidden"
              title="Best: what he put up tonight in this league's scoring. Pace: how far ahead of his own per-minute norm.">
           {[['val', 'Best'], ['pace', 'Pace']].map(([key, label]) => (
             <button key={key} onClick={() => setView({ sort: key })}
@@ -276,10 +288,11 @@ const DailyLeaders = ({ config }) => {
           ))}
         </div>
       </div>
+      {inlineBoard && <div className="hidden sm:flex sm:flex-1 sm:min-w-0">{scoreboard}</div>}
       </div>
 
       {(data?.espn_folded?.folded > 0 || data?.stats_refresh) && (
-        <div className="text-[11px] sm:text-xs text-gray-400 mb-2">
+        <div className="text-[11px] sm:text-xs text-gray-400 mb-2 sm:mb-1">
           Season averages: {data.espn_folded?.folded > 0 ? 'include tonight (ESPN)' : 'not updated yet'}
           {data.stats_refresh && <> · official NBA {data.stats_refresh.done
             ? (['refreshed', 'already refreshed'].includes(data.stats_refresh.last) ? 'confirmed' : data.stats_refresh.last)
@@ -288,12 +301,7 @@ const DailyLeaders = ({ config }) => {
       )}
 
       {data?.games?.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2 sm:mb-3">
-          {orderGames(data.games).map(g => (
-            <GameChip key={g.id} game={g} selected={g.id === gameId} dimmed={gameId !== null && g.id !== gameId}
-                      onToggle={() => setGameId(id => toggleGame(id, g.id))} />
-          ))}
-        </div>
+        <div className={`${inlineBoard ? 'sm:hidden' : ''} flex gap-1.5 overflow-x-auto pb-1 mb-2 sm:mb-1.5`}>{scoreboard}</div>
       )}
 
       {error && <div className="text-red-400 text-sm mb-2">{error}</div>}
@@ -379,11 +387,11 @@ const DailyLeaders = ({ config }) => {
                     </td>
                     {columns.map(c => {
                       // My rows: the tint is a translucent layer over the yellow, so both show.
-                      const tint = points ? '' : zTint(p.z?.[c.key]);
+                      const tint = zTint(p.z?.[c.key]);
                       return (
                         <td key={c.key}
                             className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 ${mine ? 'bg-row-mine relative' : tint}`}
-                            title={!points && p.z?.[c.key] != null ? `z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : undefined}>
+                            title={p.z?.[c.key] != null ? `z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : undefined}>
                           {mine && tint && <span className={`absolute inset-0 ${tint}`} />}
                           <span className={`${fade} ${mine ? `relative ${tint.includes('text-white') ? 'text-white' : ''}` : ''}`}>{p.dnp ? '–' : cellText(c.key, p)}</span>
                         </td>
