@@ -74,7 +74,7 @@ must keep its `sm:` twin.
   App.js): rosters in a 2-column grid, no fold, no Add team (teams come from the platform syncs; the
   edit pencil stays). Wider screens keep the panel above the tabs.
 - Desktop toolbars (owner, 2026-10-20): no "Daily Leaders" title; the date stepper (Daily Leaders) and the search box (Player Rankings) are the same
-  18rem x 42px slot at the left of the row, same look, so the first control never moves between tabs; the rest of the row follows at the same x.
+  14rem x 42px slot at the left of the row, same look, so the first control never moves between tabs; the rest of the row follows at the same x.
 - Player Rankings table (in-season) copies Daily Leaders' geometry so tab switches don't jump (owner, 2026-10-20): bare toolbar row
   (60px min, same on both tabs), pinned 15rem Player column (rank + the owner's two-letter chip under it (`OwnerChip`: first and last word's initials, else the first two letters; a muted tint hashed from the name) (other teams only; `fantasy_teams.owner_name`, the Yahoo manager nickname filled by `pull_yahoo sync`, else the team name), name, `F · BOS · 2 + 4 GP`; no status text: dimming
   and the chip say it), 4rem OVR column (5rem in points leagues), stat cards (value + percentile, tinted), stats in `orderColumns` order. Header
@@ -98,7 +98,7 @@ must keep its `sm:` twin.
   `zTint` steps; columns the league doesn't score stay plain; needs 8+ such lines.
   Desktop is dense (owner, 2026-10-20): tabs and Fantasy Teams (collapsed by default, a muted one-liner) hug the top;
   title, date, owner chips, Best|Pace, scoreboard and status share one wrapping row; the scoreboard drops to
-  its own scrolling row only past `INLINE_GAMES` (6) games.
+  its own scrolling row only past `INLINE_GAMES` (8) games; the "All" chip is gone everywhere (tap the lit owner chip to clear it); "next HH:MM" shows from 2xl up.
 - Draft board: the key/legend is off on phones; the room strip is one line (top bid, spot bar, aim %,
   room factor once picks have prices, pace only when it warns) with team chips behind "Teams".
 - The board's scroll box fills the rest of the screen on phones (measured in `DraftBoard`), so the

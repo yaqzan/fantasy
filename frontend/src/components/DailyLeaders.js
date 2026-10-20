@@ -198,7 +198,7 @@ const DailyLeaders = ({ config }) => {
     <span className="text-gray-400 text-[11px] sm:text-xs flex items-center gap-1.5 whitespace-nowrap">
       {data.live && <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
       {data.next_refresh_at
-        ? <>{clock(data.fetched_at)}<span className="hidden sm:inline"> · next {clock(data.next_refresh_at)}</span></>
+        ? <>{clock(data.fetched_at)}<span className="hidden 2xl:inline"> · next {clock(data.next_refresh_at)}</span></>
         : data.games.length ? 'Final' : 'No games'}
       {data.next_refresh_at && (
         <button onClick={() => load(true)} disabled={refreshing} aria-label="Refresh"
@@ -217,7 +217,7 @@ const DailyLeaders = ({ config }) => {
   // Points leagues: FPTS is the primary column in every sort (wider, bold; pace goes under it in Pace
   // order), paid for by narrower stat columns, which hold plain 1-2 digit counts there:
   // 166 + 48 + 5 x 32 = 374px, against 166 + 38 + 5 x 36 = 384px for categories.
-  const INLINE_GAMES = 6;
+  const INLINE_GAMES = 8;
   const inlineBoard = (data?.games?.length || 0) > 0 && data.games.length <= INLINE_GAMES;
   const scoreboard = (
     <div className="flex gap-1.5 overflow-x-auto thin-scrollbar">
@@ -238,11 +238,11 @@ const DailyLeaders = ({ config }) => {
           and the sort toggle share ONE row (`contents` flattens the two sm: rows into it).
           Status text and Today link are desktop-only: on a phone the date turns orange on
           today, and tapping the date from another day jumps back to today.
-          Desktop: the date stepper sits in the same 18rem slot Player Rankings gives its search box, styled like it; the pieces plus the scoreboard share one wrapping row; with more games than
+          Desktop: the date stepper sits in the same 14rem slot Player Rankings gives its search box, styled like it; the pieces plus the scoreboard share one wrapping row; with more games than
           INLINE_GAMES the scoreboard drops to its own scrolling row below instead. */}
-      <div className="flex items-center justify-between gap-0.5 mb-2 sm:flex sm:flex-wrap sm:justify-start sm:gap-x-4 sm:gap-y-1 sm:mb-1.5 sm:min-h-[60px]">
+      <div className="flex items-center justify-between gap-0.5 mb-2 sm:flex sm:flex-wrap sm:justify-start sm:gap-x-3 sm:gap-y-1 sm:mb-1.5 sm:min-h-[60px]">
       <div className="contents">
-        <div className="relative shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm sm:text-base sm:w-72 sm:h-[42px]">
+        <div className="relative shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm sm:text-base sm:w-56 sm:h-[42px]">
           <button onClick={() => shown && (!minDay || shown > minDay) && setDay(shiftDate(shown, -1))}
                   className="px-3 sm:px-3 py-2.5 min-w-[2.75rem] text-gray-300 hover:text-white rounded-l-md touch-manipulation" aria-label="Previous day">‹</button>
           {/* Tap: the calendar, limited to the season (preseason to playoffs). Hold: back to today.
@@ -283,7 +283,7 @@ const DailyLeaders = ({ config }) => {
         {OWNER_FILTERS.map(([key, label, short]) => (
           <button key={key} onClick={() => setView({ owner: ownerFilter === key ? 'all' : key })}
                   aria-pressed={ownerFilter === key}
-                  className={`shrink-0 px-1.5 sm:px-2.5 py-1 rounded-full border text-xs font-medium ${key === 'all' ? 'hidden sm:block' : ''} ${ownerFilter === key
+                  className={`shrink-0 px-1.5 sm:px-2.5 py-1 rounded-full border text-xs font-medium ${key === 'all' ? 'hidden' : ''} ${ownerFilter === key
                     ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-600 text-gray-300 hover:text-white'}`}>
             <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="hidden sm:inline opacity-70"> {counts[key]}</span> : ''}
           </button>

@@ -49,7 +49,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
   }));
 
   return (
-    // In-season: the search box takes the 18rem slot Daily Leaders gives its date stepper, and the toolbar sits bare above the table card at the same offsets as Daily Leaders, so the
+    // In-season: the search box takes the 14rem slot Daily Leaders gives its date stepper, and the toolbar sits bare above the table card at the same offsets as Daily Leaders, so the
     // two tabs line up. Draft mode keeps its single card.
     <div className={draftMode ? 'bg-gray-800 rounded-lg shadow-xl' : 'py-2 sm:px-2 sm:py-1'}>
       <div className={draftMode ? 'px-2 sm:px-6 py-2 sm:py-4 border-b border-gray-700 overflow-x-hidden' : 'mb-2 sm:mb-1.5 sm:min-h-[60px] flex flex-col justify-center overflow-x-hidden'}>
@@ -61,7 +61,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
             </select>
           </div>
 
-          <div className="flex gap-2 flex-1 order-first sm:flex-none sm:w-72">
+          <div className="flex gap-2 flex-1 order-first sm:flex-none sm:w-56">
             <div className="relative flex-1">
               <input
                 type="text"
