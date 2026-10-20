@@ -222,15 +222,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
   };
 
 
-  const getTeamBadgeColor = (teamId) => {
-    const colors = [
-      'bg-red-600', 'bg-blue-600', 'bg-green-600', 'bg-yellow-600',
-      'bg-purple-600', 'bg-pink-600', 'bg-indigo-600', 'bg-orange-600',
-      'bg-teal-600', 'bg-cyan-600', 'bg-emerald-600', 'bg-rose-600'
-    ];
-    return colors[teamId % colors.length];
-  };
-
   return (
     <>
       {/* Same geometry as the Daily Leaders table (card, pinned 15rem Player column with rank + name, 4rem
@@ -245,7 +236,10 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   <span className="cursor-pointer hover:text-white" onClick={() => handleSort('name')}>Player <SortIcon columnKey="name" /></span>
                 </div>
               </th>
-              <th title="Available, or the fantasy team that owns him" className={`table-header text-center px-0.5 border-r border-gray-700 ${caps.scoring === 'points' ? 'sm:w-20 sm:min-w-[5rem]' : 'sm:w-16 sm:min-w-[4rem]'}`}>Status</th>
+              <th className={`table-header text-center px-0.5 border-r border-gray-700 cursor-pointer hover:text-white whitespace-nowrap ${caps.scoring === 'points' ? 'sm:w-20 sm:min-w-[5rem]' : 'sm:w-16 sm:min-w-[4rem]'}`}
+                  onClick={() => handleSort('z_score')} title="Overall rating (0-100): how he scores across your league's categories. Click to sort.">
+                OVR <SortIcon columnKey="z_score" />
+              </th>
               {CATEGORIES.map(category => {
                 const isPunted = !includedCategories.includes(category);
                 return (
@@ -290,11 +284,19 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
               return (
               <tr key={player.name} className={`group border-t border-gray-700 ${player.drafted ? 'drafted-row' : ''}`}>
                 <td className={`sticky left-0 z-10 px-2 py-1.5 ${PLAYER_W} ${bg} ${mine ? 'shadow-[inset_3px_0_0_rgb(var(--mine))]' : ''}`}>
-                  <div className={`flex items-baseline gap-1.5 ${fade}`}>
-                    <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right"
-                          title={customScores[player.name] ? `Rank ${rank} with your punts (was ${getOverallRank(player)})` : undefined}>
-                      {loadingCustomScores ? '…' : rank}
-                    </span>
+                  <div className={`flex items-center gap-1.5 ${fade}`}>
+                    <div className="w-5 shrink-0 flex flex-col items-center gap-0.5">
+                      <span className="text-gray-500 tabular-nums text-[11px] leading-none"
+                            title={customScores[player.name] ? `Rank ${rank} with your punts (was ${getOverallRank(player)})` : undefined}>
+                        {loadingCustomScores ? '…' : rank}
+                      </span>
+                      {player.drafted && (
+                        <span className={`w-4 h-4 rounded-full border text-[9px] leading-[14px] text-center font-semibold ${mine ? 'border-mine text-mine' : 'border-gray-500 text-gray-300'}`}
+                              title={player.fantasy_team?.name || player.fantasy_team?.abbreviation}>
+                          {(player.fantasy_team?.name || player.fantasy_team?.abbreviation || '?')[0].toUpperCase()}
+                        </span>
+                      )}
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1 min-w-0">
                         <PlayerName id={player.id} name={player.name} className={`font-medium truncate min-w-0 ${mine ? 'text-mine' : 'text-white'}`} />
@@ -317,16 +319,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     </div>
                   </div>
                 </td>
-                <td className={`text-center px-0.5 whitespace-nowrap border-r border-gray-700 ${bg}`}>
-                  <span className={fade}>
-                    {player.drafted ? (
-                      <span className={`team-badge text-white ${getTeamBadgeColor(player.fantasy_team?.id || 0)}`}>
-                        {player.fantasy_team?.abbreviation || player.fantasy_team?.name || 'Unknown'}
-                      </span>
-                    ) : (
-                      <span className="text-green-400 font-medium text-[11px]">Avail</span>
-                    )}
-                  </span>
+                <td className={`text-center px-0.5 whitespace-nowrap border-r border-gray-700 tabular-nums font-medium text-gray-200 ${bg}`}>
+                  <span className={fade}>{Math.round(customScores[player.name]?.custom_z_score ?? getZScore(player))}</span>
                 </td>
                 {CATEGORIES.map(category => {
                   const stat = player.stats[category];

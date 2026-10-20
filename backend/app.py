@@ -241,6 +241,12 @@ def get_fantasy_players():
     top = sorted(player_stats.items(), key=lambda x: min(x[1].get('Z-RANK', 999), x[1].get('Z-RANK_proj', 999),
                                                          x[1].get('Z-RANK_pre', 999)))[:400]
     players_by_name = {p.name: p for p in Player.select().where(Player.name.in_([name for name, _ in top]))}
+    # A small sample is relative to how far into the season it is: one game is the norm in week one (players
+    # whose team hasn't played yet still carry last season's GP, so the games played so far can't be read off the players).
+    from player_stats import season_first_game
+    opened = season_first_game()
+    expected_gp = ((date.today() - opened).days * 0.5 + 1) if opened and date.today() >= opened else 0   # a team plays about every 2 days
+    small_floor = min(floor, expected_gp / 2)
 
     players_data = []
     stats_all = player_stats
@@ -273,7 +279,7 @@ def get_fantasy_players():
             'position': player.pos if player and player.pos else "Unknown",
             'positions': list(stats.get('Positions') or ()),
             'games_played': player.gp if player and player.gp else 0,
-            'small_sample': 0 < (stats.get('GP') or 0) < floor,
+            'small_sample': 0 < (stats.get('GP') or 0) < small_floor,
             'projected_only': not stats.get('GP') and 'GP_proj' in stats,
             'projected_games': round(stats.get('GP_proj', 0)),
             'current_week_games': current_week_games.get(full_team_name, 0),
