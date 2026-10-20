@@ -43,6 +43,24 @@ export const zTint = (z) => {
   return a >= 2 ? 'bg-red-500/40 text-white' : a >= 1 ? 'bg-red-500/25' : 'bg-red-500/10';
 };
 
+// The Player Rankings card look for one Daily Leaders stat cell, from its category z: a bordered tinted card
+// in four steps, the top ones with a glow (the same classes as Player Rankings' score cards). Inside half
+// an SD it is a faint neutral card. Returns [card classes, text colour].
+export const zCard = (z) => {
+  if (z === null || z === undefined || Math.abs(z) < 0.5) return ['bg-gray-800/10 border-gray-700/20', ''];
+  const a = Math.abs(z);
+  if (z > 0) {
+    if (a >= 2) return ['bg-green-900/60 border-green-400/80 shadow-lg shadow-green-400/30', 'text-green-300 font-semibold'];
+    if (a >= 1.5) return ['bg-green-900/50 border-green-500/70 shadow-md shadow-green-500/25', 'text-green-400 font-semibold'];
+    if (a >= 1) return ['bg-green-900/40 border-green-600/60', 'text-green-400'];
+    return ['bg-green-900/30 border-green-700/50', 'text-green-500'];
+  }
+  if (a >= 2) return ['bg-red-900/60 border-red-400/80 shadow-lg shadow-red-400/30', 'text-red-300 font-semibold'];
+  if (a >= 1.5) return ['bg-red-900/50 border-red-500/70 shadow-md shadow-red-500/25', 'text-red-400 font-semibold'];
+  if (a >= 1) return ['bg-red-900/40 border-red-600/60', 'text-red-400'];
+  return ['bg-red-900/30 border-red-700/50', 'text-red-500'];
+};
+
 // [key, label, phone label]
 export const OWNER_FILTERS = [['all', 'All', 'All'], ['free', 'Available', 'Avail'],['mine', 'My team', 'Mine']];
 

@@ -3,7 +3,7 @@ import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
 import OwnerChip from './OwnerChip';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zTint, keepRow, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zCard, keepRow, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -397,14 +397,16 @@ const DailyLeaders = ({ config }) => {
                       </span>}
                     </td>
                     {columns.map(c => {
-                      // My rows: the tint is a translucent layer over the yellow, so both show.
-                      const tint = zTint(p.z?.[c.key]);
+                      // Player Rankings' card: tinted box (glow on the extremes) around the value. The card is
+                      // translucent, so my rows' yellow shows through it; taken rows fade only the text.
+                      const [card, textTone] = p.dnp ? ['border-transparent', ''] : zCard(p.z?.[c.key]);
                       return (
                         <td key={c.key}
-                            className={`text-center tabular-nums whitespace-nowrap ${STAT_W} text-gray-200 ${mine ? 'bg-row-mine relative' : tint}`}
+                            className={`text-center tabular-nums whitespace-nowrap ${STAT_W} py-1 text-gray-200 ${mine ? 'bg-row-mine' : ''}`}
                             title={p.z?.[c.key] != null ? `z ${p.z[c.key] > 0 ? '+' : ''}${p.z[c.key]}` : undefined}>
-                          {mine && tint && <span className={`absolute inset-0 ${tint}`} />}
-                          <span className={`${fade} ${mine ? `relative ${tint.includes('text-white') ? 'text-white' : ''}` : ''}`}>{p.dnp ? '–' : cellText(c.key, p)}</span>
+                          <div className={`mx-auto px-1 py-0.5 rounded border ${card}`}>
+                            <span className={`${fade} ${textTone}`}>{p.dnp ? '–' : cellText(c.key, p)}</span>
+                          </div>
                         </td>
                       );
                     })}
