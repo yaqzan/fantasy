@@ -14,8 +14,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
   const CATEGORY_NAMES = Object.fromEntries(categoryMeta.map(c => [c.key, c.label]));
   const PERCENTAGE_CATEGORIES = categoryMeta.filter(c => c.percent).map(c => c.key);
   const caps = config?.capabilities || {};
-  // Snake and offline drafts: the round a player's rank goes in, from the team count.
-  const numTeams = config?.league?.settings?.num_teams || 1;
   const [sortConfig, setSortConfig] = useState({ key: 'overall_rank', direction: 'asc' });
   const [draftModalPlayer, setDraftModalPlayer] = useState(null);
   const includedCategories = CATEGORIES.filter(c => !puntCategories.includes(c));
@@ -379,10 +377,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   Player <SortIcon columnKey="name" />
                 </div>
               </th>
-              {/* Auction $ values are a draft tool: this table is the in-season view, so an auction league gets no column */}
-              {!caps.auction && (
-                <th className="table-header w-12" title={`The draft round his rank goes in (${numTeams} teams)`}>Rd</th>
-              )}
               {CATEGORIES.map(category => {
                 const isPunted = !includedCategories.includes(category);
                 return (
@@ -457,21 +451,17 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                           INJ{player.injured_return ? ` - ${player.injured_return}` : ''}{player.injured_games ? ` (${player.injured_games} missed)` : ''}
                         </span>
                       )}
-                      {[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined && (
-                        <React.Fragment key={i}>
-                          {' | '}
-                          <span className="text-gray-300">{player[i ? 'next_week_games' : 'current_week_games']} GP</span>
-                          <span className="text-gray-500"> ({weekRange(week)})</span>
-                        </React.Fragment>
-                      ))}
+                      {player.current_week_games !== undefined && config.current_week && (
+                        <span className="text-gray-300"
+                              title={[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined
+                                ? `${player[i ? 'next_week_games' : 'current_week_games']} games ${weekRange(week)}` : null).filter(Boolean).join(' · ')}>
+                          {' | '}{[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined
+                            ? player[i ? 'next_week_games' : 'current_week_games'] : null).filter(v => v !== null).join('+')} GP
+                        </span>
+                      )}
                     </div>
                   </div>
                 </td>
-                {!caps.auction && (
-                  <td className="table-cell text-gray-400">
-                    {Math.ceil((customScores[player.name]?.custom_z_rank || getOverallRank(player) || 0) / numTeams) || '-'}
-                  </td>
-                )}
                 {CATEGORIES.map(category => {
                   const stat = player.stats[category];
                   const isPunted = !includedCategories.includes(category);
