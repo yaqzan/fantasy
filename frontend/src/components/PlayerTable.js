@@ -68,53 +68,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     );
   };
 
-  // Get custom score display with change
-  const getCustomScoreDisplay = (playerName, originalScore) => {
-    const customScore = customScores[playerName];
-    const roundedOriginal = Math.round(originalScore);
-    
-    if (!customScore) {
-      return (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${getZScoreColor(roundedOriginal)}`}>
-          {roundedOriginal}
-        </span>
-      );
-    }
-
-    const customScoreValue = customScore.custom_z_score;
-    const roundedCustom = Math.round(customScoreValue);
-    const scoreDiff = roundedCustom - roundedOriginal;
-    
-    if (Math.abs(scoreDiff) < 1) {
-      return (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${getZScoreColor(roundedCustom)}`}>
-          {roundedCustom}
-        </span>
-      );
-    }
-    
-    let colorClass = 'text-gray-400';
-    let symbol = '';
-    
-    if (scoreDiff > 0) {
-      colorClass = 'text-green-400';
-      symbol = '+';
-    } else if (scoreDiff < 0) {
-      colorClass = 'text-red-400';
-    }
-    
-    return (
-      <div className="flex items-center space-x-1">
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${getZScoreColor(roundedCustom)}`}>
-          {roundedCustom}
-        </span>
-        <span className={`text-xs ${colorClass}`}>
-          ({symbol}{scoreDiff})
-        </span>
-      </div>
-    );
-  };
-
   // Green/Red gradient with clear text for stat values
   const getStatTextColor = (score, isInverse = false) => {
     if (score > 55) {
@@ -134,47 +87,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     }
     // Score between 45-55 - default color
     return 'text-white';                              // Default white
-  };
-
-  // Green/Red gradient for score ranks (smaller text, readable but less prominent)
-  const getScoreColor = (score, isInverse = false) => {
-    if (score > 55) {
-      // Green spectrum with readable text
-      if (score >= 90) return 'text-green-400';      // High intensity green
-      if (score >= 80) return 'text-green-500';      // Medium-high intensity green
-      if (score >= 70) return 'text-green-500';      // Medium intensity green
-      if (score >= 60) return 'text-green-500';      // Medium intensity green
-      return 'text-green-500';                       // Medium intensity green
-    } else if (score < 45) {
-      // Red spectrum with readable text
-      if (score <= 10) return 'text-red-400';         // High intensity red
-      if (score <= 20) return 'text-red-500';        // Medium-high intensity red
-      if (score <= 30) return 'text-red-500';        // Medium intensity red
-      if (score <= 40) return 'text-red-500';        // Medium intensity red
-      return 'text-red-500';                         // Medium intensity red
-    }
-    // Score between 45-55 - default color
-    return 'text-white';                              // Default white
-  };
-
-  const getScoreBgColor = (score, isInverse = false) => {
-    if (score > 55) {
-      // Green spectrum with opacity scaling
-      if (score >= 90) return 'bg-green-900/60 border-green-400/80 shadow-lg shadow-green-400/30';     // High opacity green with halo
-      if (score >= 80) return 'bg-green-900/50 border-green-500/70 shadow-md shadow-green-500/25';     // Medium-high opacity green with subtle halo
-      if (score >= 70) return 'bg-green-900/40 border-green-600/60';     // Medium opacity green
-      if (score >= 60) return 'bg-green-900/30 border-green-700/50';     // Medium-low opacity green
-      return 'bg-green-900/20 border-green-900/30';                       // Very low opacity green
-    } else if (score < 45) {
-      // Red spectrum with opacity scaling
-      if (score <= 10) return 'bg-red-900/60 border-red-400/80 shadow-lg shadow-red-400/30';             // High opacity red with halo
-      if (score <= 20) return 'bg-red-900/50 border-red-500/70 shadow-md shadow-red-500/25';            // Medium-high opacity red with subtle halo
-      if (score <= 30) return 'bg-red-900/40 border-red-600/60';         // Medium opacity red
-      if (score <= 40) return 'bg-red-900/30 border-red-700/50';         // Medium-low opacity red
-      return 'bg-red-900/20 border-red-900/30';                          // Very low opacity red
-    }
-    // Score between 45-55 - default background
-    return 'bg-gray-800/10 border-gray-700/20';                          // Very subtle neutral
   };
 
   // Get aura styling based on hot/cold intensity
@@ -224,27 +136,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     return <span className={`text-xs font-semibold ${r > 0 ? 'text-green-400' : 'text-red-400'}`} title={title}>{r > 0 ? '▲' : '▼'}{Math.abs(r)}</span>;
   };
   const preView = statType === 'pre';
-  const trendKey = preView ? 'pre_trend' : 'hot_overall';
-
-  const getZScoreColor = (score) => {
-    if (score > 55) {
-      // Green spectrum with clear text
-      if (score >= 90) return 'bg-green-500 text-white shadow-lg shadow-green-500/40';      // High intensity green with halo
-      if (score >= 80) return 'bg-green-600 text-white shadow-md shadow-green-600/30';      // Medium-high intensity green with subtle halo
-      if (score >= 70) return 'bg-green-700 text-white';      // Medium intensity green
-      if (score >= 60) return 'bg-green-800 text-white';      // Medium-low intensity green
-      return 'bg-green-900 text-white';                       // Very low intensity green
-    } else if (score < 45) {
-      // Red spectrum with clear text
-      if (score <= 10) return 'bg-red-500 text-white shadow-lg shadow-red-500/40';           // High intensity red with halo
-      if (score <= 20) return 'bg-red-600 text-white shadow-md shadow-red-600/30';          // Medium-high intensity red with subtle halo
-      if (score <= 30) return 'bg-red-700 text-white';         // Medium intensity red
-      if (score <= 40) return 'bg-red-800 text-white';         // Medium-low intensity red
-      return 'bg-red-900 text-white';                          // Very low intensity red
-    }
-    // Score between 45-55 - default background
-    return 'bg-gray-700 text-white';                           // Neutral gray
-  };
 
   const handleSort = (key) => {
     let direction;
@@ -352,25 +243,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   Rank <SortIcon columnKey="overall_rank" />
                 </div>
               </th>
-              <th 
-                className="table-header cursor-pointer hover:bg-gray-600 w-20 text-left"
-                onClick={() => handleSort('z_score')}
-              >
-                <div className="flex items-center">
-                  OVR <SortIcon columnKey="z_score" />
-                </div>
-              </th>
-              <th 
-                className="table-header cursor-pointer hover:bg-gray-600 w-10 text-center px-1"
-                onClick={() => handleSort(trendKey)}
-                title={preView ? 'Preseason vs projection (OVR points; tap again for fallers)' : 'OVR Trend (5-game vs season)'}
-              >
-                <div className="flex items-center justify-center">
-                  {preView ? 'Δ' : '📈'}<SortIcon columnKey={trendKey} />
-                </div>
-              </th>
-              <th 
-                className="table-header cursor-pointer hover:bg-gray-600 w-48"
+              <th
+                className="table-header cursor-pointer hover:bg-gray-600 w-52"
                 onClick={() => handleSort('name')}
               >
                 <div className="flex items-center">
@@ -382,7 +256,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 return (
                   <th 
                     key={category}
-                    className={`table-header w-24 ${isPunted ? 'opacity-40' : ''}`}
+                    className={`table-header !px-1 ${isPunted ? 'opacity-40' : ''}`}
                   >
                     <div className="flex items-center justify-center space-x-1">
                       {caps.punts && (
@@ -423,7 +297,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     : ''
                 }`}
               >
-                <td className="table-cell text-center">
+                <td className="px-1 py-1 text-center">
                   <div className="flex items-center justify-center">
                     {getCustomRankDisplay(player.name, getOverallRank(player))}
                     {loadingCustomScores && (
@@ -431,18 +305,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     )}
                   </div>
                 </td>
-                <td className="table-cell text-left">
-                  <div className="flex items-center">
-                    {getCustomScoreDisplay(player.name, getZScore(player))}
-                  </div>
-                </td>
-                <td className="table-cell text-center px-1">
-                  {preView ? getPreIndicator(player) : getHotColdIndicator(player)}
-                </td>
-                <td className="table-cell">
+                <td className="px-2 py-1">
                   <div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-1.5">
                       <PlayerName id={player.id} name={player.name} className="font-medium text-white" />
+                      {preView ? getPreIndicator(player) : getHotColdIndicator(player)}
                     </div>
                     <div className="text-xs text-gray-400">
                       {player.positions?.length ? player.positions.join('/') : player.position} | {player.team_abv || 'N/A'}
@@ -479,22 +346,25 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   const displayValue = stat[valueKey] !== undefined ? stat[valueKey] : stat.value;
                   const displayScore = stat[scoreKey] !== undefined ? stat[scoreKey] : stat.score;
                   
+                  // The bar reads the percentile (0-100, 50 = average), never the value: same scale for every stat.
+                  // It grows from the centre tick, green right above average, red left below; length and
+                  // brightness both follow how far from 50 he is.
+                  const dev = Math.max(-50, Math.min(50, (displayScore ?? 50) - 50));
+                  const strength = Math.abs(dev) / 50;
                   return (
-                    <td key={category} className={`table-cell ${isPunted ? 'opacity-40' : ''}`}>
-                      <div className={`px-2 py-1 rounded border ${getScoreBgColor(displayScore, stat.is_inverse)}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs text-gray-400 opacity-60 font-medium">
-                              {CATEGORY_NAMES[category]}:
-                            </span>
-                            <span className={`text-sm font-bold ${getStatTextColor(displayScore, stat.is_inverse)}`}>
-                              {category === 'PLUS_MINUS' && displayValue > 0 ? '+' : ''}{displayValue}{PERCENTAGE_CATEGORIES.includes(category) ? '%' : ''}
-                            </span>
-                          </div>
-                          <span className={`text-xs opacity-75 ${getScoreColor(displayScore, stat.is_inverse)} ml-2`}>
-                            ({displayScore})
-                          </span>
-                        </div>
+                    <td key={category} className={`px-1 py-1 text-center align-middle ${isPunted ? 'opacity-40' : ''}`}
+                        title={`${CATEGORY_NAMES[category]}: percentile ${displayScore}`}>
+                      <div className={`text-sm font-semibold tabular-nums leading-tight ${getStatTextColor(displayScore, stat.is_inverse)}`}>
+                        {category === 'PLUS_MINUS' && displayValue > 0 ? '+' : ''}{displayValue}{PERCENTAGE_CATEGORIES.includes(category) ? '%' : ''}
+                      </div>
+                      <div className="relative mx-auto mt-1 h-[3px] w-14 rounded-full bg-gray-700/60">
+                        <span className="absolute left-1/2 top-[-1px] h-[5px] w-px bg-gray-500" />
+                        <span className="absolute top-0 h-full rounded-full"
+                              style={{
+                                width: `${strength * 50}%`,
+                                ...(dev >= 0 ? { left: '50%' } : { right: '50%' }),
+                                background: dev >= 0 ? `rgba(74,222,128,${0.35 + 0.65 * strength})` : `rgba(248,113,113,${0.35 + 0.65 * strength})`,
+                              }} />
                       </div>
                     </td>
                   );
