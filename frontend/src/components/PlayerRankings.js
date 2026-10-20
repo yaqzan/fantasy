@@ -49,8 +49,10 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
   }));
 
   return (
-    <div className="bg-gray-800 rounded-lg shadow-xl">
-      <div className="px-2 sm:px-6 py-2 sm:py-4 border-b border-gray-700 overflow-x-hidden">
+    // In-season: the toolbar sits bare above the table card at the same offsets as Daily Leaders, so the
+    // two tabs line up. Draft mode keeps its single card.
+    <div className={draftMode ? 'bg-gray-800 rounded-lg shadow-xl' : 'py-2 sm:px-2 sm:py-1'}>
+      <div className={draftMode ? 'px-2 sm:px-6 py-2 sm:py-4 border-b border-gray-700 overflow-x-hidden' : 'mb-2 sm:mb-1.5 sm:min-h-[60px] flex flex-col justify-center overflow-x-hidden'}>
         <div className="flex flex-col lg:flex-row lg:items-center gap-3 sm:gap-4 overflow-x-hidden">
           <div className={`${lever} items-center space-x-2`}>
             <span className="text-sm text-gray-300">Stats:</span>

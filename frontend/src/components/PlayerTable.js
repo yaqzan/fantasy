@@ -7,6 +7,9 @@ import { weekRange } from '../weeks';
 // The in-season player table (draft mode renders DraftBoard instead).
 // priceExponent: null means the league's own draft.price_exponent (the server's default values).
 // punts: categories left out of value (the tab's view state), changed through onPuntsChange.
+// Pinned Player column: the same width as Daily Leaders' so the two tabs line up.
+const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
+
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
   // The league's categories, in display order, with labels and percent/inverse flags.
   const categoryMeta = config?.categories || [];
@@ -23,50 +26,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
   // Unchecking a category punts it (the scores refetch through the effect above)
   const handleCategoryInclusionChange = (category) => onPuntsChange?.(puntCategories.includes(category)
     ? puntCategories.filter(c => c !== category) : [...puntCategories, category]);
-
-  // Get custom rank display with change
-  const getCustomRankDisplay = (playerName, originalRank) => {
-    const customScore = customScores[playerName];
-    if (!customScore) {
-      return (
-        <span className="text-gray-400 text-sm">
-          {originalRank}
-        </span>
-      );
-    }
-
-    const customRank = customScore.custom_z_rank;
-    const rankDiff = originalRank - customRank;
-    
-    if (rankDiff === 0) {
-      return (
-        <span className="text-gray-400 text-sm">
-          {customRank}
-        </span>
-      );
-    }
-    
-    let colorClass = 'text-gray-400';
-    let symbol = '';
-    
-    if (rankDiff > 0) {
-      colorClass = 'text-green-400';
-      symbol = '+';
-    } else if (rankDiff < 0) {
-      colorClass = 'text-red-400';
-    }
-    
-    return (
-      <div className="flex items-center space-x-1">
-        <span className="text-gray-400 text-sm">
-          {customRank}
-        </span>
-        <span className={`text-xs ${colorClass}`}>
-          ({symbol}{rankDiff})
-        </span>
-      </div>
-    );
-  };
 
   // Green/Red gradient with clear text for stat values
   const getStatTextColor = (score, isInverse = false) => {
@@ -272,30 +231,23 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
 
   return (
     <>
-      <div className="overflow-x-auto hide-scrollbar">
-        <table className="min-w-full divide-y divide-gray-700">
-          <thead className="bg-gray-700">
+      {/* Same geometry as the Daily Leaders table (card, pinned 15rem Player column with rank + name, 4rem
+          column, then stats) so switching tabs does not move anything. */}
+      <div className="overflow-x-auto bg-gray-800 rounded-lg shadow-xl">
+        <table className="min-w-full text-xs sm:text-sm">
+          <thead>
             <tr>
-              <th 
-                className="table-header cursor-pointer hover:bg-gray-600 w-16 text-center"
-                onClick={() => handleSort('overall_rank')}
-              >
-                <div className="flex items-center justify-center">
-                  Rank <SortIcon columnKey="overall_rank" />
+              <th className={`table-header sticky left-0 z-20 px-2 ${PLAYER_W}`}>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-5 text-right cursor-pointer hover:text-white" onClick={() => handleSort('overall_rank')} title="Sort by rank">#<SortIcon columnKey="overall_rank" /></span>
+                  <span className="cursor-pointer hover:text-white" onClick={() => handleSort('name')}>Player <SortIcon columnKey="name" /></span>
                 </div>
               </th>
-              <th
-                className="table-header cursor-pointer hover:bg-gray-600 w-52"
-                onClick={() => handleSort('name')}
-              >
-                <div className="flex items-center">
-                  Player <SortIcon columnKey="name" />
-                </div>
-              </th>
+              <th className={`table-header text-center px-0.5 border-r border-gray-700 ${caps.scoring === 'points' ? 'sm:w-20 sm:min-w-[5rem]' : 'sm:w-16 sm:min-w-[4rem]'}`}>Status</th>
               {CATEGORIES.map(category => {
                 const isPunted = !includedCategories.includes(category);
                 return (
-                  <th 
+                  <th
                     key={category}
                     className={`table-header !px-1 ${isPunted ? 'opacity-40' : ''}`}
                   >
@@ -309,8 +261,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                           className="h-3 w-3 text-nba-orange focus:ring-nba-orange border-gray-500 rounded bg-gray-600"
                         />
                       )}
-                      <div 
-                        className="flex items-center cursor-pointer hover:bg-gray-600 px-2 py-1 rounded"
+                      <div
+                        className="flex items-center cursor-pointer hover:bg-gray-600 px-2 rounded"
                         onClick={() => handleSort(`stats.${category}.value`)}
                       >
                         {CATEGORY_NAMES[category]} <SortIcon columnKey={`stats.${category}.value`} />
@@ -320,76 +272,79 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 );
               })}
               <th className="table-header w-12">GP</th>
-              <th className="table-header w-24">Status</th>
-              <th className="table-header w-20">Actions</th>
+              <th className="table-header w-16"></th>
             </tr>
           </thead>
-          <tbody className="bg-gray-800 divide-y divide-gray-700">
-            {sortedPlayers.map((player, index) => (
-              <tr 
-                key={player.name} 
-                className={`hover:bg-gray-700 transition-colors relative ${
-                  player.drafted ? 'drafted-row' : ''
-                } ${
-                  player.fantasy_team?.abbreviation && player.fantasy_team.abbreviation !== config?.MY_TEAM_ABV ? 'opacity-40' : ''
-                } ${
-                  player.fantasy_team?.abbreviation === config?.MY_TEAM_ABV 
-                    ? 'bg-gradient-to-r from-nba-orange/10 via-nba-orange/5 to-transparent shadow-[0_0_8px_rgba(251,146,60,0.25)] ring-1 ring-nba-orange/30' 
-                    : ''
-                }`}
-              >
-                <td className="px-1 py-1 text-center">
-                  <div className="flex items-center justify-center">
-                    {getCustomRankDisplay(player.name, getOverallRank(player))}
-                    {loadingCustomScores && (
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-nba-orange ml-2"></div>
-                    )}
+          <tbody>
+            {sortedPlayers.map((player) => {
+              const mine = player.fantasy_team?.abbreviation === config?.MY_TEAM_ABV;
+              const taken = player.fantasy_team?.abbreviation && !mine;
+              const bg = mine ? 'bg-row-mine' : 'bg-gray-800 group-hover:bg-row-hover';
+              const fade = taken ? 'opacity-40' : '';
+              const rank = customScores[player.name]?.custom_z_rank || getOverallRank(player);
+              const weeks = [config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined
+                ? { n: player[i ? 'next_week_games' : 'current_week_games'], range: weekRange(week) } : null).filter(Boolean);
+              return (
+              <tr key={player.name} className={`group border-t border-gray-700 ${player.drafted ? 'drafted-row' : ''}`}>
+                <td className={`sticky left-0 z-10 px-2 py-1.5 ${PLAYER_W} ${bg} ${mine ? 'shadow-[inset_3px_0_0_rgb(var(--mine))]' : ''}`}>
+                  <div className={`flex items-baseline gap-1.5 ${fade}`}>
+                    <span className="text-gray-500 tabular-nums text-[11px] w-5 shrink-0 text-right"
+                          title={customScores[player.name] ? `Rank ${rank} with your punts (was ${getOverallRank(player)})` : undefined}>
+                      {loadingCustomScores ? '…' : rank}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <PlayerName id={player.id} name={player.name} className={`font-medium truncate min-w-0 ${mine ? 'text-mine' : 'text-white'}`} />
+                        <span className="shrink-0 text-[11px]">{preView ? getPreIndicator(player) : getHotColdIndicator(player)}</span>
+                      </div>
+                      <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap overflow-hidden">
+                        <span>{player.positions?.length ? player.positions.join('/') : player.position} · {player.team_abv || 'N/A'}</span>
+                        {weeks.length > 0 && (
+                          <span className="text-gray-300" title={weeks.map(w => `${w.n} games ${w.range}`).join(' · ')}>
+                            · {weeks.map(w => w.n).join(' + ')} GP
+                          </span>
+                        )}
+                        {player.is_injured && (
+                          <span className="inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold bg-red-600 text-white whitespace-nowrap"
+                                title={`INJ${player.injured_return ? ` - ${player.injured_return}` : ''}${player.injured_games ? ` (${player.injured_games} missed)` : ''}`}>
+                            INJ{player.injured_games ? ` ${player.injured_games}` : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </td>
-                <td className="px-2 py-1">
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <PlayerName id={player.id} name={player.name} className="font-medium text-white" />
-                      {preView ? getPreIndicator(player) : getHotColdIndicator(player)}
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      {player.positions?.length ? player.positions.join('/') : player.position} | {player.team_abv || 'N/A'}
-                      {player.is_injured && (
-                        <span className="ml-1.5 inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold bg-red-600 text-white whitespace-nowrap">
-                          INJ{player.injured_return ? ` - ${player.injured_return}` : ''}{player.injured_games ? ` (${player.injured_games} missed)` : ''}
-                        </span>
-                      )}
-                      {player.current_week_games !== undefined && config.current_week && (
-                        <span className="text-gray-300"
-                              title={[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined
-                                ? `${player[i ? 'next_week_games' : 'current_week_games']} games ${weekRange(week)}` : null).filter(Boolean).join(' · ')}>
-                          {' | '}{[config.current_week, config.next_week].map((week, i) => week && player[i ? 'next_week_games' : 'current_week_games'] !== undefined
-                            ? player[i ? 'next_week_games' : 'current_week_games'] : null).filter(v => v !== null).join(' + ')} GP
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                <td className={`text-center px-0.5 whitespace-nowrap border-r border-gray-700 ${bg}`}>
+                  <span className={fade}>
+                    {player.drafted ? (
+                      <span className={`team-badge text-white ${getTeamBadgeColor(player.fantasy_team?.id || 0)}`}>
+                        {player.fantasy_team?.abbreviation || player.fantasy_team?.name || 'Unknown'}
+                      </span>
+                    ) : (
+                      <span className="text-green-400 font-medium text-[11px]">Avail</span>
+                    )}
+                  </span>
                 </td>
                 {CATEGORIES.map(category => {
                   const stat = player.stats[category];
                   const isPunted = !includedCategories.includes(category);
-                  
+
                   if (!stat) return (
-                    <td key={category} className={`table-cell text-gray-500 ${isPunted ? 'opacity-40' : ''}`}>
+                    <td key={category} className={`text-center text-gray-500 ${isPunted ? 'opacity-40' : ''}`}>
                       -
                     </td>
                   );
-                  
+
                   // Get value and score based on selected stat type
                   const valueKey = periodKey('value');
                   const scoreKey = periodKey('score');
-                  
+
                   const displayValue = stat[valueKey] !== undefined ? stat[valueKey] : stat.value;
                   const displayScore = stat[scoreKey] !== undefined ? stat[scoreKey] : stat.score;
-                  
+
                   // Condensed card: the stat's name is in the header, so the cell is just value + percentile.
                   return (
-                    <td key={category} className={`px-1 py-1 ${isPunted ? 'opacity-40' : ''}`}
+                    <td key={category} className={`px-1 py-1 ${isPunted || taken ? 'opacity-40' : ''}`}
                         title={`${CATEGORY_NAMES[category]}: percentile ${displayScore}`}>
                       <div className={`px-1.5 py-0.5 rounded border ${getScoreBgColor(displayScore, stat.is_inverse)}`}>
                         <div className="flex items-center justify-between gap-1.5 leading-tight">
@@ -404,7 +359,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     </td>
                   );
                 })}
-                <td className="table-cell text-gray-300">
+                <td className={`text-center text-gray-300 ${fade}`}>
                   {player.projected_only ? (
                     <span className="text-sky-400" title="No NBA games last season (rookie, or out all year): valued on his projection only">
                       new
@@ -415,36 +370,26 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     </span>
                   ) : player.games_played}
                 </td>
-                <td className="table-cell">
-                  {player.drafted ? (
-                    <div className="flex items-center">
-                      <span className={`team-badge text-white ${getTeamBadgeColor(player.fantasy_team?.id || 0)}`}>
-                        {player.fantasy_team?.abbreviation || player.fantasy_team?.name || 'Unknown'}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-green-400 font-medium">Available</span>
-                  )}
-                </td>
-                <td className="table-cell">
+                <td className="text-center px-1">
                   <button
                     onClick={() => setDraftModalPlayer({
                       ...player,
                       overall_rank: customScores[player.name]?.custom_z_rank || getOverallRank(player),
                       auction_value: getAuctionValue(player),
                     })}
-                    className="btn-primary text-xs"
+                    className="btn-primary text-xs !py-0.5 !px-2"
                     disabled={fantasyTeams.length === 0}
                   >
                     Edit
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
-      
+
       {draftModalPlayer && (
         <DraftModal
           player={draftModalPlayer}

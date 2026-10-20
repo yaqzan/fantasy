@@ -239,7 +239,7 @@ const DailyLeaders = ({ config }) => {
           today, and tapping the date from another day jumps back to today.
           Desktop: the same pieces plus the scoreboard share one wrapping row; with more games than
           INLINE_GAMES the scoreboard drops to its own scrolling row below instead. */}
-      <div className="flex items-center justify-between gap-0.5 mb-2 sm:flex sm:flex-wrap sm:justify-start sm:gap-x-3 sm:gap-y-1 sm:mb-1.5">
+      <div className="flex items-center justify-between gap-0.5 mb-2 sm:flex sm:flex-wrap sm:justify-start sm:gap-x-3 sm:gap-y-1 sm:mb-1.5 sm:min-h-[60px]">
       <div className="contents">
         <h2 className="hidden sm:block text-lg font-bold text-white">Daily Leaders</h2>
         <div className="relative shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
