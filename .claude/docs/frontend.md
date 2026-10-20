@@ -73,6 +73,8 @@ must keep its `sm:` twin.
 - Fantasy Teams panel: phones get it as the last tab, **Teams** (`TeamManager asTab`, `useIsPhone` in
   App.js): rosters in a 2-column grid, no fold, no Add team (teams come from the platform syncs; the
   edit pencil stays). Wider screens keep the panel above the tabs.
+- Desktop toolbars (owner, 2026-10-20): no "Daily Leaders" title; the date stepper (Daily Leaders) and the search box (Player Rankings) are the same
+  18rem x 42px slot at the left of the row, same look, so the first control never moves between tabs; the rest of the row follows at the same x.
 - Player Rankings table (in-season) copies Daily Leaders' geometry so tab switches don't jump (owner, 2026-10-20): bare toolbar row
   (60px min, same on both tabs), pinned 15rem Player column (rank + the owner's initial chip under it (other teams only; `fantasy_teams.owner_name`, the Yahoo manager nickname filled by `pull_yahoo sync`, else the team name), name, `F · BOS · 2 + 4 GP`; no status text: dimming
   and the chip say it), 4rem OVR column (5rem in points leagues), stat cards (value + percentile, tinted), stats in `orderColumns` order. Header

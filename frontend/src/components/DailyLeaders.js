@@ -237,20 +237,19 @@ const DailyLeaders = ({ config }) => {
           and the sort toggle share ONE row (`contents` flattens the two sm: rows into it).
           Status text and Today link are desktop-only: on a phone the date turns orange on
           today, and tapping the date from another day jumps back to today.
-          Desktop: the same pieces plus the scoreboard share one wrapping row; with more games than
+          Desktop: the date stepper sits in the same 18rem slot Player Rankings gives its search box, styled like it; the pieces plus the scoreboard share one wrapping row; with more games than
           INLINE_GAMES the scoreboard drops to its own scrolling row below instead. */}
-      <div className="flex items-center justify-between gap-0.5 mb-2 sm:flex sm:flex-wrap sm:justify-start sm:gap-x-3 sm:gap-y-1 sm:mb-1.5 sm:min-h-[60px]">
+      <div className="flex items-center justify-between gap-0.5 mb-2 sm:flex sm:flex-wrap sm:justify-start sm:gap-x-4 sm:gap-y-1 sm:mb-1.5 sm:min-h-[60px]">
       <div className="contents">
-        <h2 className="hidden sm:block text-lg font-bold text-white">Daily Leaders</h2>
-        <div className="relative shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm">
+        <div className="relative shrink-0 flex items-center bg-gray-700 border border-gray-600 rounded-md text-sm sm:text-base sm:w-72 sm:h-[42px]">
           <button onClick={() => shown && (!minDay || shown > minDay) && setDay(shiftDate(shown, -1))}
                   className="px-3 sm:px-3 py-2.5 min-w-[2.75rem] text-gray-300 hover:text-white rounded-l-md touch-manipulation" aria-label="Previous day">‹</button>
           {/* Tap: the calendar, limited to the season (preseason to playoffs). Hold: back to today.
               The transparent date input sits ON the label and takes the tap itself (a real touch
               on the input opens the picker on phones; showPicker() covers desktop). */}
-          <div className="relative flex items-center"
+          <div className="relative flex items-center sm:flex-1 sm:justify-center"
                title={data && shown !== data.today ? 'Tap: pick a date. Hold: back to today' : 'Tap: pick a date'}>
-          <span className={`py-2.5 font-medium min-w-[4.75rem] sm:min-w-[6.5rem] text-center select-none ${
+          <span className={`py-2.5 font-medium min-w-[4.75rem] sm:min-w-[6.5rem] sm:flex-1 text-center select-none ${
                     data && shown === data.today ? 'text-nba-orange sm:text-white' : 'text-white'}`}>
             {shown ? (() => {
               const d = new Date(`${shown}T12:00:00`);
