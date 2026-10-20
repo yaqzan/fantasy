@@ -15,7 +15,9 @@ param(
     [int]$Port = 5001,
     [string]$Tunnel = 'fantasy',
     [string]$Controller = '',
-    [string]$Python = 'python'
+    [string]$Python = 'python',
+    [int]$StaleHours = 3,
+    [string]$PharosDir = 'C:\Development\Pharos'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -86,3 +88,23 @@ if (-not $down) {
     Start-Sleep -Seconds 20
     Write-Log ("post-start: app={0} tunnel={1}" -f (Test-App), $(if ($watchTunnel) { Test-Tunnel } else { 'n/a' }))
 }
+
+# Roster syncs stamp <log>.ok after each good --apply run. A stamp older than $StaleHours h means the sync is
+# failing (usually a lapsed Firefox login) or not running: push once per outage via Pharos (no Python needed).
+function Test-Stale {
+    param([string]$Name, [string]$Stamp)
+    $f = Join-Path $LogDir $Stamp
+    if (-not (Test-Path $f)) { return }   # task not installed / never succeeded yet: nothing to compare
+    $flag = Join-Path $LogDir ($Stamp + '.alerted')
+    $age = (New-TimeSpan -Start (Get-Item $f).LastWriteTime -End (Get-Date)).TotalHours
+    if ($age -lt $StaleHours) { Remove-Item $flag -ErrorAction SilentlyContinue; return }
+    if (Test-Path $flag) { return }
+    Write-Log ("$Name sync stale {0:N1} h -> push" -f $age)
+    try {
+        Import-Module (Join-Path $PharosDir 'Pharos.psm1') -ErrorAction Stop
+        Send-Pharos -Source fantasy -Title "$Name rosters stale" -Message ("No good sync for {0:N0} h. Log in to the site in Firefox." -f $age) -Priority 0 | Out-Null
+        New-Item -ItemType File -Path $flag -Force | Out-Null
+    } catch { Write-Log "Pharos failed: $_" }
+}
+Test-Stale 'Fantrax' 'fantrax.log.ok'
+Test-Stale 'Yahoo' 'yahoo.log.ok'

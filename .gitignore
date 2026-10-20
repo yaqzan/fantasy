@@ -27,3 +27,5 @@ draft_day_*.json
 
 # Long-horizon task state: owner strategy and research data, stays on this machine
 .horizon/
+ops/windows/logs/*.ok
+ops/windows/logs/*.alerted

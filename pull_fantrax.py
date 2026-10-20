@@ -401,11 +401,15 @@ if __name__ == '__main__':
     if args.what == 'rosters':
         ids = [args.league] if args.league else [lg.platform_league_id for lg in list_leagues()
                                                  if lg.platform == 'fantrax' and lg.platform_league_id]
+        all_ok = True
         for league_id in ids:
             try:
                 sync_rosters(league_id, args.apply)
             except requests.RequestException as e:
+                all_ok = False
                 print(f"{time.strftime('%Y-%m-%d %H:%M')} {league_id}: Fantrax unreachable: {e}")
+        if args.apply and all_ok and args.log:   # the watchdog alerts when this stamp goes stale
+            open(args.log + '.ok', 'w').close()
     elif args.what == 'draft':
         while True:
             try:

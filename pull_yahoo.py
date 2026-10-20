@@ -434,6 +434,8 @@ if __name__ == '__main__':
         parser.error(f'{args.what} needs --league')
     elif args.what == 'sync':
         sync(args.league, args.apply)
+        if args.apply and args.log:   # the watchdog alerts when this stamp goes stale
+            open(args.log + '.ok', 'w').close()
     elif args.what == 'adp':
         pull_adp(args.league)
     else:

@@ -17,6 +17,9 @@
 - **Yahoo rosters task** "Fantasy Yahoo Rosters", hourly, current user (`ops/windows/install-yahoo-task.ps1 -League <n>`):
   `pull_yahoo.py sync --league <n> --apply`, log `ops/windows/logs/yahoo.log`. Yahoo has no transaction feed here, so each run
   makes rosters, positions and can't-cut flags Yahoo's. Needs the Yahoo app keys or Firefox signed in to Yahoo.
+- **Roster-sync watchdog.** Both roster tasks catch up missed runs, run on battery and die after 10 min (installers set it). A
+  good `--apply --log X` run touches `X.ok`; `watchdog.ps1` (every 5 min) pushes once via Pharos when a stamp is over 3 h old
+  (a lapsed Firefox login, usually) and re-arms when it recovers (`X.ok.alerted` flag).
   Live drafts: run `pull_yahoo.py draft --watch 20` by hand (or a one-off task) and kill it after; one ran 3 days past its draft until 2026-10-20.
 - **No other cron jobs for data.** The API process runs a poller thread (`daily_leaders.start_poller`,
   started in `backend/app.py`; sleeps until the next thing is due, see leagues.md "Daily Leaders"):

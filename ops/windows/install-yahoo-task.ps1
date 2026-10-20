@@ -20,3 +20,7 @@ $tr = "wscript.exe //B //Nologo `"$vbs`" `"$Python`" pull_yahoo.py sync --league
 schtasks /create /tn "Fantasy Yahoo Rosters" /sc minute /mo $Minutes /tr $tr /f
 if ($LASTEXITCODE -ne 0) { throw "schtasks failed with exit code $LASTEXITCODE" }
 Write-Host "Registered task: Fantasy Yahoo Rosters (every $Minutes min, current user)"
+
+# Catch up a run missed while asleep, allow battery, kill a hung run after 10 min (default 72 h blocks every later one).
+$set = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -MultipleInstances IgnoreNew
+Set-ScheduledTask -TaskName "Fantasy Yahoo Rosters" -Settings $set | Out-Null
