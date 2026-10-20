@@ -83,16 +83,16 @@ def is_preseason(today=None):
 
 
 def default_stat_type(league):
-    """The stats choice a league opens on, and what an API call without one uses. Before its first week:
-    'pre' (the projection moved by preseason games) once preseason games are in, else 'proj' (this
-    season's projection), else last season's. From its first week: 'projected' (recent form: half the
-    season, half the last 10 games)."""
-    from fantasy_database import PlayerProjection, PreseasonLine
+    """The stats choice a league opens on, and what an API call without one uses. Until a regular-season
+    game has been played: 'pre' (the projection moved by preseason games) once preseason games are in, else
+    'proj' (this season's projection), else last season's. From the first finished game on: 'projected'
+    (recent form: half the season, half the last 10 games). Date-free: it follows the game log, so it
+    flips by itself every year."""
+    from fantasy_database import GameLine, PlayerProjection, PreseasonLine
     from projections import season_label
-    schedule = league.schedule
-    if not (schedule and date.today().isoformat() < schedule[0][0]):
-        return 'projected'
     season = season_label()
+    if GameLine.select().where(GameLine.season == season).exists():
+        return 'projected'
     if not PlayerProjection.select().where(PlayerProjection.season == season).exists():
         return 'season'
     return 'pre' if PreseasonLine.select().where(PreseasonLine.season == season).exists() else 'proj'

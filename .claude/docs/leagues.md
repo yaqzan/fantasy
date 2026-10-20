@@ -167,8 +167,8 @@ stats) is shared by all leagues.
   $ always sits on the same stats as its rank. **Three different "projections"** (don't mix them up):
   `proj` = our projection model, `pre` = the model moved by preseason games (best before the season),
   `projected` = RECENT FORM (half the season's average, half the last 10 games; labelled that way in the
-  UI). `player_stats.default_stat_type(league)` picks the default (`pre` > `proj` > `season` before the
-  first week, `projected` after) for `config.default_stat_type` and for every API call without a
+  UI). `player_stats.default_stat_type(league)` picks the default (`pre` > `proj` > `season` until a regular-season game
+  has been played, `projected` (recent form) from then on: it reads the game log for the season, no date, so it flips by itself each year) for `config.default_stat_type` and for every API call without a
   timeframe. A player with no games (rookie, missed last season) has no recent form, so his `_projected`
   is his `_proj`. Players under
   `games_floor` are flagged `small_sample`. Fit the exponent to the league's past auction prices by rank (least squares
