@@ -94,6 +94,8 @@ def _scoreboard(day):
             'detail': status.get('shortDetail') or status.get('detail'),
             'period': comp['status'].get('period'), 'clock': comp['status'].get('displayClock'),
             'start': event.get('date'),
+            # [{market: national|home|away, names: [...]}]; thin until close to tip-off, so it is refetched with the board
+            'broadcasts': [{'market': b.get('market'), 'names': b.get('names') or []} for b in comp.get('broadcasts') or []],
             'teams': [{'abbr': c['team']['abbreviation'], 'score': int(c['score']) if c.get('score') else None,
                        'home': c['homeAway'] == 'home', 'winner': c.get('winner')}
                       for c in comp['competitors']],

@@ -72,12 +72,28 @@ const DatePopover = ({ value, today, min, max, onPick, onClose }) => {
 };
 const clock = (iso) => (iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
 
+// ESPN's abbreviations that differ from NBA's (logo files are named by NBA's)
+const LOGO_ABBR = { GS: 'GSW', NO: 'NOP', NY: 'NYK', SA: 'SAS', UTAH: 'UTA', WSH: 'WAS', PHO: 'PHX', CHA: 'CHA' };
+export const TeamLogo = ({ abbr, className = 'w-4 h-4' }) => (
+  <img src={`/logos/${LOGO_ABBR[abbr] || abbr}.svg`} alt="" loading="lazy" className={`${className} shrink-0 object-contain`}
+       onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+);
+
+// Channels per market, national first: "ESPN" or "Away: MyMi, Bucks App · Home: MNMT"
+const channelLines = (game) => {
+  const by = (m) => (game.broadcasts || []).filter(b => b.market === m).flatMap(b => b.names);
+  const national = by('national');
+  const label = (m, t) => { const n = by(m); return n.length ? `${t.abbr}: ${n.join(', ')}` : null; };
+  const [away, home] = [game.teams.find(t => !t.home), game.teams.find(t => t.home)];
+  return [national.length ? national.join(', ') : null, label('away', away), label('home', home)].filter(Boolean);
+};
+
 const GameChip = ({ game, selected, dimmed, onToggle }) => {
   const [away, home] = [game.teams.find(t => !t.home), game.teams.find(t => t.home)];
   const scored = game.state !== 'pre';
   const side = (t) => (
     <span className={`flex justify-between gap-2 ${game.state === 'post' && !t.winner ? 'text-gray-400' : 'text-white'}`}>
-      <span>{t.abbr}</span>{scored && <span className="tabular-nums">{t.score}</span>}
+      <span className="flex items-center gap-1"><TeamLogo abbr={t.abbr} />{t.abbr}</span>{scored && <span className="tabular-nums">{t.score}</span>}
     </span>
   );
   return (
@@ -91,6 +107,12 @@ const GameChip = ({ game, selected, dimmed, onToggle }) => {
         <span className={`shrink-0 w-[7px] h-[7px] rounded-full ${game.state === 'pre' ? 'border-[1.5px] border-gray-400' : game.state === 'in' ? 'bg-red-500' : 'bg-gray-500'}`} />
         <span className="truncate">{game.state === 'pre' ? clock(game.start) : game.detail}</span>
       </div>
+      {selected && (
+        <div className="mt-0.5 text-gray-300 whitespace-normal max-w-[11rem]">
+          {channelLines(game).map((l, i) => <div key={i}>{l}</div>)}
+          {!channelLines(game).length && <div className="text-gray-500">TV: not announced</div>}
+        </div>
+      )}
     </button>
   );
 };
