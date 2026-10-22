@@ -74,7 +74,12 @@ export const isPickup = (p) => p.owner === 'free' && !(p.value < 0 && p.z && Obj
   ? p.pace_signal === 'up' && (p.min_usual ?? 0) >= PRESEASON_ROTATION_MIN
   : p.pace_signal === 'up' || (p.minutes_up && (p.pace ?? 0) >= 0.5) || p.streak === 'hot');
 
-export const keepRow = (filter, p) => filter === 'all' || (filter === 'pickups' ? isPickup(p) : p.owner === filter);
+// Mine in ANY league (the server's mine_any), whichever league is selected; the owner filter and
+// its counts use the same test so My team lists exactly the highlighted rows.
+export const isMine = (p) => p.mine_any ?? p.owner === 'mine';
+export const ownerKey = (p) => (isMine(p) ? 'mine' : p.owner);
+
+export const keepRow = (filter, p) => filter === 'all' || (filter === 'pickups' ? isPickup(p) : ownerKey(p) === filter);
 
 // Sort by Best, tonight's value in the league's scoring (the server's order), or by pace. Pickups
 // always read by pace.

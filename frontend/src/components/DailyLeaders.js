@@ -3,7 +3,7 @@ import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
 import OwnerChip from './OwnerChip';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zAura, keepRow, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zAura, keepRow, isMine, ownerKey, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -191,7 +191,7 @@ const DailyLeaders = ({ config }) => {
   const rows = sortRows(ownerFilter, pool.filter(p => keepRow(ownerFilter, p)), sort);
   const byPace = sort === 'pace';
   const ranks = byPace ? paceRanks(pool) : null;
-  const counts = pool.reduce((acc, p) => ({ ...acc, [p.owner]: (acc[p.owner] || 0) + 1 }), {});
+  const counts = pool.reduce((acc, p) => ({ ...acc, [ownerKey(p)]: (acc[ownerKey(p)] || 0) + 1 }), {});
 
   const signed = (v) => (points ? v.toFixed(1) : `${v > 0 ? '+' : ''}${v.toFixed(1)}`);
   const status = data && (
@@ -341,8 +341,8 @@ const DailyLeaders = ({ config }) => {
             </thead>
             <tbody>
               {rows.map(p => {
-                const mine = p.owner === 'mine';
-                const fade = p.owner === 'taken' ? 'opacity-40' : '';
+                const mine = isMine(p);
+                const fade = p.owner === 'taken' && !mine ? 'opacity-40' : '';
                 const bg = mine ? 'bg-row-mine' : 'bg-gray-800 group-hover:bg-row-hover';
                 const drag = points ? null : worstDrag(p, columns);
                 return (
@@ -351,7 +351,7 @@ const DailyLeaders = ({ config }) => {
                       <div className={`flex items-center gap-1.5 ${fade}`}>
                         <div className="w-5 shrink-0 flex flex-col items-center gap-0.5">
                           <span className="text-gray-500 tabular-nums text-[11px] leading-none">{p.dnp ? '–' : ranks ? ranks[p.espn_id] : p.rank}</span>
-                          {p.owner === 'taken' && <OwnerChip person={p.owner_person} team={p.owner_name} />}
+                          {p.owner === 'taken' && !mine && <OwnerChip person={p.owner_person} team={p.owner_name} />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 min-w-0">

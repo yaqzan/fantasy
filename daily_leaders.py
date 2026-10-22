@@ -536,6 +536,15 @@ def owners(league):
     return {pid: (abv, name, owner) for pid, abv, name, owner in rows}
 
 
+def my_players_everywhere():
+    """NBA player ids on my team in ANY league, so Daily Leaders highlights them whichever league is selected."""
+    from leagues import list_leagues
+    ids = set()
+    for lg in list_leagues():
+        ids |= {pid for pid, (abv, _, _) in owners(lg).items() if abv and abv == lg.my_team}
+    return ids
+
+
 def _result(game, abbr):
     """'W 112-108' (own score first) for a finished game."""
     me = next((t for t in game['teams'] if t['abbr'] == abbr), None)
@@ -594,6 +603,7 @@ def daily_leaders(league, day=None, force=False):
     from player_stats import is_preseason, season_first_game, season_window
     scale = None if league.is_points else league_scale(league)
     names, owned, bases = _name_index(), owners(league), _by_name(league)
+    mine_any = my_players_everywhere()
     streaks_on = not is_preseason()
     states = {t['abbr']: g for g in s['scoreboard'] for t in g['teams']}
     versus = _opponent_abv(league, day)
@@ -605,7 +615,7 @@ def daily_leaders(league, day=None, force=False):
             team = owned.get(pid)
             game = states.get(line['team'])
             players.append({
-                **line, 'player_id': pid, 'value': value, 'z': zs,
+                **line, 'player_id': pid, 'value': value, 'z': zs, 'mine_any': pid in mine_any,
                 'owner': ('mine' if team[0] == league.my_team else 'taken') if team else 'free',
                 'owner_abv': team[0] if team else None, 'owner_name': team[1] if team else None,
                 'owner_person': team[2] if team else None,
@@ -630,15 +640,17 @@ def daily_leaders(league, day=None, force=False):
         for d in _dnp.get(g['id'], []):
             pid = names.get(norm_name(d['name']))
             team = owned.get(pid)
-            if not team:
+            if not team and pid not in mine_any:
                 continue
+            team = team or (None, None, None)
             players.append({
                 **{k: 0 for k in ('MIN', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TOV', 'PF', 'FGM', 'FGA', 'FG3M',
                                   'FG3A', 'FTM', 'FTA', 'TECH', 'BLKA', 'DD2', 'TD3', 'PLUS_MINUS', 'OREB', 'DREB')},
                 'espn_id': d['espn_id'], 'name': d['name'], 'team': d['team'],
                 'opp': next((t['abbr'] for t in g['teams'] if t['abbr'] != d['team']), None),
                 'player_id': pid, 'value': 0, 'z': {}, 'rank': None, 'dnp': True, 'dnp_reason': d['reason'],
-                'owner': 'mine' if team[0] == league.my_team else 'taken',
+                'mine_any': pid in mine_any,
+                'owner': 'free' if team[0] is None else 'mine' if team[0] == league.my_team else 'taken',
                 'owner_abv': team[0], 'owner_name': team[1], 'owner_person': team[2], 'vs_me': bool(versus and team[0] == versus),
                 'game_state': 'post', 'game_period': g.get('period'), 'game_clock': g.get('clock'),
                 'game_result': _result(g, d['team']), 'on_court': None, 'preseason': bool(g.get('preseason')),
