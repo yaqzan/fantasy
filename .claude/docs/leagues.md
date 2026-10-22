@@ -203,7 +203,7 @@ stats) is shared by all leagues.
   stat line of a day, ranked by the selected league, rows marked mine (highlighted) / taken
   (dimmed) / free. **Mine means mine in ANY league** (`my_players_everywhere`, row field `mine_any`; frontend
   `isMine`/`ownerKey` in `dailyLeaders.js`): the highlight, the My team filter and its count ignore which league is selected;
-  a player taken here but mine elsewhere is highlighted, not dimmed, no owner chip. Scoring and `owner` stay the selected league's. **Source is ESPN's public site API** (scoreboard + one `summary` per game):
+  a player taken here but mine elsewhere is highlighted, not dimmed, and keeps the other owner's initials chip. Scoring and `owner` stay the selected league's. **Source is ESPN's public site API** (scoreboard + one `summary` per game):
   cdn.nba.com answers this host 403 and stats.nba.com box scores are empty while a game is on
   (checked 2026-10-09), so neither can be live. ESPN's box lacks times blocked and techs; both
   come from its play-by-play (a block play's first participant is the shooter; "technical foul"

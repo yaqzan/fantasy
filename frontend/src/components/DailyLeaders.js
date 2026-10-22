@@ -410,7 +410,7 @@ const DailyLeaders = ({ config }) => {
                       <div className={`flex items-center gap-1.5 ${fade}`}>
                         <div className="w-5 shrink-0 flex flex-col items-center gap-0.5">
                           <span className="text-gray-500 tabular-nums text-[11px] leading-none">{p.dnp ? '–' : ranks ? ranks[p.espn_id] : p.rank}</span>
-                          {p.owner === 'taken' && !mine && <OwnerChip person={p.owner_person} team={p.owner_name} />}
+                          {p.owner === 'taken' && <OwnerChip person={p.owner_person} team={p.owner_name} />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 min-w-0">
