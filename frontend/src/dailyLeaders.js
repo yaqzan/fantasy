@@ -79,7 +79,22 @@ export const isPickup = (p) => p.owner === 'free' && !(p.value < 0 && p.z && Obj
 export const isMine = (p) => p.mine_any ?? p.owner === 'mine';
 export const ownerKey = (p) => (isMine(p) ? 'mine' : p.owner);
 
-export const keepRow = (filter, p) => filter === 'all' || (filter === 'pickups' ? isPickup(p) : ownerKey(p) === filter);
+// The saved owner pick is one key or several joined by commas ("free,mine"); 'all' or empty = no filter.
+export const ownerKeys = (saved) => {
+  const keys = String(saved || 'all').split(',').map(k => (k === 'pickups' ? 'free' : k)).filter(k => k && k !== 'all');
+  return [...new Set(keys)];
+};
+export const toggleOwner = (saved, key) => {
+  const keys = ownerKeys(saved);
+  const next = keys.includes(key) ? keys.filter(k => k !== key) : [...keys, key];
+  return next.length ? next.join(',') : 'all';
+};
+
+export const keepRow = (filter, p) => {
+  if (filter === 'pickups') return isPickup(p);
+  const keys = ownerKeys(filter);
+  return !keys.length || keys.some(k => ownerKey(p) === k);
+};
 
 // Sort by Best, tonight's value in the league's scoring (the server's order), or by pace. Pickups
 // always read by pace.

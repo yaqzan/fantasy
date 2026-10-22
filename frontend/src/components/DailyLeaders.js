@@ -3,7 +3,7 @@ import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
 import OwnerChip from './OwnerChip';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zAura, keepRow, isMine, ownerKey, orderGames, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zAura, keepRow, isMine, ownerKey, orderGames, ownerKeys, toggleOwner, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -147,7 +147,8 @@ const GameProgress = ({ p }) => {
 const DailyLeaders = ({ config }) => {
   const points = config?.capabilities?.scoring === 'points';
   const [{ owner: savedOwner, sort: pickedSort }, setView] = useLeagueViewState(config?.league?.id, 'daily', { owner: 'all' });
-  const ownerFilter = savedOwner === 'pickups' ? 'free' : savedOwner; // the old Pickups chip is Available now
+  const ownerFilter = ownerKeys(savedOwner).join(',') || 'all'; // one or several chips; the old Pickups chip is Available now
+  const ownerOn = ownerKeys(savedOwner);
   const [day, setDay] = useState(null);      // null = the server's default (today once games tip)
   const [gameId, setGameId] = useState(null); // a tapped scoreboard: only its players
   const [data, setData] = useState(null);
@@ -303,9 +304,9 @@ const DailyLeaders = ({ config }) => {
 
       <div className="contents">
         {OWNER_FILTERS.map(([key, label, short]) => (
-          <button key={key} onClick={() => setView({ owner: ownerFilter === key ? 'all' : key })}
-                  aria-pressed={ownerFilter === key}
-                  className={`shrink-0 px-1.5 sm:px-2.5 py-1 rounded-full border text-xs font-medium ${key === 'all' ? 'hidden' : ''} ${ownerFilter === key
+          <button key={key} onClick={() => setView({ owner: toggleOwner(ownerFilter, key) })}
+                  aria-pressed={ownerOn.includes(key)}
+                  className={`shrink-0 px-1.5 sm:px-2.5 py-1 rounded-full border text-xs font-medium ${key === 'all' ? 'hidden' : ''} ${ownerOn.includes(key)
                     ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-600 text-gray-300 hover:text-white'}`}>
             <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="hidden sm:inline opacity-70"> {counts[key]}</span> : ''}
           </button>
