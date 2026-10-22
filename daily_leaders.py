@@ -27,6 +27,7 @@ IDLE_REFRESH_SECONDS = 3 * 3600  # a slate with nothing started yet (tip-off tim
 NEAR_TIP_REFRESH_SECONDS = 3600  # ... hourly once the first tip is less than that away
 OVERDUE_SECONDS = 2 * 60    # a page request fetches itself when the poller is this late (stalled, machine slept)
 MIN_SLEEP, MAX_SLEEP = 30, 3 * 3600  # the poller sleeps until the next thing is due, within these
+CHANNEL_CHECK_HOURS = (7, 10, 12, 14, 16)  # Eastern: scoreboard recheck before tip-off, when TV channels (broadcasts) get filled in
 FORCE_FLOOR_SECONDS = 60    # the Refresh button can't go faster than this
 SCALE_SECONDS = 60 * 60     # league pools and the name index change slowly
 NBA_TZ = ZoneInfo('America/New_York')  # an NBA "day" is an Eastern-time date
@@ -196,6 +197,16 @@ def _due(cur, floor):
     return time.time() - cur['fetched'] >= floor
 
 
+def _next_channel_check(after):
+    """Epoch of the first CHANNEL_CHECK_HOURS Eastern slot strictly after `after`."""
+    t = datetime.fromtimestamp(after, NBA_TZ)
+    for day in (t.date(), t.date() + timedelta(days=1)):
+        for h in CHANNEL_CHECK_HOURS:
+            slot = datetime.combine(day, datetime.min.time(), NBA_TZ).replace(hour=h)
+            if slot > t:
+                return slot.timestamp()
+
+
 def due_at(cur):
     """Epoch when the poller next refetches a day, or None once every game is final: while a game
     is on, REFRESH_SECONDS after the last fetch; before tip-off, the first tip (or the idle
@@ -210,7 +221,9 @@ def due_at(cur):
             for g in cur['scoreboard'] if g['state'] == 'pre' and g.get('start')]
     # Within IDLE_REFRESH_SECONDS of tip-off, recheck hourly: a game moved earlier shows up within the hour.
     near = tips and min(tips) - time.time() < IDLE_REFRESH_SECONDS
-    return min([cur['fetched'] + (NEAR_TIP_REFRESH_SECONDS if near else IDLE_REFRESH_SECONDS)] + tips)
+    # Broadcasts are announced a few hours before tip-off, so also recheck at fixed morning/afternoon slots.
+    return min([cur['fetched'] + (NEAR_TIP_REFRESH_SECONDS if near else IDLE_REFRESH_SECONDS),
+                _next_channel_check(cur['fetched'])] + tips)
 
 
 def _polled_days():
