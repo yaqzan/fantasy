@@ -79,16 +79,52 @@ export const TeamLogo = ({ abbr, className = 'w-4 h-4' }) => (
        onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
 );
 
-// Channels per market, national first: "ESPN" or "Away: MyMi, Bucks App · Home: MNMT"
-const channelLines = (game) => {
-  const by = (m) => (game.broadcasts || []).filter(b => b.market === m).flatMap(b => b.names);
-  const national = by('national');
-  const label = (m, t) => { const n = by(m); return n.length ? `${t.abbr}: ${n.join(', ')}` : null; };
+// Tap a scoreboard chip: score, status and TV channels. Close with the X, a tap outside or Escape.
+const GameModal = ({ game, filtered, onFilter, onClose }) => {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const [away, home] = [game.teams.find(t => !t.home), game.teams.find(t => t.home)];
-  return [national.length ? national.join(', ') : null, label('away', away), label('home', home)].filter(Boolean);
+  const scored = game.state !== 'pre';
+  const lines = [['National', 'national'], [away.abbr, 'away'], [home.abbr, 'home']]
+    .map(([label, m]) => [label, (game.broadcasts || []).filter(b => b.market === m).flatMap(b => b.names)])
+    .filter(([, names]) => names.length);
+  const team = (t) => (
+    <div className="flex flex-col items-center gap-1 w-20">
+      <TeamLogo abbr={t.abbr} className="w-12 h-12" />
+      <span className="font-semibold text-white">{t.abbr}</span>
+      {scored && <span className={`text-2xl tabular-nums ${game.state === 'post' && !t.winner ? 'text-gray-400' : 'text-white'}`}>{t.score}</span>}
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="relative w-full max-w-sm rounded-lg bg-gray-800 border border-gray-600 p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} aria-label="Close" autoFocus
+                className="absolute top-1 right-1 w-10 h-10 text-2xl leading-none text-gray-300 hover:text-white touch-manipulation">×</button>
+        <div className="flex items-center justify-center gap-4 pt-2">{team(away)}<span className="text-gray-500 text-sm">@</span>{team(home)}</div>
+        <div className={`mt-2 text-center text-sm ${game.state === 'in' ? 'text-red-400' : 'text-gray-400'}`}>
+          {game.state === 'pre' ? clock(game.start) : game.detail}
+        </div>
+        <div className="mt-3 border-t border-gray-700 pt-3">
+          <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Where to watch</div>
+          {lines.length ? lines.map(([label, names]) => (
+            <div key={label} className="flex gap-2 py-0.5 text-sm">
+              <span className="w-16 shrink-0 text-gray-400">{label}</span><span className="text-white">{names.join(', ')}</span>
+            </div>
+          )) : <div className="text-sm text-gray-500">Not announced yet</div>}
+        </div>
+        <button onClick={onFilter}
+                className="mt-4 w-full py-2 rounded-md border border-gray-600 text-sm text-gray-200 hover:text-white hover:bg-gray-700 touch-manipulation">
+          {filtered ? 'Show every game' : 'Show only this game'}
+        </button>
+      </div>
+    </div>
+  );
 };
 
-const GameChip = ({ game, selected, dimmed, onToggle }) => {
+const GameChip = ({ game, selected, dimmed, onOpen }) => {
   const [away, home] = [game.teams.find(t => !t.home), game.teams.find(t => t.home)];
   const scored = game.state !== 'pre';
   const side = (t) => (
@@ -97,7 +133,7 @@ const GameChip = ({ game, selected, dimmed, onToggle }) => {
     </span>
   );
   return (
-    <button onClick={onToggle} aria-pressed={selected} title={selected ? 'Show every game' : 'Show only this game'}
+    <button onClick={onOpen} aria-pressed={selected} title="Game details and TV channels"
             className={`shrink-0 text-left rounded px-1.5 py-0.5 text-[11px] leading-tight min-w-[4.5rem] sm:text-xs sm:px-2 sm:py-1 sm:min-w-[5.5rem] border transition-opacity ${
               selected ? 'bg-gray-700 border-nba-orange ring-1 ring-nba-orange'
                 : `bg-gray-800 ${game.state === 'in' ? 'border-gray-500' : 'border-gray-700'}`
@@ -107,12 +143,6 @@ const GameChip = ({ game, selected, dimmed, onToggle }) => {
         <span className={`shrink-0 w-[7px] h-[7px] rounded-full ${game.state === 'pre' ? 'border-[1.5px] border-gray-400' : game.state === 'in' ? 'bg-red-500' : 'bg-gray-500'}`} />
         <span className="truncate">{game.state === 'pre' ? clock(game.start) : game.detail}</span>
       </div>
-      {selected && (
-        <div className="mt-0.5 text-gray-300 whitespace-normal max-w-[11rem]">
-          {channelLines(game).map((l, i) => <div key={i}>{l}</div>)}
-          {!channelLines(game).length && <div className="text-gray-500">TV: not announced</div>}
-        </div>
-      )}
     </button>
   );
 };
@@ -150,6 +180,7 @@ const DailyLeaders = ({ config }) => {
   const ownerFilter = ownerKeys(savedOwner).join(',') || 'all'; // one or several chips; the old Pickups chip is Available now
   const ownerOn = ownerKeys(savedOwner);
   const [day, setDay] = useState(null);      // null = the server's default (today once games tip)
+  const [infoId, setInfoId] = useState(null); // the game whose details modal is open
   const [gameId, setGameId] = useState(null); // a tapped scoreboard: only its players
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -179,7 +210,7 @@ const DailyLeaders = ({ config }) => {
   }, [day]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setGameId(null); }, [day]);
+  useEffect(() => { setGameId(null); setInfoId(null); }, [day]);
 
   // While games are unfinished, ask again just after the server's next refetch (at least a
   // minute apart); skipped while the browser tab is hidden, caught up when it shows again.
@@ -246,7 +277,7 @@ const DailyLeaders = ({ config }) => {
     <div className="flex gap-1.5 overflow-x-auto thin-scrollbar">
       {orderGames(data?.games || []).map(g => (
         <GameChip key={g.id} game={g} selected={g.id === gameId} dimmed={gameId !== null && g.id !== gameId}
-                  onToggle={() => setGameId(id => toggleGame(id, g.id))} />
+                  onOpen={() => setInfoId(g.id)} />
       ))}
     </div>
   );
@@ -255,8 +286,13 @@ const DailyLeaders = ({ config }) => {
     ? 'w-[3rem] min-w-[3rem] max-w-[3rem] sm:w-20 sm:min-w-[5rem] sm:max-w-none left-[10.375rem] sm:left-60'
     : 'w-[2.375rem] min-w-[2.375rem] max-w-[2.375rem] sm:w-16 sm:min-w-[4rem] sm:max-w-none left-[10.375rem] sm:left-60';
   const STAT_W = points ? 'min-w-[2rem] px-0.5 sm:min-w-0 sm:px-2' : 'min-w-[2.25rem] px-0.5 sm:min-w-0 sm:px-2';
+  const infoGame = (data?.games || []).find(g => g.id === infoId) || null;
   return (
     <div className="py-2 sm:px-2 sm:py-1">
+      {infoGame && (
+        <GameModal game={infoGame} filtered={gameId === infoGame.id} onClose={() => setInfoId(null)}
+                   onFilter={() => { setGameId(id => toggleGame(id, infoGame.id)); setInfoId(null); }} />
+      )}
       {/* Phones: date stepper, the three owner chips (tap the lit one to go back to everything)
           and the sort toggle share ONE row (`contents` flattens the two sm: rows into it).
           Status text and Today link are desktop-only: on a phone the date turns orange on
