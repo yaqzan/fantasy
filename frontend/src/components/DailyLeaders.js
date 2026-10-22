@@ -401,7 +401,7 @@ const DailyLeaders = ({ config }) => {
             <tbody>
               {rows.map(p => {
                 const mine = isMine(p);
-                const fade = p.owner === 'taken' && !mine ? 'opacity-40' : '';
+                const fade = p.owner === 'taken' ? 'opacity-40' : '';
                 const bg = mine ? 'bg-row-mine' : 'bg-gray-800 group-hover:bg-row-hover';
                 const drag = points ? null : worstDrag(p, columns);
                 return (
