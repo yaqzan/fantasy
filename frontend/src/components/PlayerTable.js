@@ -4,7 +4,7 @@ import { PlayerName } from './PlayerCard';
 import usePlayerValues from '../usePlayerValues';
 import { weekRange } from '../weeks';
 import OwnerChip from './OwnerChip';
-import { orderColumns } from '../dailyLeaders';
+import { orderColumns, zAura } from '../dailyLeaders';
 
 // The in-season player table (draft mode renders DraftBoard instead).
 // priceExponent: null means the league's own draft.price_exponent (the server's default values).
@@ -12,6 +12,12 @@ import { orderColumns } from '../dailyLeaders';
 // Pinned Player column: the same width as Daily Leaders' so the two tabs line up.
 // Phones: each stat column is a fifth of what the Player column leaves (screen - 1rem page padding - pinned column), so exactly five show.
 const STAT_W = 'w-[calc((100vw-11.375rem)/5)] min-w-[calc((100vw-11.375rem)/5)] max-w-[calc((100vw-11.375rem)/5)] sm:w-auto sm:min-w-0 sm:max-w-none';
+// Percentile (0-100) as the z it stands for, so the cells reuse Daily Leaders' tint: 50 -> 0, 84 -> 1, 98 -> 2 SD.
+const percentileZ = (score) => {
+  const q = Math.min(0.995, Math.max(0.005, score / 100)), t = Math.sqrt(-2 * Math.log(Math.min(q, 1 - q)));
+  const z = t - (2.515517 + 0.802853 * t + 0.010328 * t * t) / (1 + 1.432788 * t + 0.189269 * t * t + 0.001308 * t ** 3);
+  return q < 0.5 ? -z : z;
+};
 const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
 
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
@@ -31,68 +37,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
   // Unchecking a category punts it (the scores refetch through the effect above)
   const handleCategoryInclusionChange = (category) => onPuntsChange?.(puntCategories.includes(category)
     ? puntCategories.filter(c => c !== category) : [...puntCategories, category]);
-
-  // Green/Red gradient with clear text for stat values
-  const getStatTextColor = (score, isInverse = false) => {
-    if (score > 55) {
-      // Green spectrum with clear text
-      if (score >= 90) return 'text-green-300';      // High intensity green
-      if (score >= 80) return 'text-green-400';      // Medium-high intensity green
-      if (score >= 70) return 'text-green-500';      // Medium intensity green
-      if (score >= 60) return 'text-green-500';      // Medium intensity green
-      return 'text-green-500';                       // Medium intensity green
-    } else if (score < 45) {
-      // Red spectrum with clear text
-      if (score <= 10) return 'text-red-300';         // High intensity red
-      if (score <= 20) return 'text-red-400';        // Medium-high intensity red
-      if (score <= 30) return 'text-red-500';        // Medium intensity red
-      if (score <= 40) return 'text-red-500';        // Medium intensity red
-      return 'text-red-500';                         // Medium intensity red
-    }
-    // Score between 45-55 - default color
-    return 'text-white';                              // Default white
-  };
-
-  // Green/Red gradient for score ranks (smaller text, readable but less prominent)
-  const getScoreColor = (score, isInverse = false) => {
-    if (score > 55) {
-      // Green spectrum with readable text
-      if (score >= 90) return 'text-green-400';      // High intensity green
-      if (score >= 80) return 'text-green-500';      // Medium-high intensity green
-      if (score >= 70) return 'text-green-500';      // Medium intensity green
-      if (score >= 60) return 'text-green-500';      // Medium intensity green
-      return 'text-green-500';                       // Medium intensity green
-    } else if (score < 45) {
-      // Red spectrum with readable text
-      if (score <= 10) return 'text-red-400';         // High intensity red
-      if (score <= 20) return 'text-red-500';        // Medium-high intensity red
-      if (score <= 30) return 'text-red-500';        // Medium intensity red
-      if (score <= 40) return 'text-red-500';        // Medium intensity red
-      return 'text-red-500';                         // Medium intensity red
-    }
-    // Score between 45-55 - default color
-    return 'text-white';                              // Default white
-  };
-
-  const getScoreBgColor = (score, isInverse = false) => {
-    if (score > 55) {
-      // Green spectrum with opacity scaling
-      if (score >= 90) return 'bg-green-900/60 border-green-400/80 shadow-lg shadow-green-400/30';     // High opacity green with halo
-      if (score >= 80) return 'bg-green-900/50 border-green-500/70 shadow-md shadow-green-500/25';     // Medium-high opacity green with subtle halo
-      if (score >= 70) return 'bg-green-900/40 border-green-600/60';     // Medium opacity green
-      if (score >= 60) return 'bg-green-900/30 border-green-700/50';     // Medium-low opacity green
-      return 'bg-green-900/20 border-green-900/30';                       // Very low opacity green
-    } else if (score < 45) {
-      // Red spectrum with opacity scaling
-      if (score <= 10) return 'bg-red-900/60 border-red-400/80 shadow-lg shadow-red-400/30';             // High opacity red with halo
-      if (score <= 20) return 'bg-red-900/50 border-red-500/70 shadow-md shadow-red-500/25';            // Medium-high opacity red with subtle halo
-      if (score <= 30) return 'bg-red-900/40 border-red-600/60';         // Medium opacity red
-      if (score <= 40) return 'bg-red-900/30 border-red-700/50';         // Medium-low opacity red
-      return 'bg-red-900/20 border-red-900/30';                          // Very low opacity red
-    }
-    // Score between 45-55 - default background
-    return 'bg-gray-800/10 border-gray-700/20';                          // Very subtle neutral
-  };
 
   // Get aura styling based on hot/cold intensity
   const getHotAura = (diff) => {
@@ -337,19 +281,17 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   const displayValue = stat[valueKey] !== undefined ? stat[valueKey] : stat.value;
                   const displayScore = stat[scoreKey] !== undefined ? stat[scoreKey] : stat.score;
 
-                  // Condensed card: the stat's name is in the header, so the cell is just value + percentile.
+                  // Daily Leaders' look: no card or fill; the value is tinted on a gradient of z and glows at the high end
+                  // (zAura), the percentile sits muted beside (desktop) or under (phone) it.
+                  const aura = zAura(percentileZ(displayScore));
                   return (
-                    <td key={category} className={`${STAT_W} px-px sm:px-1 py-1 ${isPunted || taken ? 'opacity-40' : ''}`}
+                    <td key={category} className={`px-px sm:px-1 py-1 text-center tabular-nums whitespace-nowrap ${STAT_W} ${isPunted || taken ? 'opacity-40' : ''}`}
                         title={`${CATEGORY_FULL[category]}: percentile ${displayScore}`}>
-                      <div className={`px-0 sm:px-1.5 py-0.5 rounded border ${getScoreBgColor(displayScore, stat.is_inverse)}`}>
-                        <div className="flex flex-col sm:flex-row items-center sm:justify-between sm:gap-1.5 leading-tight">
-                          <span className={`text-xs sm:text-sm font-bold tabular-nums ${getStatTextColor(displayScore, stat.is_inverse)}`}>
-                            {category === 'PLUS_MINUS' && displayValue > 0 ? '+' : ''}{displayValue}{PERCENTAGE_CATEGORIES.includes(category) ? '%' : ''}
-                          </span>
-                          <span className={`text-[10px] sm:text-[11px] opacity-75 tabular-nums ${getScoreColor(displayScore, stat.is_inverse)}`}>
-                            {displayScore}
-                          </span>
-                        </div>
+                      <div className="flex flex-col sm:flex-row items-center justify-center sm:gap-1.5 leading-tight">
+                        <span className="text-xs sm:text-sm text-gray-200" style={aura ? { color: aura.color, textShadow: aura.glow, fontWeight: aura.weight } : undefined}>
+                          {category === 'PLUS_MINUS' && displayValue > 0 ? '+' : ''}{displayValue}{PERCENTAGE_CATEGORIES.includes(category) ? '%' : ''}
+                        </span>
+                        <span className="text-[10px] sm:text-[11px] text-gray-500">{displayScore}</span>
                       </div>
                     </td>
                   );

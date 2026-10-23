@@ -81,6 +81,7 @@ must keep its `sm:` twin.
   cells never wrap (a taller header row shifts the table). The GP warning (`small_sample`) scales with days since the first game
   (`player_stats.small_sample_floor`, shared by rankings, Lineup Optimizer and Weekly Pickups): week one flags nobody.
 - Player Rankings on phones (owner, 2026-10-22): OVR column hidden; exactly five stat columns (`orderColumns`: PTS, REB, A-TO/AST, STL, BLK) show: each is a fifth of `100vw - 11.375rem` (`STAT_W` in PlayerTable; 11.375 = 1rem page padding + the 10.375rem pinned column). Shrinking cells by feel overshot to 7 columns; keep the explicit width. The cell stacks value over percentile and the punt checkbox sits under the label. `sm:` restores the side-by-side card and OVR. Sort arrows are desktop-only (they cost the fifth column).
+- Player Rankings stat cells use Daily Leaders' colouring (owner, 2026-10-22): no card, the value tinted by `zAura`, fed `percentileZ(score)` (percentile -> z: 50 = 0, 84 = 1 SD, 98 = 2 SD); the percentile is muted beside (desktop) / under (phone).
 - Player Rankings filters **Tonight (Thu Oct 22)** / **Tomorrow (...)**: `plays_today` / `plays_tomorrow` from `/api/fantasy` (NBA Eastern date, `week_schedule`); the labels carry the Eastern date. Per league, in the Filters fold on phones.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
