@@ -237,7 +237,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                   <span className="cursor-pointer hover:text-white" onClick={() => handleSort('name')}>Player <SortIcon columnKey="name" /></span>
                 </div>
               </th>
-              <th className={`table-header text-center px-0.5 border-r border-gray-700 cursor-pointer hover:text-white whitespace-nowrap ${caps.scoring === 'points' ? 'sm:w-20 sm:min-w-[5rem]' : 'sm:w-16 sm:min-w-[4rem]'}`}
+              <th className={`table-header hidden sm:table-cell text-center px-0.5 border-r border-gray-700 cursor-pointer hover:text-white whitespace-nowrap ${caps.scoring === 'points' ? 'sm:w-20 sm:min-w-[5rem]' : 'sm:w-16 sm:min-w-[4rem]'}`}
                   onClick={() => handleSort('z_score')} title="Overall rating (0-100): how he scores across your league's categories. Click to sort.">
                 OVR <SortIcon columnKey="z_score" />
               </th>
@@ -246,9 +246,9 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 return (
                   <th
                     key={category}
-                    className={`table-header !px-1 whitespace-nowrap ${isPunted ? 'opacity-40' : ''}`}
+                    className={`table-header !px-0.5 sm:!px-1 whitespace-nowrap ${isPunted ? 'opacity-40' : ''}`}
                   >
-                    <div className="flex items-center justify-center space-x-1">
+                    <div className="flex flex-col sm:flex-row items-center justify-center sm:space-x-1">
                       {caps.punts && (
                         <input
                           type="checkbox"
@@ -259,7 +259,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                         />
                       )}
                       <div
-                        className="flex items-center whitespace-nowrap cursor-pointer hover:bg-gray-600 px-1 rounded"
+                        className="flex items-center whitespace-nowrap cursor-pointer hover:bg-gray-600 px-0 sm:px-1 rounded"
                         title={`${CATEGORY_FULL[category]} (click to sort)`}
                         onClick={() => handleSort(`stats.${category}.value`)}
                       >
@@ -315,7 +315,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     </div>
                   </div>
                 </td>
-                <td className={`text-center px-0.5 whitespace-nowrap border-r border-gray-700 tabular-nums font-medium text-gray-200 ${bg}`}>
+                <td className={`hidden sm:table-cell text-center px-0.5 whitespace-nowrap border-r border-gray-700 tabular-nums font-medium text-gray-200 ${bg}`}>
                   <span className={fade}>{Math.round(customScores[player.name]?.custom_z_score ?? getZScore(player))}</span>
                 </td>
                 {CATEGORIES.map(category => {
@@ -337,14 +337,14 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
 
                   // Condensed card: the stat's name is in the header, so the cell is just value + percentile.
                   return (
-                    <td key={category} className={`px-1 py-1 ${isPunted || taken ? 'opacity-40' : ''}`}
+                    <td key={category} className={`px-0.5 sm:px-1 py-1 ${isPunted || taken ? 'opacity-40' : ''}`}
                         title={`${CATEGORY_FULL[category]}: percentile ${displayScore}`}>
-                      <div className={`px-1.5 py-0.5 rounded border ${getScoreBgColor(displayScore, stat.is_inverse)}`}>
-                        <div className="flex items-center justify-between gap-1.5 leading-tight">
-                          <span className={`text-sm font-bold tabular-nums ${getStatTextColor(displayScore, stat.is_inverse)}`}>
+                      <div className={`px-0.5 sm:px-1.5 py-0.5 rounded border ${getScoreBgColor(displayScore, stat.is_inverse)}`}>
+                        <div className="flex flex-col sm:flex-row items-center sm:justify-between sm:gap-1.5 leading-tight">
+                          <span className={`text-xs sm:text-sm font-bold tabular-nums ${getStatTextColor(displayScore, stat.is_inverse)}`}>
                             {category === 'PLUS_MINUS' && displayValue > 0 ? '+' : ''}{displayValue}{PERCENTAGE_CATEGORIES.includes(category) ? '%' : ''}
                           </span>
-                          <span className={`text-[11px] opacity-75 tabular-nums ${getScoreColor(displayScore, stat.is_inverse)}`}>
+                          <span className={`text-[10px] sm:text-[11px] opacity-75 tabular-nums ${getScoreColor(displayScore, stat.is_inverse)}`}>
                             {displayScore}
                           </span>
                         </div>

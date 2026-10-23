@@ -80,6 +80,7 @@ must keep its `sm:` twin.
   and the chip say it), 4rem OVR column (5rem in points leagues), stat cards (value + percentile, tinted), stats in `orderColumns` order. Header
   cells never wrap (a taller header row shifts the table). The GP warning (`small_sample`) scales with days since the first game
   (`player_stats.small_sample_floor`, shared by rankings, Lineup Optimizer and Weekly Pickups): week one flags nobody.
+- Player Rankings on phones (owner, 2026-10-22): OVR column hidden; the first five stat columns (`orderColumns`: PTS, REB, A-TO/AST, STL, BLK) fit at 390px because the cell stacks value over percentile and the punt checkbox sits under the label. `sm:` restores the side-by-side card and OVR.
 - Player Rankings toolbar: search + a Filters button (badge = levers changed from default); stats,
   positions, star premium, available/healthy fold into it.
 - Daily Leaders toolbar: one row on phones: `‹ Wed 14 ›` (orange on today; hold it to jump back; tap it for a month calendar that picks on tap, no OK button (`DatePopover`), limited to `season_range`: regular season widened 30 days before, 70 after, `player_stats.season_window`), Avail / Mine chips (no All, no counts; tap the lit chip to return to everything), Best|Pace. Status text and the Today link are desktop-only.
