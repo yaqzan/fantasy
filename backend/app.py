@@ -20,7 +20,8 @@ from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_f
                                  league_team_ids, get_undroppable_players, set_league_flags)
 from leagues import (POINT_STATS, get_league, list_leagues, create_league, update_league, activate_league, delete_league,
                      generate_weeks, category_meta, CATEGORY_CATALOG, DEFAULT_SETTINGS, NotFound)
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from daily_leaders import NBA_TZ
 
 app = Flask(__name__, static_folder=None)  # /static/* belongs to the React build (serve_frontend)
 CORS(app, resources={
@@ -236,6 +237,10 @@ def get_fantasy_players():
     current_week_games = team_games(week_schedule(current_week_start, current_week_end))
     next_week_games = team_games(week_schedule(next_week_start, next_week_end)) if next_week_start else {}
 
+    # Who plays on the NBA's (Eastern) today and tomorrow, for the Player Rankings filters
+    today = datetime.now(NBA_TZ).date()
+    day_games = week_schedule(today, today + timedelta(days=1))
+
     # The 400 best on last season, the projection or the preseason-adjusted projection (rookies lack the first).
     top = sorted(player_stats.items(), key=lambda x: min(x[1].get('Z-RANK', 999), x[1].get('Z-RANK_proj', 999),
                                                          x[1].get('Z-RANK_pre', 999)))[:400]
@@ -280,6 +285,8 @@ def get_fantasy_players():
             'projected_games': round(stats.get('GP_proj', 0)),
             'current_week_games': current_week_games.get(full_team_name, 0),
             'next_week_games': next_week_games.get(full_team_name, 0),
+            'plays_today': today in day_games.get(full_team_name, {}),
+            'plays_tomorrow': today + timedelta(days=1) in day_games.get(full_team_name, {}),
             'stats': category_stats,
             'overall_rank': stats.get('Z-RANK_projected', 0),  # Default to projected
             'overall_rank_season': stats.get('Z-RANK', 0),

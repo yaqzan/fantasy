@@ -21,7 +21,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
   const chips = caps.positions?.length ? caps.positions : ['G', 'F', 'C'];
   const [view, setView] = useLeagueViewState(config.league?.id, 'players', {
     statType: config.default_stat_type || 'projected', positions: chips, available: true, healthy: true,
-    priceExponent: null, punts: [],
+    priceExponent: null, punts: [], tonight: false, tomorrow: false,
   }, (picked) => ({
     ...validStat(config)(picked),
     ...(picked.punts && { punts: picked.punts.filter(c => categoryKeys.includes(c)) }),
@@ -33,16 +33,21 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
   const leagueExponent = config.league?.settings?.draft?.price_exponent ?? 1;
   const showPositionFilter = !draftMode || Boolean(caps.positions?.length);
 
+  // The NBA's day is an Eastern date; label the filters with it so it is clear which night they mean.
+  const dayLabel = (offset) => new Date(Date.now() + offset * 864e5).toLocaleDateString('en-US',
+    { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
   const search = searchTerm.toLowerCase();
   const filtered = players.filter(player => {
     const mine = player.fantasy_team?.abbreviation === config.MY_TEAM_ABV;
     return (player.name.toLowerCase().includes(search) || player.team.toLowerCase().includes(search))
       && (mine || !view.available || !player.drafted)
       && (!showPositionFilter || view.positions.some(chip => playsPosition(player, chip)))
-      && (!view.healthy || !player.is_injured);
+      && (!view.healthy || !player.is_injured)
+      && (!view.tonight || player.plays_today)
+      && (!view.tomorrow || player.plays_tomorrow);
   });
   const changed = [view.statType !== (config.default_stat_type || 'projected'), showPositionFilter && view.positions.length !== chips.length,
-    caps.auction && view.priceExponent != null, !view.available, !view.healthy].filter(Boolean).length;
+    caps.auction && view.priceExponent != null, !view.available, !view.healthy, view.tonight, view.tomorrow].filter(Boolean).length;
   const lever = filtersOpen ? 'flex' : 'hidden sm:flex';
   const togglePosition = (chip) => setView(v => ({
     positions: v.positions.includes(chip) ? v.positions.filter(p => p !== chip) : [...v.positions, chip],
@@ -114,10 +119,18 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
             </div>
           )}
 
-          <div className={`${lever} items-center space-x-4`}>
+          <div className={`${lever} items-center flex-wrap gap-x-4 gap-y-1`}>
             <label className="flex items-center">
               <input type="checkbox" checked={view.available} onChange={(e) => setView({ available: e.target.checked })} className={checkboxClass} />
               <span className="ml-2 text-sm text-gray-300">Available</span>
+            </label>
+            <label className="flex items-center" title="Only players whose team plays on this Eastern date">
+              <input type="checkbox" checked={view.tonight} onChange={(e) => setView({ tonight: e.target.checked })} className={checkboxClass} />
+              <span className="ml-2 text-sm text-gray-300">Tonight ({dayLabel(0)})</span>
+            </label>
+            <label className="flex items-center" title="Only players whose team plays on this Eastern date">
+              <input type="checkbox" checked={view.tomorrow} onChange={(e) => setView({ tomorrow: e.target.checked })} className={checkboxClass} />
+              <span className="ml-2 text-sm text-gray-300">Tomorrow ({dayLabel(1)})</span>
             </label>
             <label className="flex items-center">
               <input type="checkbox" checked={view.healthy} onChange={(e) => setView({ healthy: e.target.checked })} className={checkboxClass} />

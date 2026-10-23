@@ -246,7 +246,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                 return (
                   <th
                     key={category}
-                    className={`table-header !px-0.5 sm:!px-1 whitespace-nowrap ${isPunted ? 'opacity-40' : ''}`}
+                    className={`table-header !px-0 sm:!px-1 whitespace-nowrap ${isPunted ? 'opacity-40' : ''}`}
                   >
                     <div className="flex flex-col sm:flex-row items-center justify-center sm:space-x-1">
                       {caps.punts && (
@@ -263,7 +263,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                         title={`${CATEGORY_FULL[category]} (click to sort)`}
                         onClick={() => handleSort(`stats.${category}.value`)}
                       >
-                        {CATEGORY_NAMES[category]} <SortIcon columnKey={`stats.${category}.value`} />
+                        {CATEGORY_NAMES[category]}<span className="hidden sm:inline ml-1"><SortIcon columnKey={`stats.${category}.value`} /></span>
                       </div>
                     </div>
                   </th>
@@ -337,9 +337,9 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
 
                   // Condensed card: the stat's name is in the header, so the cell is just value + percentile.
                   return (
-                    <td key={category} className={`px-0.5 sm:px-1 py-1 ${isPunted || taken ? 'opacity-40' : ''}`}
+                    <td key={category} className={`px-px sm:px-1 py-1 ${isPunted || taken ? 'opacity-40' : ''}`}
                         title={`${CATEGORY_FULL[category]}: percentile ${displayScore}`}>
-                      <div className={`px-0.5 sm:px-1.5 py-0.5 rounded border ${getScoreBgColor(displayScore, stat.is_inverse)}`}>
+                      <div className={`px-0 sm:px-1.5 py-0.5 rounded border ${getScoreBgColor(displayScore, stat.is_inverse)}`}>
                         <div className="flex flex-col sm:flex-row items-center sm:justify-between sm:gap-1.5 leading-tight">
                           <span className={`text-xs sm:text-sm font-bold tabular-nums ${getStatTextColor(displayScore, stat.is_inverse)}`}>
                             {category === 'PLUS_MINUS' && displayValue > 0 ? '+' : ''}{displayValue}{PERCENTAGE_CATEGORIES.includes(category) ? '%' : ''}
