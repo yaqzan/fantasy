@@ -425,12 +425,62 @@ def pull_adp(yahoo_league, count=300):
     print(f'{len(rows)} players -> {path}; top 5: ' + ', '.join(f"{r['name']} (#{r['rank']}, ADP {r['adp']})" for r in rows[:5]))
 
 
+def sync_schedule(yahoo_league, apply):
+    """Our league schedule from Yahoo's scoreboards: each regular week's start and my opponent (teams matched
+    by Yahoo team number). Playoff weeks keep a blank opponent and what's already here; playoffs.first_week
+    is filled when it is unset."""
+    from datetime import date, timedelta
+    from fantasy_database import FantasyTeam
+    from leagues import update_league
+    league = _league(yahoo_league)
+    key = f'nba.l.{yahoo_league}'
+    teams = list(FantasyTeam.select().where(FantasyTeam.league == league.id))
+    abv = {str(t.platform_team_id): t.abv for t in teams if t.platform_team_id}
+    mine = next((str(t.platform_team_id) for t in teams if t.abv == league.my_team and t.platform_team_id), None)
+    if not mine:
+        raise SystemExit(f'my team ({league.my_team!r}) has no Yahoo team number; run pull_yahoo.py sync first')
+    first_playoff = int(fetch(f'league/{key}/settings').findtext('.//y:playoff_start_week', namespaces=NS))
+    schedule, week_end = [], None
+    for week in range(1, first_playoff):
+        root = fetch(f'league/{key}/scoreboard;week={week}')
+        start = root.findtext('.//y:week_start', namespaces=NS)
+        week_end = date.fromisoformat(root.findtext('.//y:week_end', namespaces=NS))
+        opponent = None
+        for m in root.iter(f"{{{NS['y']}}}matchup"):
+            ids = [t.findtext('y:team_key', namespaces=NS).rsplit('.t.', 1)[-1] for t in m.iter(f"{{{NS['y']}}}team")]
+            if mine in ids:
+                theirs = ids[1] if ids[0] == mine else ids[0]
+                opponent = abv.get(theirs)
+                if opponent is None:
+                    raise SystemExit(f'week {week}: no team here with Yahoo team {theirs}')
+        if opponent is None:
+            raise SystemExit(f'week {week}: Yahoo lists no matchup for my team')
+        schedule.append([start, opponent])
+    old = dict(league.schedule)
+    # Playoff weeks start the day after the last regular week; the ones already here stay.
+    first_start = (week_end + timedelta(days=1)).isoformat()
+    schedule += sorted([s, o] for s, o in old.items() if s >= first_start)
+    for i, (start, opponent) in enumerate(schedule, 1):
+        was = old.get(start)
+        note = '' if was == opponent else ('  (new week)' if was is None else f'  (was {was or "blank"})')
+        print(f'  week {i:2} {start}  {opponent or "-"}{note}')
+    for start in sorted(set(old) - {s for s, _ in schedule}):
+        print(f'  {start}: not a Yahoo week, dropped')
+    settings = dict(league.settings, schedule=schedule)
+    if not league.settings['playoffs']['first_week']:
+        settings['playoffs'] = dict(league.settings['playoffs'], first_week=first_playoff)
+        print(f'  playoffs start week {first_playoff}')
+    if apply:
+        update_league(league.id, settings=settings)
+    print(f'{len(schedule)} weeks' + ('' if apply else ' (dry run; pass --apply)'))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Yahoo Fantasy league import (dry run unless --apply).')
-    parser.add_argument('what', choices=['auth', 'sync', 'draft', 'adp'])
+    parser.add_argument('what', choices=['auth', 'sync', 'draft', 'adp', 'schedule'])
     parser.add_argument('--code', help='auth: the code Yahoo showed after approving')
     parser.add_argument('--league', help='sync: the Yahoo league number (settings platform_league_id)')
-    parser.add_argument('--apply', action='store_true', help='sync, draft: write the changes')
+    parser.add_argument('--apply', action='store_true', help='sync, draft, schedule: write the changes')
     parser.add_argument('--watch', type=int, metavar='SECONDS', help='draft: repeat every N seconds until Ctrl+C')
     parser.add_argument('--log', metavar='FILE', help='append all output to FILE (background runs)')
     args = parser.parse_args()
@@ -447,6 +497,8 @@ if __name__ == '__main__':
             open(args.log + '.ok', 'w').close()
     elif args.what == 'adp':
         pull_adp(args.league)
+    elif args.what == 'schedule':
+        sync_schedule(args.league, args.apply)
     else:
         while True:
             try:

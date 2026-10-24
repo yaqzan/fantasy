@@ -36,7 +36,9 @@ stats) is shared by all leagues.
   round-1 order (teams' `draft_position`, empty until Yahoo sets it shortly before the draft) to settings
   `draft.order` (team abbreviations) and puts each drafted player on his team (Yahoo wins; no pick number is
   stored); `--watch N` polls. `adp` writes Yahoo's pre-draft rank (`OR`) and ADP for the top 300 to
-  `.cache/yahoo_adp_<league>.json` (the snake room model, draft-strategy.md).
+  `.cache/yahoo_adp_<league>.json` (the snake room model, draft-strategy.md). `schedule` (dry run unless `--apply`)
+  writes our weeks and opponents from Yahoo's scoreboards, opponents matched by Yahoo team number; sync never
+  touches the schedule, and the lineup optimizer's opponent is wrong until it runs.
 - **Which league a request is about.** `X-League` header (the frontend's switcher, stored in
   localStorage `fantasy.league`), else `?league=`, else the active league. Switching in the UI
   also activates the league, so CLI scripts (`lineup_optimizer.py`, default `--league`) follow
