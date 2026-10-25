@@ -75,26 +75,13 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
     return null;
   };
 
-  // Preseason-adjusted view: how far his preseason games moved his OVR off the projection.
-  const getPreIndicator = (player) => {
-    const d = player.pre_trend;
-    if (d === null || d === undefined) return <span className="text-[11px] text-gray-500" title="No preseason games">–</span>;
-    const r = Math.round(d);
-    const title = `${player.preseason_games} preseason games, ${player.preseason_minutes} min: OVR ${r > 0 ? '+' : ''}${r} vs the projection (rank ${player.overall_rank_proj} → ${player.overall_rank_pre})`;
-    if (r === 0) return <span className="text-[11px] text-gray-500" title={title}>±0</span>;
-    return <span className={`text-xs font-semibold ${r > 0 ? 'text-green-400' : 'text-red-400'}`} title={title}>{r > 0 ? '▲' : '▼'}{Math.abs(r)}</span>;
-  };
-  const preView = statType === 'pre';
 
   const handleSort = (key) => {
     let direction;
     
     if (sortConfig.key === key) {
       // If clicking the same column, cycle: current direction -> unsorted -> unsorted
-      // (the preseason trend goes risers -> fallers -> unsorted)
-      if (key === 'pre_trend' && sortConfig.direction === 'desc') {
-        direction = 'asc';
-      } else if (sortConfig.direction === null) {
+      if (sortConfig.direction === null) {
         direction = null; // Stay unsorted
       } else {
         direction = null; // Go to unsorted
@@ -146,9 +133,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
       bValue = b[sortConfig.key];
     }
     
-    // Handle null/undefined values (players with no preseason games sit below risers and fallers alike)
+    // Handle null/undefined values
     if (aValue == null && bValue == null) return 0;
-    if (sortConfig.key === 'pre_trend' && (aValue == null || bValue == null)) return aValue == null ? 1 : -1;
     if (aValue == null) return sortConfig.direction === 'asc' ? 1 : -1;
     if (bValue == null) return sortConfig.direction === 'asc' ? -1 : 1;
     
@@ -242,7 +228,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1 min-w-0">
                         <PlayerName id={player.id} name={player.name} className={`font-medium truncate min-w-0 ${mine ? 'text-mine' : 'text-white'}`} />
-                        <span className="shrink-0 text-[11px]">{preView ? getPreIndicator(player) : getHotColdIndicator(player)}</span>
+                        <span className="shrink-0 text-[11px]">{getHotColdIndicator(player)}</span>
                       </div>
                       <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                         <span>{player.positions?.length ? player.positions.join('/') : player.position} · {player.team_abv || 'N/A'}</span>

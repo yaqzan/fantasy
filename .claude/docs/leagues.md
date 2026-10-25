@@ -166,13 +166,12 @@ stats) is shared by all leagues.
   (`num_teams x roster.size`) costs $1; the rest of `num_teams x budget` goes by (value -
   first undrafted player's value) ^ `draft.price_exponent`, rounded to whole dollars that add up
   to the budget. `/api/fantasy` prices every timeframe (`auction_value_<period>`) so the table's
-  $ always sits on the same stats as its rank. **Three different "projections"** (don't mix them up):
-  `proj` = our projection model, `pre` = the model moved by preseason games (best before the season),
-  `projected` = RECENT FORM (half the season's average, half the last 10 games; labelled that way in the
-  UI). `player_stats.default_stat_type(league)` picks the default (`pre` > `proj` > `season` until a regular-season game
-  has been played, `projected` (recent form) from then on: it reads the game log for the season, no date, so it flips by itself each year) for `config.default_stat_type` and for every API call without a
-  timeframe. A player with no games (rookie, missed last season) has no recent form, so his `_projected`
-  is his `_proj`. Players under
+  $ always sits on the same stats as its rank. **One projection** (2026-10-24; was three: model, preseason-adjusted, "recent form"): the stats choices are
+  `projected` = "Projection" (the default everywhere; the model moved by preseason games, then by his real games,
+  per stat, last 10 weighted extra: projections.md "In-season update"), `season`, `10`, `5`. `_proj` stays as the
+  unfaded model line (Projections tab, what-if, the card's first row), not a stats choice; an older client's `proj` / `pre` falls to `projected`.
+  `player_stats.default_stat_type(league)` is `projected` once this season has a projection or a game, else `season`.
+  A player with no line (2 of 517 on 2026-10-24) keeps the old recent-form numbers in `_projected` but sits outside the scaling pool. Players under
   `games_floor` are flagged `small_sample`. Fit the exponent to the league's past auction prices by rank (least squares
   over the drafted players); the owner's league stores its fit (a gitignored
   `draft_history_price_curve.json` holds the price curve it came from).

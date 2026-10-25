@@ -11,11 +11,11 @@ from leagues import CATEGORY_CATALOG, slot_reach
 
 
 TIME_PERIODS = ['', '_5', '_10']
-TIMEFRAMES = ['', '_5', '_10', '_projected', '_proj', '_pre']  # '_proj': this season's projection (projections.py)
-PROJ_FRAMES = ('_proj', '_pre')  # '_pre': the projection moved by his preseason games (preseason.py)
-# The frontend's stats choices -> key suffix. 'projected' is RECENT FORM (half this season, half last 10
-# games), not the projection model: 'proj' is the model, 'pre' the model moved by preseason games.
-STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected', 'proj': '_proj', 'pre': '_pre'}
+TIMEFRAMES = ['', '_5', '_10', '_projected', '_proj']  # '_proj': the blended line as is; '_projected': THE projection (see _add_projections)
+PROJ_FRAMES = ('_proj', '_projected')
+# The frontend's stats choices -> key suffix. 'projected' is THE projection (model + preseason + this season's games);
+# an older client's 'proj' / 'pre' falls through to it (callers default to '_projected').
+STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected'}
 Z_CAP = 3.0       # a category's z-score is capped at +/-Z_CAP before categories are summed
 POOL_PASSES = 3   # re-rank passes that settle the pool the z-scores are measured against
 # Players in that pool per roster spot. Teams reach past the top `spots` for categories and injuries
@@ -83,19 +83,15 @@ def is_preseason(today=None):
 
 
 def default_stat_type(league):
-    """The stats choice a league opens on, and what an API call without one uses. Until a regular-season
-    game has been played: 'pre' (the projection moved by preseason games) once preseason games are in, else
-    'proj' (this season's projection), else last season's. From the first finished game on: 'projected'
-    (recent form: half the season, half the last 10 games). Date-free: it follows the game log, so it
-    flips by itself every year."""
-    from fantasy_database import GameLine, PlayerProjection, PreseasonLine
+    """The stats choice a league opens on, and what an API call without one uses: the projection ('projected'),
+    which is the model moved by preseason games and then by real ones, so it is right from before the season on.
+    Last season's averages until this season has a projection."""
+    from fantasy_database import GameLine, PlayerProjection
     from projections import season_label
     season = season_label()
     if GameLine.select().where(GameLine.season == season).exists():
         return 'projected'
-    if not PlayerProjection.select().where(PlayerProjection.season == season).exists():
-        return 'season'
-    return 'pre' if PreseasonLine.select().where(PreseasonLine.season == season).exists() else 'proj'
+    return 'projected' if PlayerProjection.select().where(PlayerProjection.season == season).exists() else 'season'
 
 
 def nba_positions(player):
@@ -115,44 +111,62 @@ def _ratios(stats, n):
     stats[f'EFG%{n}'] = (stats[f'FGM{n}'] + 0.5 * stats[f'FG3M{n}']) / fga if fga else 0
 
 
+def _season_minutes(season):
+    """{NBA player id: (minutes this season, minutes over his last RECENT_GAMES, games)} from the game lines."""
+    from fantasy_database import GameLine
+    from inseason import RECENT_GAMES
+    rows = {}
+    for r in GameLine.select(GameLine.player_id, GameLine.game_date, GameLine.min).where(
+            (GameLine.season == season) & (GameLine.min > 0)).order_by(GameLine.game_date):
+        rows.setdefault(r.player_id, []).append(r.min)
+    return {pid: (sum(m), sum(m[-RECENT_GAMES:]), len(m)) for pid, m in rows.items()}
+
+
 def _add_projections(player_stats, preseason, team_win):
-    """The '_proj' timeframe: this season's blended projection (projections.player_lines) for
-    every rostered player who has one, rookies included. Once his games this season are in the
-    players table, each stat becomes (projection x K + actual total) / (K + games played),
-    K = PROJECTION_FADE_GAMES, so early-season samples don't swing him around."""
+    """The projection frames, for every rostered player who has a blended line (projections.player_lines), rookies included.
+    '_proj': the line as it is, the model's view before this season. '_projected': THE projection, the one stats
+    choice the app uses: the line moved by his preseason games (preseason.adjust), then updated by his real games this
+    season, per stat (inseason.blend: the prior is worth K games, his last 10 count extra), so early samples don't
+    swing him around and a real role change shows. Players with no line keep the old recent-form numbers
+    (half the season, half the last 10) in '_projected'."""
     from projections import player_lines, season_label
     from preseason import adjust, preseason_totals
+    from inseason import RECENT_GAMES, blend
     lines = player_lines(season_label())
     if not lines:
         return
     pre_totals = preseason_totals(season_label())
     first_game = season_first_game()
+    minutes = _season_minutes(season_label()) if first_game is not None and not preseason else {}
     rostered = Player.select().where(Player.id.in_(list(lines)), Player.team.is_null(False), Player.pos.is_null(False))
     for player in rostered:
         line = lines[player.id]
         team_name = TEAM_DICT.get(player.team, player.team)
-        no_games = player.name not in player_stats   # rookie, or missed last season: no stats of his own
         stats = player_stats.setdefault(player.name, {'TEAM': team_name, 'Pos': player.pos,
                                                       'Positions': nba_positions(player), 'GP': 0})
         current = (not preseason and first_game is not None and player.api_updated_at is not None
                    and player.api_updated_at.date() >= first_game)
         played = (player.gp or 0) if current else 0
+        recent = min(played, RECENT_GAMES)
         pre = pre_totals.get(player.id)
-        for n, source in (('_proj', line), ('_pre', adjust(line, pre))):
+        for n, source in (('_proj', line), ('_projected', adjust(line, pre))):
             for key, attr in PROJECTED_STATS.items():
-                projected = source[attr] or 0.0
-                actual = getattr(player, attr, None) or 0
-                stats[f'{key}{n}'] = ((projected * PROJECTION_FADE_GAMES + actual) / (PROJECTION_FADE_GAMES + played)
-                                      if played else projected)
-            stats[f'MIN{n}'] = source['min'] or 0.0
+                prior = source[attr] or 0.0
+                if n == '_projected' and played:
+                    total = getattr(player, attr, None) or 0
+                    stats[f'{key}{n}'] = blend(key, prior, total, getattr(player, f'{attr}_10', None) or 0, played, recent)
+                else:
+                    stats[f'{key}{n}'] = prior
+            mpg = source['min'] or 0.0
+            if n == '_projected' and played and player.id in minutes:
+                total, last, games = minutes[player.id]
+                mpg = blend('MIN', mpg, total, last, games, min(games, RECENT_GAMES))
+            stats[f'MIN{n}'] = mpg
             stats[f'WIN%{n}'] = stats[f'W{n}'] = team_win.get(team_name, 0.5)
             stats[f'PLUS_MINUS{n}'] = 0.0
             _ratios(stats, n)
         stats['PRE_G'], stats['PRE_MIN'] = (pre['g'], pre['min']) if pre else (0, 0)
-        stats['GP_proj'] = stats['GP_pre'] = line['gp'] or 0.0   # preseason moves rates and minutes, not games
-        if no_games:  # the 'projected' blend (half season, half last 10) has nothing to blend: use the projection
-            for key in [k for k in stats if k.endswith('_proj')]:
-                stats[f'{key[:-5]}_projected'] = stats[key]
+        stats['GP_proj'] = stats['GP_projected'] = line['gp'] or 0.0   # games are the projection's; real games move rates and minutes
         if line.get('exp') is not None:
             stats['NBA_YEAR'] = line['exp'] + 1   # 3 = entering his third season
 

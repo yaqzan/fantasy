@@ -1,4 +1,4 @@
-"""The '_pre' timeframe: this season's projection updated by the player's preseason games.
+"""Preseason games move the projection (the first step of the "_projected" timeframe, player_stats._add_projections): the projection updated by the player's preseason games.
 
 Constants from the 2026-10-17 backtest (.claude/docs/projections.md "Preseason signal": 13 seasons,
 fit before each target, holdout 2021-25). Per stat: take the preseason's hot level off (offset), then

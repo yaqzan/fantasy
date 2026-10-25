@@ -10,7 +10,7 @@ import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fantasy_database import (DB, Player, Team, FantasyTeam, FantasyTeamPlayer,
-                              PlayerProjection, PreseasonLine, ProjectionAdjustment)
+                              PlayerProjection, ProjectionAdjustment)
 from projections import season_label
 from player_stats import (league_player_stats, calculate_auction_values, calculate_team_totals, week_schedule,
                           team_games, player_week_games, best_starters, small_sample_floor, auction_value_at,
@@ -104,7 +104,7 @@ def _draft_plan(league_id):
 def league_config(league):
     """League rules the frontend renders from (categories, roster, draft). Before the league's
     first week the stats are last season's, and the full season is the basis to draft on; after,
-    'projected' (recent form: half the season, half the last 10 games); see player_stats.default_stat_type."""
+    'projected' (the projection, updated by his games); see player_stats.default_stat_type."""
     schedule = league.schedule
     team_ids = league_team_ids(league)
     preseason = bool(schedule) and date.today().isoformat() < schedule[0][0]
@@ -123,8 +123,6 @@ def league_config(league):
         # Before the season: this season's projection when there is one, else last season.
         'default_stat_type': default_stat_type(league),
         'projection_season': season_label() if has_projections else None,
-        # The 'pre' stats choice: the projection moved by this season's preseason games (preseason.py).
-        'has_preseason': has_projections and PreseasonLine.select().where(PreseasonLine.season == season_label()).exists(),
     }
 
 
@@ -241,9 +239,8 @@ def get_fantasy_players():
     today = datetime.now(NBA_TZ).date()
     day_games = week_schedule(today, today + timedelta(days=1))
 
-    # The 400 best on last season, the projection or the preseason-adjusted projection (rookies lack the first).
-    top = sorted(player_stats.items(), key=lambda x: min(x[1].get('Z-RANK', 999), x[1].get('Z-RANK_proj', 999),
-                                                         x[1].get('Z-RANK_pre', 999)))[:400]
+    # The 400 best on last season or the projection (rookies lack the first).
+    top = sorted(player_stats.items(), key=lambda x: min(x[1].get('Z-RANK', 999), x[1].get('Z-RANK_projected', 999)))[:400]
     players_by_name = {p.name: p for p in Player.select().where(Player.name.in_([name for name, _ in top]))}
     # A small sample is relative to how far into the season it is: one game is the norm in week one (players
     # whose team hasn't played yet still carry last season's GP, so the games played so far can't be read off the players).
@@ -258,15 +255,15 @@ def get_fantasy_players():
         category_stats = {}
         for category in league.categories:
             values, scores = {}, {}
-            for period, suffix in (('season', ''), ('5', '_5'), ('10', '_10'), ('projected', '_projected'), ('proj', '_proj'), ('pre', '_pre')):
+            for period, suffix in (('season', ''), ('5', '_5'), ('10', '_10'), ('projected', '_projected'), ('proj', '_proj')):
                 value = stats.get(category + suffix, 0) or 0
                 values[period] = round(value * 100, 1) if CATEGORY_CATALOG[category].get('percent') else round(value, 2 if category in ('TECH', 'WIN%') else 1)
                 scores[period] = int(stats.get(f'SCORE-{category}{suffix}', 0))
             category_stats[category] = {
                 'value': values['projected'], 'value_season': values['season'], 'value_5': values['5'],
-                'value_10': values['10'], 'value_projected': values['projected'], 'value_proj': values['proj'], 'value_pre': values['pre'],
+                'value_10': values['10'], 'value_projected': values['projected'], 'value_proj': values['proj'],
                 'score': scores['projected'], 'score_season': scores['season'], 'score_5': scores['5'],
-                'score_10': scores['10'], 'score_projected': scores['projected'], 'score_proj': scores['proj'], 'score_pre': scores['pre'],
+                'score_10': scores['10'], 'score_projected': scores['projected'], 'score_proj': scores['proj'],
                 'is_inverse': category in league.inverse_categories,
             }
 
@@ -294,24 +291,18 @@ def get_fantasy_players():
             'overall_rank_10': stats.get('Z-RANK_10', 0),
             'overall_rank_projected': stats.get('Z-RANK_projected', 0),
             'overall_rank_proj': stats.get('Z-RANK_proj', 0),
-            'overall_rank_pre': stats.get('Z-RANK_pre', 0),
             'z_score': round(stats.get('Z-SCORE_projected', 0), 1),  # Default to projected
             'z_score_season': round(stats.get('Z-SCORE', 0), 1),
             'z_score_5': round(stats.get('Z-SCORE_5', 0), 1),
             'z_score_10': round(stats.get('Z-SCORE_10', 0), 1),
             'z_score_projected': round(stats.get('Z-SCORE_projected', 0), 1),
             'z_score_proj': round(stats.get('Z-SCORE_proj', 0), 1),
-            'z_score_pre': round(stats.get('Z-SCORE_pre', 0), 1),
-            # Preseason view: how far his preseason moved his value (OVR points, 10 = 1 SD), and on what.
-            'pre_trend': round(stats.get('Z-SCORE_pre', 0) - stats.get('Z-SCORE_proj', 0), 1) if stats.get('PRE_G') else None,
-            'preseason_games': stats.get('PRE_G') or 0, 'preseason_minutes': stats.get('PRE_MIN') or 0,
             'auction_value': stats.get('AUCTION_VALUE_projected', 0),  # Default to projected
             'auction_value_season': stats.get('AUCTION_VALUE', 0),
             'auction_value_5': stats.get('AUCTION_VALUE_5', 0),
             'auction_value_10': stats.get('AUCTION_VALUE_10', 0),
             'auction_value_projected': stats.get('AUCTION_VALUE_projected', 0),
             'auction_value_proj': stats.get('AUCTION_VALUE_proj', 0),
-            'auction_value_pre': stats.get('AUCTION_VALUE_pre', 0),
             'hot_overall': round(stats.get('Z-SCORE_5', 0) - stats.get('Z-SCORE', 0), 1),
             'is_injured': bool(player and player.injured == 1),
             'injured_return': (player.injured_return if player and player.injured == 1 else None),

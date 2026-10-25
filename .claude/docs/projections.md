@@ -131,8 +131,8 @@ team wins (`team_strength`). NBA-wide, shared by every league.
 - **Stats basis `_proj`** (`player_stats._add_projections`): every rostered player with a line,
   rookies included; `GP_proj` >= 20 makes the scaling pool, and only pool players get an auction $ (any timeframe:
   `ELIGIBLE{n}`; the rest show $1. A model-only line on 67 career minutes had priced at $18); ratios are not shrunk again. Once
-  his games this season are loaded (`api_updated_at` after opening night), each stat fades:
-  (projection x 12 + actual total) / (12 + games). Pre-season the UI defaults to it.
+  his games this season are loaded (`api_updated_at` after opening night), `_projected` updates it (below);
+  `_proj` is the line as it is.
 - **Team wins** (`team_projection_index`, `team_strength`): sources weighted by past accuracy
   (`TEAM_SOURCE_WEIGHT`: Vegas .41, ESPN summer panel .30, Bleacher .29; no track record = 0).
   Vegas has been off by 6.5 wins a team over 13 seasons, the rest slightly worse. Strength =
@@ -171,12 +171,32 @@ team wins (`team_strength`). NBA-wide, shared by every league.
 - **Check a new source before blending it**: median per-game ratio to ESPN per stat and games.
   CBS 2026-27 came out at .84 points / 1.12 games (totals over too many games) and is in
   `NOT_BLENDED`; the others sit within ~7% (ESPN is the most optimistic, as in the backtests).
-- **Preseason signal (backtest 2026-10-17, `.horizon/preseason-2026/`: `backtest.py`, `holdout.py`).** In the app as the
-  `'_pre'` timeframe (`preseason.py` holds the constants below; `player_stats._add_projections` builds it from the
-  unfaded projection, then fades it with real games like `'_proj'`; `PROJ_FRAMES` treats both alike). Player Rankings'
-  "Preseason-adjusted" stats choice (only there: Lineup/Pickups/Standings don't offer it) with a Δ column
-  (`pre_trend`: OVR points vs the projection; tap again for fallers); the card's Adjusted row; the draft board
-  follows the same stats choice. Players projected 32+ MPG keep their minutes (below). Lines: `game_log.store_preseason` -> `preseason_lines` (every
+- **In-season update (2026-10-24; `inseason.py`, backtest `.horizon/preseason-2026/inseason.py` + `inseason_rank.py`,
+  logs `data/rs_*.csv`, `fetch_rs.py`).** `_projected`, THE projection (the one stats choice besides Season / Last 10 / Last 5), per stat per game:
+  `(K x prior + games + R x last-10 games) / (K + n + R x n10)`; prior = the blended line moved by his preseason games.
+  Before: one K=12 for every stat, no recency, minutes never updated, plus a separate "Recent form" (half season, half last 10,
+  no prior) that was the default once games existed: on 2-3 games it made Davion Mitchell a +0.55 pickup against +0.06
+  on the projection. K, R fit 2016-2022 (prior = `project_season` + `preseason.adjust`, checkpoints after 5/10/20/30 games, error on his
+  REST-of-season per-game stat, players projected 15+ MPG, weighted by games left), scored on 2023-2025 (12,354 rows):
+  | | MIN | PTS | REB | AST | STL | BLK | 3PM | TOV | FGA | FGM | FTA | FTM |
+  |---|---|---|---|---|---|---|---|---|---|---|---|---|
+  | K (games) | 16 | 12 | 16 | 12 | 32 | 32 | 16 | 16 | 16 | 16 | 16 | 16 |
+  | R | 2 | 1 | 1 | 1 | 0 | .5 | .5 | .5 | 2 | 1 | .5 | .5 |
+  BLKA / PF / DD / TD / TECH borrow a neighbour's (`inseason.FOLLOW`). Minutes now update too (game lines).
+  Out of sample error (MSE / variance of the stat) vs prior only / old K=12 / recent form: PTS .155 / .244 / .157 / .230, REB .156,
+  AST .152, MIN .260 / .454 / .275 / .358, FGA .148 / .259 / .157 / .197, STL .373 / .450 / .400 / .916. Fitted beats
+  K=12 by 0-2% on PTS REB AST 3PM TOV FTA, 4-7% on MIN FGA STL BLK; recent form is 25-59% WORSE than the fitted blend and
+  worse than the prior alone on REB, STL, BLK, 3PM, TOV, FTA. By games played (mean over stats): 5 g prior .269, K12 .217, form .500,
+  fitted .211; 10 g .280 / .203 / .335 / .200; 20 g .300 / .194 / .266 / .187. **Ranking** (composite z of PTS REB AST STL BLK 3PM TOV,
+  Spearman with rest-of-season, 2023-25 mean): after 5 games prior .806, form .775, K12 .853, fitted .857; 10 g .798 / .821 / .861 / .863;
+  20 g .782 / .844 / .867 / .871; of the real top 30 found: 18 / 18 / 20 / 21 (5 g). So the gain over the old blend is small and
+  consistent; the big fix is dropping "recent form" and the prior-less default. R is real but modest: R=1 (the last 10 count double) is
+  the optimum for volume stats, 0 for steals. The backtest prior is our model alone, so the live prior (experts blended in) is a little better and
+  would want a slightly higher K. Re-fit when a season of live games is in. A first-game call-up has no
+  prior of his own (no line): he sits outside the pool.
+- **Preseason signal (backtest 2026-10-17, `.horizon/preseason-2026/`: `backtest.py`, `holdout.py`).** In the app
+  as step one of the `'_projected'` timeframe (`preseason.py` holds the constants below; the in-season update, next entry,
+  runs on top; there is no separate preseason stats choice any more). Players projected 32+ MPG keep their minutes (below). Lines: `game_log.store_preseason` -> `preseason_lines` (every
   `pull_api_data.py` full pull, one call; minutes clamped at 0: the NBA log had a -4).
   stats.nba.com `LeagueGameLog` `Pre Season` has every season (one call each; 2019-20's also holds the July 2020
   bubble scrimmages: keep 45 days from the first game). 4,285 player-seasons 2013-14..2025-26 (500+ regular-season

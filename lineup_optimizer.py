@@ -30,8 +30,7 @@ NEXT_CLAIM_POOL = 30  # later claims only retry the best candidates of the claim
 
 
 def timeframe_suffix(timeframe):
-    """The key suffix of a stats choice. Callers pass the league's `default_stat_type`; never rely on this
-    fallback: 'projected' is recent form, not the projection model."""
+    """The key suffix of a stats choice. Callers pass the league's `default_stat_type`."""
     return STAT_SUFFIXES.get(timeframe or 'projected', '_projected')
 
 

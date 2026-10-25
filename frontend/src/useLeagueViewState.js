@@ -19,13 +19,10 @@ export default function useLeagueViewState(leagueId, tab, defaults, sanitize = (
   return [{ ...defaults, ...picked }, set];
 }
 
-// The stats choices every tab offers. 'proj' (this season's projection model) and 'pre' (the model moved
-// by this season's preseason games) only when they exist. 'projected' is NOT the model: it is recent
-// form, half this season's average and half the last 10 games.
-export const statOptions = (config) => [
-  ...(config?.projection_season ? [['proj', `${config.projection_season} projection`]] : []),
-  ...(config?.has_preseason ? [['pre', 'Projection + preseason']] : []),
-  ['projected', 'Recent form (season + last 10)'], ['season', 'Season Average'], ['10', 'Last 10 Games'], ['5', 'Last 5 Games'],
+// The stats choices every tab offers. 'projected' is THE projection: the model moved by this season's preseason
+// games and then by his real games, with extra weight on the last 10 (backend inseason.py). The rest are plain averages.
+export const statOptions = () => [
+  ['projected', 'Projection'], ['season', 'Season Average'], ['10', 'Last 10 Games'], ['5', 'Last 5 Games'],
 ];
 
 // Drops a stored stats choice the league can't offer any more.
