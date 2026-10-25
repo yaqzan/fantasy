@@ -3,7 +3,7 @@ import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
 import OwnerChip from './OwnerChip';
-import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, toggleGame, cellText, zAura, keepRow, isMine, ownerKey, orderGames, ownerKeys, toggleOwner, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
+import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, cellText, zAura, keepRow, isMine, ownerKey, orderGames, ownerKeys, toggleOwner, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
 // fantasy points; category leagues: summed per-category z, see daily_leaders.py). My players are
@@ -79,8 +79,8 @@ export const TeamLogo = ({ abbr, className = 'w-4 h-4' }) => (
        onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
 );
 
-// Tap a scoreboard chip: score, status and TV channels. Close with the X, a tap outside or Escape.
-const GameModal = ({ game, filtered, onFilter, onClose }) => {
+// Tap a selected scoreboard chip: score, status and TV channels. Close with the X, a tap outside or Escape.
+const GameModal = ({ game, onClose }) => {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -115,10 +115,6 @@ const GameModal = ({ game, filtered, onFilter, onClose }) => {
             </div>
           )) : <div className="text-sm text-gray-500">Not announced yet</div>}
         </div>
-        <button onClick={onFilter}
-                className="mt-4 w-full py-2 rounded-md border border-gray-600 text-sm text-gray-200 hover:text-white hover:bg-gray-700 touch-manipulation">
-          {filtered ? 'Show every game' : 'Show only this game'}
-        </button>
       </div>
     </div>
   );
@@ -133,7 +129,7 @@ const GameChip = ({ game, selected, dimmed, onOpen }) => {
     </span>
   );
   return (
-    <button onClick={onOpen} aria-pressed={selected} title="Game details and TV channels"
+    <button onClick={onOpen} aria-pressed={selected} title={selected ? 'Tap again: TV channels' : 'Tap: show only this game\'s players'}
             className={`shrink-0 text-left rounded px-1.5 py-0.5 text-[11px] leading-tight min-w-[4.5rem] sm:text-xs sm:px-2 sm:py-1 sm:min-w-[5.5rem] border transition-opacity ${
               selected ? 'bg-gray-700 border-nba-orange ring-1 ring-nba-orange'
                 : `bg-gray-800 ${game.state === 'in' ? 'border-gray-500' : 'border-gray-700'}`
@@ -180,7 +176,7 @@ const DailyLeaders = ({ config }) => {
   const ownerFilter = ownerKeys(savedOwner).join(',') || 'all'; // one or several chips; the old Pickups chip is Available now
   const ownerOn = ownerKeys(savedOwner);
   const [day, setDay] = useState(null);      // null = the server's default (today once games tip)
-  const [infoId, setInfoId] = useState(null); // the game whose details modal is open
+  const [infoId, setInfoId] = useState(null); // the selected game's TV-channel modal is open
   const [gameId, setGameId] = useState(null); // a tapped scoreboard: only its players
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -277,7 +273,7 @@ const DailyLeaders = ({ config }) => {
     <div className="flex gap-1.5 overflow-x-auto thin-scrollbar">
       {orderGames(data?.games || []).map(g => (
         <GameChip key={g.id} game={g} selected={g.id === gameId} dimmed={gameId !== null && g.id !== gameId}
-                  onOpen={() => setInfoId(g.id)} />
+                  onOpen={() => (g.id === gameId ? setInfoId(g.id) : setGameId(g.id))} />
       ))}
     </div>
   );
@@ -290,8 +286,7 @@ const DailyLeaders = ({ config }) => {
   return (
     <div className="py-2 sm:px-2 sm:py-1">
       {infoGame && (
-        <GameModal game={infoGame} filtered={gameId === infoGame.id} onClose={() => setInfoId(null)}
-                   onFilter={() => { setGameId(id => toggleGame(id, infoGame.id)); setInfoId(null); }} />
+        <GameModal game={infoGame} onClose={() => setInfoId(null)} />
       )}
       {/* Phones: date stepper, the three owner chips (tap the lit one to go back to everything)
           and the sort toggle share ONE row (`contents` flattens the two sm: rows into it).
