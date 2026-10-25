@@ -9,7 +9,7 @@ or overwritten. An install from before leagues existed (teams with no league, a 
 import json
 import os
 
-from peewee import MySQLDatabase, IntegerField, CharField, TextField
+from peewee import MySQLDatabase, IntegerField, CharField, TextField, BooleanField
 
 from fantasy_config import DB_NAME, DB_CONFIGS
 
@@ -48,6 +48,11 @@ def upgrade_schema(DB):
         ops.append(migrator.add_column('fantasy_teams', 'eliminated_stage', IntegerField(null=True)))
     if 'owner_name' not in team_cols:
         ops.append(migrator.add_column('fantasy_teams', 'owner_name', CharField(max_length=64, null=True)))
+    if 'adds_used' not in team_cols:
+        ops.append(migrator.add_column('fantasy_teams', 'adds_used', IntegerField(null=True)))
+        ops.append(migrator.add_column('fantasy_teams', 'adds_week', IntegerField(null=True)))
+    if 'il' not in {c.name for c in DB.get_columns('fantasy_team_players')}:
+        ops.append(migrator.add_column('fantasy_team_players', 'il', BooleanField(default=False)))
     if 'released_roster' not in team_cols:
         ops.append(migrator.add_column('fantasy_teams', 'released_roster', TextField(null=True)))
     if 'fantrax_team_id' in team_cols and 'platform_team_id' not in team_cols:  # named for Fantrax until Yahoo

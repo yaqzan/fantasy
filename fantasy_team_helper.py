@@ -87,6 +87,29 @@ def get_all_my_team_players(league):
     return _team_players(team, healthy_only=False) if team else []
 
 
+def my_il_players(league):
+    """My players sitting in the platform's injured-list slot (they hold no active spot and play no games)."""
+    team = get_team_by_abv(league, league.my_team)
+    if not team:
+        return set()
+    return {ftp.player_name for ftp in FantasyTeamPlayer.select().where(
+        (FantasyTeamPlayer.fantasy_team_id == team.id) & (FantasyTeamPlayer.il == True))}  # noqa: E712
+
+
+def claims_left(league, week_start):
+    """Pickups I have left in the week starting `week_start`: the league's claims_per_week, less what the platform
+    says I've used when its count is for that week (pull_yahoo.py sync); else the full allowance."""
+    per_week = league.claims_per_week
+    team = get_team_by_abv(league, league.my_team)
+    if not team or team.adds_used is None or not team.adds_week:
+        return per_week
+    starts = sorted(s for s, _ in league.schedule)
+    key = week_start.isoformat() if hasattr(week_start, 'isoformat') else str(week_start)
+    if key in starts and starts.index(key) + 1 == team.adds_week:
+        return max(per_week - team.adds_used, 0)
+    return per_week
+
+
 def get_all_taken_players(league):
     """Every player on any team in this league."""
     team_ids = league_team_ids(league)

@@ -16,7 +16,7 @@
   `ops/windows/logs/fantrax.log`. Needs Firefox logged in to fantrax.com (the login is re-read from it).
 - **Yahoo rosters task** "Fantasy Yahoo Rosters", hourly, current user (`ops/windows/install-yahoo-task.ps1 -League <n>`):
   `pull_yahoo.py sync --league <n> --apply`, log `ops/windows/logs/yahoo.log`. Yahoo has no transaction feed here, so each run
-  makes rosters, positions and can't-cut flags Yahoo's. Needs the Yahoo app keys or Firefox signed in to Yahoo.
+  makes rosters, positions, can't-cut flags, injured-list slots (`fantasy_team_players.il`) and the weekly pickups used (`fantasy_teams.adds_used` / `adds_week`, Yahoo's `roster_adds`) Yahoo's. Needs the Yahoo app keys or Firefox signed in to Yahoo.
 - **Roster-sync watchdog.** Both roster tasks catch up missed runs, run on battery and die after 10 min (installers set it). A
   good `--apply --log X` run touches `X.ok`; `watchdog.ps1` (every 5 min) pushes once via Pharos when a stamp is over 3 h old
   (a lapsed Firefox login, usually) and re-arms when it recovers (`X.ok.alerted` flag).

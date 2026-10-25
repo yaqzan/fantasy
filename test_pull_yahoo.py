@@ -36,9 +36,23 @@ def test_rosters_keep_slot_positions_and_cant_cut():
     [team] = parse_rosters(ET.fromstring(ROSTERS.encode()))
     assert (team['team_id'], team['name']) == ('3', 'Team Three')
     luka, center = team['players']
-    assert luka == {'name': 'Luka Dončić', 'positions': ['PG', 'SG', 'G'], 'undroppable': True}
-    assert center == {'name': 'Test Center', 'positions': ['C'], 'undroppable': False}
+    assert luka == {'name': 'Luka Dončić', 'positions': ['PG', 'SG', 'G'], 'undroppable': True, 'il': False}
+    assert center == {'name': 'Test Center', 'positions': ['C'], 'undroppable': False, 'il': False}
 
 
 def test_settings_starting_slots():
     assert parse_slots(ET.fromstring(SETTINGS.encode())) == ['PG', 'G', 'C', 'C', 'UTIL', 'UTIL']
+
+
+def test_injured_list_slot_and_weekly_adds():
+    xml = f"""<fantasy_content {NS}><league><teams><team><team_id>11</team_id><name>T</name>
+      <roster_adds><coverage_type>week</coverage_type><coverage_value>1</coverage_value><value>4</value></roster_adds>
+      <roster><players>
+        <player><name><full>Bench Guy</full></name><eligible_positions><position>C</position></eligible_positions>
+          <selected_position><position>BN</position></selected_position></player>
+        <player><name><full>Hurt Guy</full></name><eligible_positions><position>C</position><position>IL</position></eligible_positions>
+          <selected_position><position>IL</position></selected_position></player>
+      </players></roster></team></teams></league></fantasy_content>"""
+    [team] = parse_rosters(ET.fromstring(xml.encode()))
+    assert (team['adds_used'], team['adds_week']) == (4, 1)
+    assert [p['il'] for p in team['players']] == [False, True]

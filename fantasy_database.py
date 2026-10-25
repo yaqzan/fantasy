@@ -138,6 +138,9 @@ class FantasyTeam(BaseModel):
     eliminated_stage = IntegerField(null=True)
     released_roster = TextField(null=True)
     owner_name = CharField(max_length=64, null=True)  # the manager's name on the platform (Yahoo nickname), for chips
+    # Pickups the platform counts this team has made in its week `adds_week` (the league's week number), pull_yahoo.py sync.
+    adds_used = IntegerField(null=True)
+    adds_week = IntegerField(null=True)
 
     class Meta:
         table_name = 'fantasy_teams'
@@ -149,6 +152,7 @@ class FantasyTeamPlayer(BaseModel):
     player_name = CharField(null=True)
     fantasy_team_name = CharField(null=True)
     price = IntegerField(null=True)  # auction $ paid, when recorded on the draft board
+    il = BooleanField(default=False)  # in the platform's injured-list slot: takes no active spot, plays no games (pull_yahoo.py)
 
     class Meta:
         table_name = 'fantasy_team_players'

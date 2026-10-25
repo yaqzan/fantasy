@@ -16,7 +16,7 @@ from fantasy_database import FantasyTeam, FantasyTeamPlayer
 from player_stats import (league_player_stats, week_schedule, player_week_games, best_starters, team_week_totals,
                           AVAILABILITY,
                           average_week_totals, category_win_chances, category_margins, small_sample_floor, STAT_SUFFIXES, default_stat_type)
-from fantasy_team_helper import (get_all_my_team_players, get_available_players, get_current_fantasy_week_dates,
+from fantasy_team_helper import (get_all_my_team_players, my_il_players, claims_left, get_available_players, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_team_by_abv)
 
 Side = namedtuple('Side', 'totals games wins')          # a roster's week: team_week_totals, games, wins per player
@@ -32,6 +32,12 @@ NEXT_CLAIM_POOL = 30  # later claims only retry the best candidates of the claim
 def timeframe_suffix(timeframe):
     """The key suffix of a stats choice. Callers pass the league's `default_stat_type`."""
     return STAT_SUFFIXES.get(timeframe or 'projected', '_projected')
+
+
+def _active_roster(league):
+    """(my roster without the injured-list slot, the injured-list players): IL players hold no spot and score nothing."""
+    il = my_il_players(league)
+    return [p for p in get_all_my_team_players(league) if p not in il], sorted(il)
 
 
 def _roster(team):
@@ -161,18 +167,20 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
     week_start, week_end, opponent_abv = _resolve_week(league, week_start, week_end, opponent_abv)
     suffix = timeframe_suffix(timeframe)
     week = Week(league, week_start, week_end)
-    roster = get_all_my_team_players(league)
+    roster, il = _active_roster(league)
     if not any(p in week.stats for p in roster):
         return {'error': f"No players on your team ({league.my_team or 'set Your team in the league settings'}) "
                          "in this league yet"}
     label, theirs = week.opponent(opponent_abv, suffix)
     undroppable = get_undroppable_players(league)
+    claims = claims_left(league, week_start)
     result = {
         'week_start': week_start.isoformat(), 'week_end': week_end.isoformat(),
         'days': (week_end - week_start).days + 1, 'timeframe': timeframe,
         'opponent': label, 'scheduled_opponent': opponent_abv,
         'current': _side_json(week, week.team(roster, suffix), theirs, suffix),
-        'roster': roster, 'undroppable': undroppable, 'claims_per_week': league.claims_per_week,
+        'roster': roster, 'il': il, 'undroppable': undroppable, 'claims_per_week': league.claims_per_week,
+        'claims_left': claims,
         'free_agents': sorted(get_available_players(league, week.stats),
                               key=lambda p: week.stats[p].get(f'Z-VALUE{suffix}', 0), reverse=True)[:400],
     }
@@ -186,7 +194,7 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
                                  'adds': list(adds), 'drops': list(drops)}
     if moves:
         steps, final = best_moves(week, roster, theirs or week.team(roster, suffix).totals, suffix,
-                                  undroppable, league.claims_per_week)
+                                  undroppable, claims)
         result['moves'] = {**_side_json(week, week.team(final, suffix), theirs, suffix),
                            'steps': [{'add': m.add, 'drop': m.drop, 'gain': round(m.gain, 3),
                                       'add_score': round(week.stats[m.add].get(f'Z-SCORE{suffix}', 0), 1),
@@ -205,7 +213,7 @@ def get_pickup_candidates(league, week_start=None, week_end=None, opponent_abv=N
     suffix = timeframe_suffix(timeframe)
     week = Week(league, week_start, week_end)
     stats = week.stats
-    roster = get_all_my_team_players(league)
+    roster, il = _active_roster(league)
     if not any(p in stats for p in roster):
         return {'error': f"No players on your team ({league.my_team or 'set Your team in the league settings'}) "
                          "in this league yet"}
@@ -238,6 +246,7 @@ def get_pickup_candidates(league, week_start=None, week_end=None, opponent_abv=N
         'my_week': {c: {'total': mine[c][0], 'opponent': theirs[c][0], 'chance': round(base[c], 3)}
                     for c in league.categories},
         'candidates': rows, 'tried': len(candidates), 'claims_per_week': league.claims_per_week,
+        'claims_left': claims_left(league, week_start), 'il': il,
     }
 
 

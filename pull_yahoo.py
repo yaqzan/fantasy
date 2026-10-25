@@ -162,12 +162,13 @@ def _text(node, path):
 
 
 def parse_player(node):
-    """{name, positions, undroppable} from a Yahoo <player>. Positions keep the ones lineup slots
-    understand (PG SG G SF PF F C); Util, IL and BN aren't positions."""
+    """{name, positions, undroppable, il} from a Yahoo <player>. Positions keep the ones lineup slots
+    understand (PG SG G SF PF F C); Util, IL and BN aren't positions. il: sits in the injured-list slot."""
     positions = [p.text for p in node.findall('y:eligible_positions/y:position', NS)]
     return {'name': _text(node, 'y:name/y:full'),
             'positions': [p for p in positions if p in ('PG', 'SG', 'G', 'SF', 'PF', 'F', 'C')],
-            'undroppable': _text(node, 'y:is_undroppable') == '1'}
+            'undroppable': _text(node, 'y:is_undroppable') == '1',
+            'il': _text(node, 'y:selected_position/y:position') in ('IL', 'IL+')}
 
 
 def _owner(team):
@@ -177,8 +178,11 @@ def _owner(team):
 
 
 def parse_rosters(root):
-    """[{team_id, name, players: [parse_player]}] from /league/<key>/teams/roster."""
+    """[{team_id, name, players: [parse_player], adds_used, adds_week}] from /league/<key>/teams/roster; adds are the
+    pickups Yahoo counts for the team in that week number (its weekly limit is a league setting)."""
     return [{'team_id': _text(team, 'y:team_id'), 'name': _text(team, 'y:name'), 'owner': _owner(team),
+             'adds_used': int(_text(team, 'y:roster_adds/y:value') or 0) if _text(team, 'y:roster_adds/y:value') else None,
+             'adds_week': int(_text(team, 'y:roster_adds/y:coverage_value') or 0) or None,
              'players': [parse_player(p) for p in team.findall('y:roster/y:players/y:player', NS)]}
             for team in root.iter(f"{{{NS['y']}}}team")]
 
@@ -284,6 +288,9 @@ def sync(yahoo_league, apply):
             if apply and yt.get('owner') and team.owner_name != yt['owner']:
                 team.owner_name = yt['owner']
                 team.save()
+            if apply and (team.adds_used, team.adds_week) != (yt['adds_used'], yt['adds_week']):
+                team.adds_used, team.adds_week = yt['adds_used'], yt['adds_week']
+                team.save()
             if team.platform_team_id != yt['team_id'] or team.name != yt['name']:
                 changes += 1
                 print(f'  {team.abv}: "{team.name}" -> "{yt["name"]}" (Yahoo team {yt["team_id"]})')
@@ -311,6 +318,9 @@ def sync(yahoo_league, apply):
                                                      & FantasyTeamPlayer.fantasy_team_id.in_(league_team_ids(league))).execute()
                     FantasyTeamPlayer.create(player_id=want[name], fantasy_team_id=team, player_name=name,
                                              fantasy_team_name=team.name)
+                on_il = {ours(p['name']).name for p in yt['players'] if p['il'] and ours(p['name'])}
+                FantasyTeamPlayer.update(il=FantasyTeamPlayer.player_name.in_(list(on_il) or [''])).where(
+                    FantasyTeamPlayer.fantasy_team_id == team.id).execute()
 
         flags = {f.player_id: f for f in LeaguePlayerFlag.select().where(LeaguePlayerFlag.league == league.id)}
         position_changes = undroppable_adds = 0
