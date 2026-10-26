@@ -158,8 +158,8 @@ function Averages({ card, columns }) {
 function GameLog({ card, columns, points }) {
   const regular = card.games.filter(g => g.kind === 'regular');
   const pre = card.games.filter(g => g.kind === 'preseason');
-  const row = (g, i, first) => (
-    <tr key={`${g.kind}${g.date}`} className={`border-t ${first ? 'border-t-2 border-gray-400' : i === 5 || i === 10 ? 'border-dashed border-gray-500' : 'border-gray-700'}`}>
+  const row = (g, i) => (
+    <tr key={`${g.kind}${g.date}`} className={`border-t ${g.kind === 'preseason' ? 'opacity-50 border-gray-700' : i === 5 || i === 10 ? 'border-dashed border-gray-500' : 'border-gray-700'}`}>
       <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap ${g.kind === 'regular' && i < 5 ? 'shadow-[inset_2px_0_0_rgb(var(--accent))]' : ''}`}>
         <span className="text-gray-300">{shortDate(g.date)}</span>
         <span className="text-gray-500 text-[10px] ml-1">{g.opp || ''}</span>
@@ -197,8 +197,8 @@ function GameLog({ card, columns, points }) {
             {!points && <td className="border-l border-gray-700" />}
           </tr>
         ))}
-        {regular.map((g, i) => row(g, i, false))}
-        {pre.map((g, i) => row(g, -1, i === 0))}
+        {regular.map((g, i) => row(g, i))}
+        {pre.map((g, i) => row(g, -1))}
       </tbody>
     </table>
   );
