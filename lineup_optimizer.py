@@ -148,6 +148,7 @@ def _side_json(week, side, theirs, suffix):
                            'chance': round(chances[c], 3) if theirs else None} for c in league.categories},
         'players': sorted(({'name': p, 'positions': list(stats[p]['Positions']), 'plays': round(side.games.get(p, 0), 1),
                             'games': len(week.schedule.get(stats[p]['TEAM'], {})), 'injured': p in week.injured,
+                            'days': sorted(d.isoformat() for d in week.schedule.get(stats[p]['TEAM'], {})),
                             'score': round(stats[p].get(f'Z-SCORE{suffix}', 0), 1)}
                            for p in side.games), key=lambda r: (-r['plays'], -r['score'])),
     }
@@ -184,6 +185,10 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
         'free_agents': sorted(get_available_players(league, week.stats),
                               key=lambda p: week.stats[p].get(f'Z-VALUE{suffix}', 0), reverse=True)[:400],
     }
+    opponent_team = get_team_by_abv(league, opponent_abv) if opponent_abv else None
+    if label and label != 'league average' and opponent_team is not None:
+        result['opponent_players'] = _side_json(week, week.team(_roster(opponent_team), suffix),
+                                                week.team(roster, suffix).totals, suffix)['players']
     if adds or drops:
         what_if = [p for p in roster if p not in drops] + [p for p in adds if p in week.stats and p not in roster]
         if len(what_if) > league.roster_size:

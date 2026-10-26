@@ -92,6 +92,8 @@ function Chip({ className = '', children, title }) {
   return <span title={title} className={`text-[11px] px-1.5 py-px rounded-full border whitespace-nowrap ${className || 'border-gray-600 text-gray-300'}`}>{children}</span>;
 }
 
+const TODAY = () => new Date().toLocaleDateString('en-CA');
+const TODAY_MARK = 'shadow-[inset_2px_0_0_rgb(var(--accent))]';  // today's row in the game log
 const STICKY = 'sticky left-0 z-[1] bg-gray-800';
 
 // Averages and game log share one column layout (label, Min, categories) so the columns line up.
@@ -158,7 +160,7 @@ function Averages({ card, columns }) {
 function GameLog({ card, columns, points }) {
   const row = (g, i) => (
     <tr key={`${g.kind}${g.date}`} className={`border-t ${g.kind === 'preseason' ? 'opacity-50 border-gray-700' : i === 5 || i === 10 ? 'border-dashed border-gray-500' : 'border-gray-700'}`}>
-      <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap ${g.kind === 'regular' && i < 5 ? 'shadow-[inset_2px_0_0_rgb(var(--accent))]' : ''}`}>
+      <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap ${g.date === TODAY() ? TODAY_MARK : ''}`}>
         <span className="text-gray-300">{shortDate(g.date)}</span>
         <span className="text-gray-500 text-[10px] ml-1">{g.opp || ''}</span>
         <span className={`text-[10px] ml-1 ${g.w ? 'text-green-400' : 'text-red-400'}`}>{g.w ? 'W' : 'L'}</span>
@@ -187,7 +189,7 @@ function GameLog({ card, columns, points }) {
       <tbody>
         {(card.upcoming || []).map(u => (
           <tr key={`up${u.date}`} className="border-t border-gray-700 text-gray-500">
-            <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap`}>
+            <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap ${u.date === TODAY() ? TODAY_MARK : ''}`}>
               <span>{shortDate(u.date)}</span><span className="text-[10px] ml-1">{u.opp}</span>
             </td>
             <td className="py-1" />
