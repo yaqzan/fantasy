@@ -187,7 +187,21 @@ def card(league, player_id=None, name=None):
             home = g.team_home == player.team
             other = g.team_away if home else g.team_home
             nxt = {'date': g.date.isoformat(), 'opp': f"{'vs' if home else '@'} {abv_of.get(other, other[:3].upper())}"}
+    upcoming = []  # his team's games from today to the end of this fantasy week, not yet in the log
+    if player.team:
+        from fantasy_team_helper import get_current_fantasy_week_dates
+        week_end = get_current_fantasy_week_dates(league)[1]
+        played = {r.game_date for r in rs_rows}
+        for g in (Game.select().where((Game.date >= date.today()) & (Game.date <= week_end)
+                                      & ((Game.team_home == player.team) | (Game.team_away == player.team)))
+                  .order_by(Game.date)):
+            if g.date in played:
+                continue
+            home = g.team_home == player.team
+            other = g.team_away if home else g.team_home
+            upcoming.append({'date': g.date.isoformat(), 'opp': f"{'vs' if home else '@'} {abv_of.get(other, other[:3].upper())}"})
     return {
+        'upcoming': upcoming,
         'id': player.id, 'name': player.name, 'team': abv_of.get(player.team, player.team),
         'positions': list(stats.get('Positions') or ()) or [p for p in (player.positions or player.pos or '').split('-') if p],
         'injured': bool(player.injured), 'injured_return': player.injured_return if player.injured else None,

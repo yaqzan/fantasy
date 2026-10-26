@@ -66,6 +66,7 @@ const fmtAvg = (c, v) => {
   if (v === null || v === undefined) return '–';
   if (isPercent(c) || c.key === 'WIN%') return v < 1 ? v.toFixed(3).replace(/^0/, '') : v.toFixed(3);
   if (c.key === 'TECH') return v.toFixed(2);
+  if (c.key === 'FPTS') return String(Math.round(v));
   return v.toFixed(1);
 };
 
@@ -132,7 +133,7 @@ function Averages({ card, columns }) {
             </td>
             <td className="text-center px-0.5 py-1.5 text-gray-400">{r.values.MIN ? Math.round(r.values.MIN) : '–'}</td>
             {columns.map(c => (
-              <td key={c.key} className="text-center px-0.5 py-1.5 whitespace-nowrap">
+              <td key={c.key} className={`text-center px-0.5 py-1.5 whitespace-nowrap ${c.key === 'FPTS' ? 'bg-white/10' : ''}`}>
                 <span className={r.key === card.delta_base ? 'text-white font-semibold' : 'text-white'}>{fmtAvg(c, r.values[c.key])}</span>
                 {base && r !== base ? <Delta c={c} v={r.values[c.key]} base={base.values[c.key]} />
                   : <span className="block text-[10px] leading-tight">&nbsp;</span>}
@@ -166,9 +167,9 @@ function GameLog({ card, columns, points }) {
       </td>
       <td className="text-center px-0.5 py-1 text-gray-400">{g.min}</td>
       {columns.map(c => (
-        <td key={c.key} className={`text-center px-0.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white' : 'text-gray-200'} ${points ? '' : zTint(g.z?.[c.key])}`}
+        <td key={c.key} className={`text-center px-0.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white bg-white/10' : 'text-gray-200'} ${points ? '' : zTint(g.z?.[c.key])}`}
             title={!points && g.z?.[c.key] != null ? `z ${signed(g.z[c.key])}` : undefined}>
-          {g.cells[c.key]}
+          {c.key === 'FPTS' && typeof g.cells[c.key] === 'number' ? Math.round(g.cells[c.key]) : g.cells[c.key]}
         </td>
       ))}
       {!points && <td className={`text-center px-0.5 py-1 font-semibold text-white border-l border-gray-700 ${zTint(g.value / 3)}`}>{signed(g.value.toFixed(1))}</td>}
@@ -189,6 +190,16 @@ function GameLog({ card, columns, points }) {
         </tr>
       </thead>
       <tbody>
+        {(card.upcoming || []).map(u => (
+          <tr key={`up${u.date}`} className="border-t border-gray-700 text-gray-500">
+            <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap`}>
+              <span>{shortDate(u.date)}</span><span className="text-[10px] ml-1">{u.opp}</span>
+            </td>
+            <td className="py-1" />
+            {columns.map(c => <td key={c.key} className={c.key === 'FPTS' ? 'bg-white/10' : ''} />)}
+            {!points && <td className="border-l border-gray-700" />}
+          </tr>
+        ))}
         {regular.length > 0 && pre.length > 0 && header('Regular season', regular.length)}
         {regular.map((g, i) => row(g, i, false))}
         {pre.length > 0 && header('Preseason', pre.length)}
