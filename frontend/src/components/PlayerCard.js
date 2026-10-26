@@ -159,7 +159,7 @@ function GameLog({ card, columns, points }) {
   const regular = card.games.filter(g => g.kind === 'regular');
   const pre = card.games.filter(g => g.kind === 'preseason');
   const row = (g, i, first) => (
-    <tr key={`${g.kind}${g.date}`} className={`border-t ${first ? 'border-gray-500' : i === 5 || i === 10 ? 'border-dashed border-gray-500' : 'border-gray-700'}`}>
+    <tr key={`${g.kind}${g.date}`} className={`border-t ${first ? 'border-t-2 border-gray-400' : i === 5 || i === 10 ? 'border-dashed border-gray-500' : 'border-gray-700'}`}>
       <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap ${g.kind === 'regular' && i < 5 ? 'shadow-[inset_2px_0_0_rgb(var(--accent))]' : ''}`}>
         <span className="text-gray-300">{shortDate(g.date)}</span>
         <span className="text-gray-500 text-[10px] ml-1">{g.opp || ''}</span>
@@ -174,9 +174,6 @@ function GameLog({ card, columns, points }) {
       ))}
       {!points && <td className={`text-center px-0.5 py-1 font-semibold text-white border-l border-gray-700 ${zTint(g.value / 3)}`}>{signed(g.value.toFixed(1))}</td>}
     </tr>
-  );
-  const header = (label, n) => (
-    <tr><td colSpan={columns.length + 3} className={`${STICKY} bg-gray-800 pl-3 pt-3 pb-1 text-left text-[10px] uppercase tracking-wider text-gray-500`}>{label} · {n} games</td></tr>
   );
   return (
     <table className="w-full table-fixed border-collapse tabular-nums text-xs" style={tableStyle(columns.length)}>
@@ -200,10 +197,8 @@ function GameLog({ card, columns, points }) {
             {!points && <td className="border-l border-gray-700" />}
           </tr>
         ))}
-        {regular.length > 0 && pre.length > 0 && header('Regular season', regular.length)}
         {regular.map((g, i) => row(g, i, false))}
-        {pre.length > 0 && header('Preseason', pre.length)}
-        {pre.map((g, i) => row(g, -1, i === 0 && regular.length === 0))}
+        {pre.map((g, i) => row(g, -1, i === 0))}
       </tbody>
     </table>
   );
