@@ -45,7 +45,7 @@ def _value(cat, line, league):
     return game_value(cat, line)
 
 
-def _average(cats, lines, league, minutes=None):
+def _average(cats, lines, league, minutes=None, scale=None):
     """{cat: per-game average} over lines; ratios pooled (made / attempts). minutes: scale counting
     stats to that many minutes a game instead (per-minute rate x minutes)."""
     if not lines:
@@ -54,6 +54,11 @@ def _average(cats, lines, league, minutes=None):
     unknown = set().union(*(l['_unknown'] for l in lines))
     per = (minutes / total['MIN']) if minutes and total['MIN'] else 1 / len(lines)
     out = {'MIN': minutes or total['MIN'] / len(lines)}
+    if scale:  # z of the average game, to colour the cells like the game log
+        avg = {k: v * per for k, v in total.items()}
+        avg['_unknown'] = unknown
+        zs = score_line(avg, league, scale)[1]
+        out['_z'] = {c: (None if c in unknown else z) for c, z in zs.items()}
     for cat in cats:
         spec = CATEGORY_CATALOG.get(cat, {})
         if cat in unknown:
@@ -155,7 +160,7 @@ def card(league, player_id=None, name=None):
                      'note': f'{len(pre_lines)} g, per {proj_min:.0f} min' if proj_min else f'{len(pre_lines)} g',
                      'title': (f'{len(pre_lines)} preseason games, {pre_min} minutes, scaled to his projected '
                                f'{proj_min:.0f} minutes a game' if proj_min else None),
-                     'values': _average(cats, pre_lines, league, minutes=proj_min or None)})
+                     'values': _average(cats, pre_lines, league, minutes=proj_min or None, scale=scale)})
     if (stats.get('PRE_G') or rs_lines) and 'GP_proj' in stats and any(stats.get(f'{c}_projected') is not None for c in cats):
         rows.append({'key': 'adj', 'label': 'Updated', 'note': f"{stats.get('MIN_projected') or 0:.0f} min",
                      'title': 'The projection moved by his preseason and then by his games this season, each stat weighted '
@@ -165,7 +170,7 @@ def card(league, player_id=None, name=None):
     if n:
         windows = [('season', 'Season', None, '')] + [(f'l{w}', f'Last {w}', w, f'_{w}') for w in (10, 5) if n > w]
         for key, label, w, suffix in windows:
-            values = _average(cats, rs_lines[:w] if w else rs_lines, league)
+            values = _average(cats, rs_lines[:w] if w else rs_lines, league, scale=scale)
             if 'BLKA' in values and values['BLKA'] is None:  # the NBA gives totals only: the player's stored ones
                 values['BLKA'] = stats.get(f'BLKA{suffix}')
             rows.append({'key': key, 'label': label, 'note': f'{n} g' if key == 'season' else None, 'values': values})
@@ -178,7 +183,7 @@ def card(league, player_id=None, name=None):
         line = {k: v / s.gp for k, v in line.items()}  # totals -> one average game; pooled ratios are unchanged
         line['_unknown'] = {'TECH'} if s.tech is None else set()
         rows.append({'key': f'y{s.season}', 'label': s.season, 'note': f'{s.gp} g · {s.team or ""}'.rstrip(' ·'),
-                     'values': _average(cats, [line], league)})
+                     'values': _average(cats, [line], league, scale=scale)})
 
     team = owners(league).get(player.id)
     nxt, upcoming = None, []  # next game, and his team's games to the end of this fantasy week (not yet in the log)

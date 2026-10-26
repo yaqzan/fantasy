@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { getPlayerCard, getSelectedLeague, errorMessage } from '../services/api';
-import { orderColumns, zTint } from '../dailyLeaders';
+import { orderColumns, zAura } from '../dailyLeaders';
 
 // Tap a player's name (Daily Leaders, Player Rankings) -> his card: averages (Projection, Preseason at
 // his projected minutes, Season, Last 10, Last 5) with a delta under each against the season (from
@@ -94,6 +94,8 @@ function Chip({ className = '', children, title }) {
 
 const TODAY = () => new Date().toLocaleDateString('en-CA');
 const TODAY_MARK = 'shadow-[inset_2px_0_0_rgb(var(--accent))]';  // today's row in the game log
+// The Daily Leaders aura (tinted value, glow at the high end) from a z.
+const auraStyle = (z) => { const a = zAura(z); return a ? { color: a.color, textShadow: a.glow, fontWeight: a.weight } : undefined; };
 const STICKY = 'sticky left-0 z-[1] bg-gray-800';
 
 // Averages and game log share one column layout (label, Min, categories) so the columns line up.
@@ -136,7 +138,7 @@ function Averages({ card, columns }) {
             <td className="text-center px-0.5 py-1.5 text-gray-400">{r.values.MIN ? Math.round(r.values.MIN) : '–'}</td>
             {columns.map(c => (
               <td key={c.key} className={`text-center px-0.5 py-1.5 whitespace-nowrap ${c.key === 'FPTS' ? 'bg-white/10' : ''}`}>
-                <span className={r.key === card.delta_base ? 'text-white font-semibold' : 'text-white'}>{fmtAvg(c, r.values[c.key])}</span>
+                <span className={r.key === card.delta_base ? 'font-semibold' : ''} style={auraStyle(r.values._z?.[c.key])}>{fmtAvg(c, r.values[c.key])}</span>
                 {base && r !== base ? <Delta c={c} v={r.values[c.key]} base={base.values[c.key]} />
                   : <span className="block text-[10px] leading-tight">&nbsp;</span>}
               </td>
@@ -167,12 +169,12 @@ function GameLog({ card, columns, points }) {
       </td>
       <td className="text-center px-0.5 py-1 text-gray-400">{g.min}</td>
       {columns.map(c => (
-        <td key={c.key} className={`text-center px-0.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white bg-white/10' : 'text-gray-200'} ${points ? '' : zTint(g.z?.[c.key])}`}
+        <td key={c.key} className={`text-center px-0.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white bg-white/10' : 'text-gray-200'} `}
             title={!points && g.z?.[c.key] != null ? `z ${signed(g.z[c.key])}` : undefined}>
-          {c.key === 'FPTS' && typeof g.cells[c.key] === 'number' ? Math.round(g.cells[c.key]) : g.cells[c.key]}
+          <span style={points ? undefined : auraStyle(g.z?.[c.key])}>{c.key === 'FPTS' && typeof g.cells[c.key] === 'number' ? Math.round(g.cells[c.key]) : g.cells[c.key]}</span>
         </td>
       ))}
-      {!points && <td className={`text-center px-0.5 py-1 font-semibold text-white border-l border-gray-700 ${zTint(g.value / 3)}`}>{signed(g.value.toFixed(1))}</td>}
+      {!points && <td className={`text-center px-0.5 py-1 font-semibold text-white border-l border-gray-700`}><span style={auraStyle(g.value / 3)}>{signed(g.value.toFixed(1))}</span></td>}
     </tr>
   );
   return (
