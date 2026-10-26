@@ -207,6 +207,7 @@ function GameLog({ card, columns, points }) {
 
 function PlayerCard({ target, open, onClose }) {
   const [state, setState] = useState({ card: null, error: null });
+  const [settled, setSettled] = useState(false);  // the open animation is done: only then render the heavy body
   const closeRef = useRef(null);
   const drag = useRef(null);
   const cardRef = useRef(null);
@@ -218,6 +219,14 @@ function PlayerCard({ target, open, onClose }) {
       .catch(e => live && setState({ card: null, error: errorMessage(e) }));
     return () => { live = false; };
   }, [target]);
+
+  // Rendering ~100 aura cells during the slide-up froze its frames and skipped it; the sheet slides
+  // open on a spinner of the same height, then the body fades in.
+  useEffect(() => {
+    if (!open) return undefined;
+    const t = setTimeout(() => setSettled(true), 210);
+    return () => clearTimeout(t);
+  }, [open]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -268,7 +277,7 @@ function PlayerCard({ target, open, onClose }) {
           <div className="flex items-start gap-3 px-4 pt-3 pb-2.5 border-b border-gray-700">
             <div className="min-w-0 flex-1">
               <h2 id="pc-name" className="text-lg font-bold text-white leading-tight truncate">{card?.name || target.name}</h2>
-              {card && (
+              {card && settled ? (
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400">
                   <span>{card.team} · {card.positions.join('/')}</span>
                   {card.rank && <span title="Rank on the projection in this league">#{card.rank} proj</span>}
@@ -277,7 +286,7 @@ function PlayerCard({ target, open, onClose }) {
                   {card.injured && <Chip className="border-red-500 text-red-400">INJ{card.injured_return ? ` · ${card.injured_return}` : ''}</Chip>}
                   {card.next_game && <Chip>Next: {weekday(card.next_game.date)} {card.next_game.opp}</Chip>}
                 </div>
-              )}
+              ) : <div className="mt-1 h-5" />}
             </div>
             <button ref={closeRef} type="button" onClick={onClose} aria-label="Close"
                     className="-mr-1 px-1 text-2xl leading-none text-gray-400 hover:text-white">×</button>
@@ -286,9 +295,9 @@ function PlayerCard({ target, open, onClose }) {
         <div className="flex-1 overflow-auto overscroll-contain thin-scrollbar"
              onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
           {error && <p className="p-4 text-sm text-red-400">{error}</p>}
-          {!card && !error && <div className="p-6 flex justify-center"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-nba-orange" /></div>}
-          {card && (
-            <>
+          {!(card && settled) && !error && <div className="min-h-[45vh] p-6 flex justify-center"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-nba-orange" /></div>}
+          {card && settled && (
+            <div className="pc-fade">
               <div className="flex justify-between px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-wider text-gray-500">
                 <span>Averages</span>
                 <span className="normal-case tracking-normal">{card.delta_base === 'season' ? 'Δ vs season' : 'Δ vs projection'}</span>
@@ -299,7 +308,7 @@ function PlayerCard({ target, open, onClose }) {
               {card.games.length || card.upcoming?.length ? <GameLog card={card} columns={columns} points={points} />
                 : <p className="px-3 pb-3 text-xs text-gray-500">No games this season yet.</p>}
               <div className="h-3" />
-            </>
+            </div>
           )}
         </div>
       </div>
