@@ -200,6 +200,7 @@ def card(league, player_id=None, name=None):
             home = g.team_home == player.team
             other = g.team_away if home else g.team_home
             upcoming.append({'date': g.date.isoformat(), 'opp': f"{'vs' if home else '@'} {abv_of.get(other, other[:3].upper())}"})
+    upcoming.reverse()  # newest first like the log: the next game sits right above the last one played
     return {
         'upcoming': upcoming,
         'id': player.id, 'name': player.name, 'team': abv_of.get(player.team, player.team),
