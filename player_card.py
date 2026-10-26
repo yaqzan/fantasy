@@ -151,29 +151,28 @@ def card(league, player_id=None, name=None):
 
     proj_min = stats.get('MIN_proj') or 0
     rows = []
-    if any(stats.get(f'{c}_proj') is not None for c in cats):
-        rows.append({'key': 'proj', 'label': 'Projection', 'note': f'{proj_min:.0f} min' if proj_min else None,
-                     'values': {'MIN': proj_min or None, **{c: stats.get(f'{c}_proj') for c in cats}}})
+    n = len(rs_lines)
+    if n:
+        values = _average(cats, rs_lines, league, scale=scale)
+        if 'BLKA' in values and values['BLKA'] is None:  # the NBA gives totals only: the player's stored ones
+            values['BLKA'] = stats.get('BLKA')
+        rows.append({'key': 'season', 'label': f'{season} Season', 'note': f'{n} g', 'values': values})
+    # Running Projection: the projection moved by his preseason and then by his games this season (the
+    # '_projected' timeframe); before either exists, the plain projection under the same name.
+    running = (stats.get('PRE_G') or rs_lines) and 'GP_proj' in stats and any(stats.get(f'{c}_projected') is not None for c in cats)
+    sfx = '_projected' if running else '_proj'
+    if running or any(stats.get(f'{c}_proj') is not None for c in cats):
+        rows.append({'key': 'adj', 'label': f'{season} Running Projection', 'note': f"{stats.get('MIN' + sfx) or 0:.0f} min",
+                     'title': 'The projection moved by his preseason and then by his games this season, each stat weighted '
+                              'by how much that has predicted the rest of the season (projections.md "In-season update")',
+                     'values': {'MIN': stats.get('MIN' + sfx) or None, **{c: stats.get(c + sfx) for c in cats}}})
     if pre_lines:
         pre_min = sum(l['MIN'] for l in pre_lines)
-        rows.append({'key': 'pre', 'label': 'Preseason',
+        rows.append({'key': 'pre', 'label': f'{season} Preseason',
                      'note': f'{len(pre_lines)} g, per {proj_min:.0f} min' if proj_min else f'{len(pre_lines)} g',
                      'title': (f'{len(pre_lines)} preseason games, {pre_min} minutes, scaled to his projected '
                                f'{proj_min:.0f} minutes a game' if proj_min else None),
                      'values': _average(cats, pre_lines, league, minutes=proj_min or None, scale=scale)})
-    if (stats.get('PRE_G') or rs_lines) and 'GP_proj' in stats and any(stats.get(f'{c}_projected') is not None for c in cats):
-        rows.append({'key': 'adj', 'label': 'Updated', 'note': f"{stats.get('MIN_projected') or 0:.0f} min",
-                     'title': 'The projection moved by his preseason and then by his games this season, each stat weighted '
-                              'by how much that has predicted the rest of the season (projections.md "In-season update")',
-                     'values': {'MIN': stats.get('MIN_projected') or None, **{c: stats.get(f'{c}_projected') for c in cats}}})
-    n = len(rs_lines)
-    if n:
-        windows = [('season', 'Season', None, '')] + [(f'l{w}', f'Last {w}', w, f'_{w}') for w in (10, 5) if n > w]
-        for key, label, w, suffix in windows:
-            values = _average(cats, rs_lines[:w] if w else rs_lines, league, scale=scale)
-            if 'BLKA' in values and values['BLKA'] is None:  # the NBA gives totals only: the player's stored ones
-                values['BLKA'] = stats.get(f'BLKA{suffix}')
-            rows.append({'key': key, 'label': label, 'note': f'{n} g' if key == 'season' else None, 'values': values})
 
     for s in (PlayerSeason.select().where((PlayerSeason.player_id == player.id) & (PlayerSeason.season < season)
                                           & (PlayerSeason.gp > 0)).order_by(PlayerSeason.season.desc()).limit(HISTORY_SEASONS)):
@@ -213,6 +212,6 @@ def card(league, player_id=None, name=None):
         'owner_name': team[1] if team else None, 'next_game': nxt,
         'scoring': 'points' if points else 'categories', 'season': season,
         'categories': meta, 'averages': rows,
-        'delta_base': 'season' if n >= DELTA_SEASON_GAMES else ('proj' if rows and rows[0]['key'] == 'proj' else None),
+        'delta_base': 'season' if n >= DELTA_SEASON_GAMES else ('adj' if any(r['key'] == 'adj' for r in rows) else None),
         'games': games,
     }

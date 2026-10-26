@@ -111,13 +111,16 @@ function Cols({ n, extra = 0 }) {
 }
 
 const isHistory = (r) => r.key.startsWith('y');
+const isOther = (r) => isHistory(r) || r.key === 'pre';   // behind the 'other seasons' toggle (the latest past season stays out)
 
 function Averages({ card, columns }) {
   const [older, setOlder] = useState(false);
   const base = card.averages.find(r => r.key === card.delta_base);
   const history = card.averages.filter(isHistory);
-  const rows = card.averages.filter(r => !isHistory(r) || older || r === history[0]);
-  const hidden = history.length - 1;
+  const main = card.averages.filter(r => !isOther(r));
+  const rest = card.averages.filter(r => r.key === 'pre' || (isHistory(r) && r !== history[0]));
+  const rows = [...main, ...(history[0] ? [history[0]] : []), ...(older ? rest : [])];
+  const hidden = rest.length;
   return (
     <table className="w-full table-fixed border-collapse tabular-nums text-xs" style={tableStyle(columns.length)}>
       <Cols n={columns.length} />
@@ -149,7 +152,7 @@ function Averages({ card, columns }) {
           <tr className="border-t border-gray-700">
             <td colSpan={columns.length + 1} className={`${STICKY} bg-gray-800 pl-3 py-1.5 text-left`}>
               <button type="button" onClick={() => setOlder(o => !o)} className="text-[11px] text-gray-400 hover:text-white">
-                {older ? '▴ Hide older seasons' : `▾ ${hidden} older season${hidden > 1 ? 's' : ''}`}
+                {older ? '▴ Hide other seasons' : `▾ ${hidden} other season${hidden > 1 ? 's' : ''}`}
               </button>
             </td>
           </tr>
@@ -300,7 +303,7 @@ function PlayerCard({ target, open, onClose }) {
             <div className="pc-fade">
               <div className="flex justify-between px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-wider text-gray-500">
                 <span>Averages</span>
-                <span className="normal-case tracking-normal">{card.delta_base === 'season' ? 'Δ vs season' : 'Δ vs projection'}</span>
+                <span className="normal-case tracking-normal">{card.delta_base === 'season' ? 'Δ vs season' : 'Δ vs running projection'}</span>
               </div>
               {card.averages.length ? <Averages card={card} columns={columns} />
                 : <p className="px-3 pb-2 text-xs text-gray-500">No projection or games yet.</p>}

@@ -43,9 +43,13 @@ Tap a player's name on Daily Leaders or Player Rankings (`PlayerName`) -> `compo
 down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` (or `?name=`), `player_card.py`.
 
 - **Averages** in the league's categories, Daily Leaders' column order (points leagues: FPTS first):
-  Projection; Preseason at his projected minutes (per-minute x projected MPG: preseason minutes are
-  rotations); Updated (the `'_projected'` timeframe, projections.md "In-season update"); Season, Last 10, Last 5 (a window only when he has more games than it). Delta under each
-  vs the season from 10 games, else vs the projection; percentages in points; grey under 6% / 1 point.
+  "<season> Season", then "<season> Running Projection" (the `'_projected'` timeframe: projection moved by his
+  preseason and then his games, projections.md "In-season update"; the plain projection until either exists).
+  Behind "N other seasons": "<season> Preseason" (at his projected minutes: preseason minutes are rotations)
+  and the older seasons (the latest past one stays visible). Delta under each vs the season from 10 games,
+  else vs the running projection; percentages in points; grey under 6% / 1 point. Values are tinted with
+  Daily Leaders' `zAura` (z of the average game; none on the Running Projection row). The same name labels
+  that choice in every tab's stats dropdown (`statOptions`).
 - **Game log**: regular season then preseason (`preseason_lines`, never in season totals), scored by
   `daily_leaders.score_line`, so tints and Z equal the board's. Stats the source lacks per game (NBA
   rows: BLKA; preseason: TECH) show '–' and leave the game's Z; season BLKA comes from the player's totals.
