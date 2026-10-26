@@ -194,6 +194,11 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   the optimum for volume stats, 0 for steals. The backtest prior is our model alone, so the live prior (experts blended in) is a little better and
   would want a slightly higher K. Re-fit when a season of live games is in. A first-game call-up has no
   prior of his own (no line): he sits outside the pool.
+- **Week-1 check (2026-10-25, `.horizon/week1-review/bias.py`, 242 players 2+ games, projected 18+ MPG, 4 days).** League-wide
+  scoring ran under the model line: PTS -9%, 3PM -12%, AST -10%, FGA -9%, MIN -5%; TOV +9%, STL +8%, FTA +7%. A level shift
+  hits every roster alike (H2H unaffected); the in-season blend already closes half of it (PTS -5%). Too short to retune K/R:
+  the backtest above still says heavier weight on a few games is worse. Role changes (a teammate's long injury) are what the
+  blend can't see: use the owner's `ProjectionAdjustment` (Projections tab, `production` x), e.g. +18% for the next man up.
 - **Preseason signal (backtest 2026-10-17, `.horizon/preseason-2026/`: `backtest.py`, `holdout.py`).** In the app
   as step one of the `'_projected'` timeframe (`preseason.py` holds the constants below; the in-season update, next entry,
   runs on top; there is no separate preseason stats choice any more). Players projected 32+ MPG keep their minutes (below). Lines: `game_log.store_preseason` -> `preseason_lines` (every
