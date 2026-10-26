@@ -156,8 +156,6 @@ function Averages({ card, columns }) {
 }
 
 function GameLog({ card, columns, points }) {
-  const regular = card.games.filter(g => g.kind === 'regular');
-  const pre = card.games.filter(g => g.kind === 'preseason');
   const row = (g, i) => (
     <tr key={`${g.kind}${g.date}`} className={`border-t ${g.kind === 'preseason' ? 'opacity-50 border-gray-700' : i === 5 || i === 10 ? 'border-dashed border-gray-500' : 'border-gray-700'}`}>
       <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap ${g.kind === 'regular' && i < 5 ? 'shadow-[inset_2px_0_0_rgb(var(--accent))]' : ''}`}>
@@ -197,8 +195,7 @@ function GameLog({ card, columns, points }) {
             {!points && <td className="border-l border-gray-700" />}
           </tr>
         ))}
-        {regular.map((g, i) => row(g, i))}
-        {pre.map((g, i) => row(g, -1))}
+        {card.games.map((g, i) => row(g, g.kind === 'regular' ? i : -1))}
       </tbody>
     </table>
   );
@@ -295,7 +292,7 @@ function PlayerCard({ target, open, onClose }) {
               {card.averages.length ? <Averages card={card} columns={columns} />
                 : <p className="px-3 pb-2 text-xs text-gray-500">No projection or games yet.</p>}
               <div className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-gray-500">Game log</div>
-              {card.games.length ? <GameLog card={card} columns={columns} points={points} />
+              {card.games.length || card.upcoming?.length ? <GameLog card={card} columns={columns} points={points} />
                 : <p className="px-3 pb-3 text-xs text-gray-500">No games this season yet.</p>}
               <div className="h-3" />
             </>

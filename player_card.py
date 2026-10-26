@@ -13,6 +13,7 @@ from datetime import date
 
 from daily_leaders import _ratio, game_value, league_scale, league_stats, owners, score_line
 from fantasy_database import Game, GameLine, Player, PlayerSeason, PreseasonLine, Team
+from fantasy_team_helper import get_current_fantasy_week_dates
 from game_log import season_label
 from leagues import CATEGORY_CATALOG, category_meta, fantasy_points
 
@@ -119,12 +120,13 @@ def card(league, player_id=None, name=None):
     # Opponents of regular-season games, from the stored schedule (game_lines has no matchup).
     opp = {}
     if rs_rows:
-        for g in Game.select().where(Game.date.in_([r.game_date for r in rs_rows])):
-            for r in rs_rows:
-                mine = full.get(r.team)
-                if r.game_date == g.date and mine in (g.team_home, g.team_away):
-                    other = g.team_away if mine == g.team_home else g.team_home
-                    opp[r.game_date] = f"{'vs' if mine == g.team_home else '@'} {abv_of.get(other, other[:3].upper())}"
+        by_date = {r.game_date: r for r in rs_rows}
+        teams = {full.get(r.team) for r in rs_rows} - {None}
+        for g in Game.select().where(Game.date.in_(list(by_date)) & (Game.team_home.in_(teams) | Game.team_away.in_(teams))):
+            mine = full.get(by_date[g.date].team) if g.date in by_date else None
+            if mine in (g.team_home, g.team_away):
+                other = g.team_away if mine == g.team_home else g.team_home
+                opp[g.date] = f"{'vs' if mine == g.team_home else '@'} {abv_of.get(other, other[:3].upper())}"
 
     def game(r, kind, line):
         value, zs = score_line(line, league, scale)
@@ -179,27 +181,22 @@ def card(league, player_id=None, name=None):
                      'values': _average(cats, [line], league)})
 
     team = owners(league).get(player.id)
-    nxt = None
+    nxt, upcoming = None, []  # next game, and his team's games to the end of this fantasy week (not yet in the log)
     if player.team:
-        g = (Game.select().where((Game.date >= date.today()) & ((Game.team_home == player.team) | (Game.team_away == player.team)))
-             .order_by(Game.date).first())
-        if g:
-            home = g.team_home == player.team
-            other = g.team_away if home else g.team_home
-            nxt = {'date': g.date.isoformat(), 'opp': f"{'vs' if home else '@'} {abv_of.get(other, other[:3].upper())}"}
-    upcoming = []  # his team's games from today to the end of this fantasy week, not yet in the log
-    if player.team:
-        from fantasy_team_helper import get_current_fantasy_week_dates
         week_end = get_current_fantasy_week_dates(league)[1]
         played = {r.game_date for r in rs_rows}
-        for g in (Game.select().where((Game.date >= date.today()) & (Game.date <= week_end)
-                                      & ((Game.team_home == player.team) | (Game.team_away == player.team)))
+        for g in (Game.select().where((Game.date >= date.today()) & ((Game.team_home == player.team) | (Game.team_away == player.team)))
                   .order_by(Game.date)):
             if g.date in played:
                 continue
             home = g.team_home == player.team
             other = g.team_away if home else g.team_home
-            upcoming.append({'date': g.date.isoformat(), 'opp': f"{'vs' if home else '@'} {abv_of.get(other, other[:3].upper())}"})
+            item = {'date': g.date.isoformat(), 'opp': f"{'vs' if home else '@'} {abv_of.get(other, other[:3].upper())}"}
+            nxt = nxt or item
+            if g.date <= week_end:
+                upcoming.append(item)
+            else:
+                break
     upcoming.reverse()  # newest first like the log: the next game sits right above the last one played
     return {
         'upcoming': upcoming,
