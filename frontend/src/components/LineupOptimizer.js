@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { analyze, getPickups, errorMessage } from '../services/api';
 import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
 import { WeekSelect, defaultWeekStart, validWeek, selectClass, shortDate, weekdayLetter, weekDays } from '../weeks';
+import { orderColumns } from '../dailyLeaders';
 
 const pct = (x) => `${Math.round(x * 100)}%`;
 const signed = (x, digits = 2) => `${x > 0 ? '+' : x < 0 ? '-' : ''}${Math.abs(x).toFixed(digits)}`;
 const plays = (n) => (Number.isInteger(n) ? n : n.toFixed(1));
 const chanceClass = (chance) => chance == null ? 'text-gray-200' : chance > 0.55 ? 'text-emerald-300' : chance < 0.45 ? 'text-red-300' : 'text-gray-200';
 const deltaClass = (x) => x > 0.0005 ? 'text-green-400' : x < -0.0005 ? 'text-red-400' : 'text-gray-500';
+const pointsDelta = (d) => `${d > 0 ? '+' : ''}${Math.round(d * 100)}`;   // a chance change in percentage points
 const tagFor = (chance) => chance == null ? null : chance >= 0.75 ? ['safe', 'bg-green-900 text-green-200'] : chance <= 0.3 ? ['long shot', 'bg-red-900 text-red-200']
   : chance > 0.4 && chance < 0.6 ? ['swing', 'bg-amber-900 text-amber-200'] : null;
 
@@ -42,7 +44,7 @@ const DayDots = ({ days, played, lit = 'bg-nba-orange' }) => (
   </span>
 );
 
-const RosterTable = ({ title, players, days, nameClass, dropName, addName }) => (
+const RosterTable = ({ title, players, days, nameClass, lit, dropName, addName }) => (
   <div className="min-w-0">
     <h4 className={`text-sm font-semibold mb-1 ${nameClass}`}>{title}</h4>
     <div className="text-xs space-y-0.5">
@@ -54,7 +56,7 @@ const RosterTable = ({ title, players, days, nameClass, dropName, addName }) => 
             {p.injured && <span className="text-red-400"> INJ</span>}
           </span>
           <span className="flex items-center gap-1.5 shrink-0">
-            <DayDots days={days} played={p.days || []} lit={nameClass === 'text-opp' ? 'bg-opp' : 'bg-nba-orange'} />
+            <DayDots days={days} played={p.days || []} lit={lit} />
             <span className="w-8 text-right text-gray-400" title="Expected games he counts for / games his team plays">{plays(p.plays)}/{p.games}</span>
           </span>
         </div>
@@ -76,83 +78,109 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const slots = league?.settings?.roster?.active;
   const rosterSize = league?.settings?.roster?.size;
   // Open days only exist with daily lineups: a weekly lineup's starters play every game.
-  const openSlots = league?.settings?.roster?.daily_lineups ? slots : null;
+  const daily = !!league?.settings?.roster?.daily_lineups;
+  const openSlots = daily ? slots : null;
   const [view, setView] = useLeagueViewState(league?.id, 'lineup', {
     week: defaultWeekStart(weeks), statType: config.default_stat_type || 'projected',
   }, (picked) => validWeek(weeks)(validStat(config)(picked)));
   const [data, setData] = useState(null);
   const [candidates, setCandidates] = useState([]);
+  const [pickupsError, setPickupsError] = useState(null);   // why there are no candidates (e.g. every player undroppable)
   const [selected, setSelected] = useState(null);     // a candidate name, or the manual pick's
   const [manual, setManual] = useState(null);         // {name, drop}: a free agent outside the top candidates
-  const [previews, setPreviews] = useState({});       // 'add|drop' -> the what-if side
+  const [previews, setPreviews] = useState({});       // 'add|drop' -> the what-if side, or {error}
   const [filter, setFilter] = useState({ games: false, cat: '', pos: '' });
   const [search, setSearch] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
   const asked = useRef(new Set());
+  const loaded = useRef(null);                         // the matchup the previews belong to (null while loading)
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true); setError(null); setData(null); setCandidates([]); setSelected(null); setManual(null);
+    setLoading(true); setError(null); setData(null); setCandidates([]); setPickupsError(null); setSelected(null); setManual(null);
     setPreviews({}); asked.current = new Set();
-    Promise.all([analyze(view.week, view.statType), getPickups(view.week, view.statType).catch(() => null)])
+    Promise.all([analyze(view.week, view.statType), getPickups(view.week, view.statType).catch(err => ({ error: errorMessage(err) }))])
       .then(([matchup, pickups]) => {
         if (cancelled) return;
+        loaded.current = matchup;
         setData(matchup);
+        setPickupsError(pickups?.error || null);
         const list = pickups?.candidates || [];
         setCandidates(list);
         setSelected(list[0]?.name || null);
       })
       .catch(err => { if (!cancelled) setError(errorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; loaded.current = null; };
   }, [view.week, view.statType, reload]);
 
   const best = candidates[0] || null;
   const pick = manual && manual.name === selected ? manual : candidates.find(c => c.name === selected) || null;
   const keyOf = (c) => `${c.name}|${c.drop || ''}`;
 
-  // The best pick and the one being looked at are scored as real what-ifs, once each.
+  // The best pick and the one being looked at are scored as real what-ifs, once each. Requests are not
+  // cancelled when the selection moves on (that left a key asked but never answered: "..." for good);
+  // an answer is dropped only once the matchup it was asked for has been replaced (week, stats, Refresh).
   useEffect(() => {
-    if (!data) return undefined;
-    let cancelled = false;
+    if (!data || data !== loaded.current) return;   // a stale run in the same flush as a reload
     [best, pick].filter(Boolean).forEach(c => {
       const key = keyOf(c);
       if (asked.current.has(key)) return;
       asked.current.add(key);
       analyze(view.week, view.statType, { adds: [c.name], drops: c.drop ? [c.drop] : [] })
         .then(result => {
-          if (cancelled) return;
-          if (result.what_if?.error) { asked.current.delete(key); setError(result.what_if.error); return; }
-          setPreviews(prev => ({ ...prev, [key]: result.what_if }));
+          if (loaded.current !== data) return;
+          setPreviews(prev => ({ ...prev, [key]: result.what_if?.error ? { error: result.what_if.error } : result.what_if }));
         })
-        .catch(err => { asked.current.delete(key); if (!cancelled) setError(errorMessage(err)); });
+        .catch(err => {
+          if (loaded.current !== data) return;
+          asked.current.delete(key);   // a failed request is retried when he's picked again
+          setPreviews(prev => ({ ...prev, [key]: { error: errorMessage(err) } }));
+        });
     });
-    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, best?.name, pick?.name, pick?.drop, view.week, view.statType]);
+  }, [data, best?.name, best?.drop, pick?.name, pick?.drop]);
 
   const days = data ? weekDays(data.week_start, data.week_end) : [];
   const opponentLabel = data?.opponent === 'league average' ? 'League avg' : data?.opponent;
   const hasOpponent = !!data?.opponent;
   const claims = data?.claims_per_week || config.capabilities?.claims_per_week || 1;
-  const bestSide = best ? previews[keyOf(best)] : null;
-  const pickSide = pick ? previews[keyOf(pick)] : null;
-  const same = !pick || !best || pick.name === best.name;
+  const sideOf = (c) => { const s = c && previews[keyOf(c)]; return s && !s.error ? s : null; };
+  const errorOf = (c) => (c && previews[keyOf(c)]?.error) || null;
+  const bestSide = sideOf(best);
+  const pickSide = sideOf(pick);
+  const pickIsBest = !!(pick && best && keyOf(pick) === keyOf(best));
   const baseChance = weekChance(data?.current, points);
+  // The comparison columns beside "As is": the best pick, then the one being looked at when it differs.
+  const columns = [
+    ...(best ? [{ key: 'best', label: pickIsBest ? 'With him' : 'Best pick', side: bestSide, error: errorOf(best) }] : []),
+    ...(pick && !pickIsBest ? [{ key: 'pick', label: lastName(pick.name), side: pickSide, error: errorOf(pick) }] : []),
+  ];
+  const waiting = (col) => <span className="text-gray-500" title={col.error || 'Working it out'}>{col.error ? '-' : '...'}</span>;
 
-  const positions = useMemo(() => [...new Set(candidates.flatMap(c => c.positions))].sort(), [candidates]);
+  // A picked position filter stays listed after a week switch, so it can be seen and cleared.
+  const positions = useMemo(() => [...new Set([...candidates.flatMap(c => c.positions), ...(filter.pos ? [filter.pos] : [])])].sort(),
+    [candidates, filter.pos]);
   const shown = candidates.filter(c => (!filter.games || c.games >= 4)
     && (!filter.cat || (c.chance_changes[filter.cat] || 0) >= 0.02)
     && (!filter.pos || c.positions.includes(filter.pos)));
   const matches = search ? (data?.free_agents || []).filter(p => p.toLowerCase().includes(search.toLowerCase())).slice(0, 6) : [];
   const droppable = data ? data.roster.filter(p => !data.undroppable.includes(p)) : [];
 
-  const choose = (name) => { setSelected(name); };
+  // A searched free agent starts on the open spot when the roster has one, else the best pick's drop,
+  // else your lowest-rated droppable player (the drop picker changes it). One already in the candidates
+  // is just selected, with his own best drop (a second card under the same name would light up both).
   const chooseManual = (name) => {
-    setManual({ name, drop: best?.drop || droppable[droppable.length - 1] || null, positions: [], games: 0, manual: true });
-    setSelected(name); setSearch('');
+    setSearch('');
+    if (candidates.some(c => c.name === name)) { setSelected(name); return; }
+    const open = rosterSize && data.roster.length < rosterSize;
+    // A player outside current.players (a weekly lineup's bench, or no stats this week) ranks below every rated one.
+    const score = Object.fromEntries(data.current.players.map(p => [p.name, p.score]));
+    const weakest = [...droppable].sort((a, b) => (score[a] ?? -Infinity) - (score[b] ?? -Infinity))[0];
+    setManual({ name, drop: open ? null : best?.drop || weakest || null, positions: [], games: 0, manual: true });
+    setSelected(name);
   };
 
   const format = (key, value) => {
@@ -160,12 +188,17 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
     if (value == null) return '-';
     return m.percent ? value.toFixed(3) : (key === 'WIN%' || key === 'TECH') ? value.toFixed(2) : value.toFixed(value >= 100 ? 0 : 1);
   };
-  const cats = data ? Object.keys(data.current.categories) : [];
-  const theirGames = (data?.opponent_players || []).reduce((s, p) => s + p.plays, 0);
+  // Daily Leaders' column order (PTS, REB, A-TO, STL, BLK, then the rest): the categories object arrives key-sorted.
+  const cats = data ? orderColumns(data.categories).map(c => c.key) : [];
+  const catLabel = (k) => meta[k]?.label || k;
+  // Inverse categories (turnovers, times blocked...): the server's chance already means "lower wins".
+  const catTitle = (k) => `${meta[k]?.name || k}${meta[k]?.inverse ? ': lower wins' : ''}`;
+  const inverseLabels = cats.filter(k => meta[k]?.inverse).map(catLabel);
 
-  // Players with a game each day, for you without the drop (the open days are where a pickup streams) and for them.
-  const perDay = (players) => days.map(day => players.filter(p => (p.days || []).includes(day)).length);
-  const withoutDrop = data ? data.current.players.filter(p => !(pick?.drop && p.name === pick.drop)) : [];
+  // Healthy players with a game each day, for you without the drop (the open days are where a pickup streams) and for them.
+  const perDay = (players) => days.map(day => players.filter(p => !p.injured && (p.days || []).includes(day)).length);
+  const mineByDay = perDay(data ? data.current.players.filter(p => !(pick?.drop && p.name === pick.drop)) : []);
+  const isOpen = (n) => !!openSlots && n < openSlots;
 
   const pickPlayers = pickSide?.players.find(p => p.name === pick?.name);
   const pickDays = pick?.days || pickPlayers?.days || [];
@@ -196,7 +229,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
         <>
           <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4 mb-4">
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4">
-              <div>
+              <div className="min-w-0">
                 <div className="text-sm font-semibold text-mine">You</div>
                 {points ? (
                   <div className="text-2xl sm:text-3xl font-bold text-mine">{data.current.categories.FPTS?.mine.toFixed(0)}</div>
@@ -213,12 +246,12 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                   </>
                 ) : <div className="text-xs text-gray-400 max-w-[8rem]">Opponent TBD: your projected week only</div>}
               </div>
-              <div className="text-right">
-                <div className="text-sm font-semibold text-opp truncate">{hasOpponent ? opponentLabel : 'Opponent'}</div>
+              <div className="text-right min-w-0">
+                <div className="text-sm font-semibold text-opp truncate" title={hasOpponent ? opponentLabel : undefined}>{hasOpponent ? opponentLabel : 'Opponent'}</div>
                 {hasOpponent && (points ? (
                   <div className="text-2xl sm:text-3xl font-bold text-opp">{data.current.categories.FPTS?.theirs?.toFixed(0)}</div>
                 ) : (
-                  <div className="text-2xl sm:text-3xl font-bold text-opp">{(Object.keys(data.current.categories).length - data.current.expected).toFixed(1)}</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-opp">{(cats.length - data.current.expected).toFixed(1)}</div>
                 ))}
                 <div className="text-xs text-gray-400">{hasOpponent ? (points ? 'projected points' : 'categories expected') : ''}</div>
               </div>
@@ -227,8 +260,8 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
               {shortDate(data.week_start)} to {shortDate(data.week_end)} ({data.days} days)
               {data.opponent === 'league average' && ` · the league's average team${data.scheduled_opponent ? ` (${data.scheduled_opponent} has no roster yet)` : ''}`}
               {!data.scheduled_opponent && ' · no opponent in the schedule for this week'}
-              {' · '}Games counted <span className="text-gray-200">{plays(+gamesCounted(data.current).toFixed(1))}</span>
-              {data.opponent_players && <> vs <span className="text-gray-200">{plays(+theirGames.toFixed(1))}</span></>}
+              {' · '}Games counted <span className="text-gray-200">{gamesCounted(data.current.players)}</span>
+              {data.opponent_players && <> vs <span className="text-gray-200">{gamesCounted(data.opponent_players)}</span></>}
               {' · '}<span className="text-gray-200">{data.claims_left ?? claims}</span> of {claims} claim{claims === 1 ? '' : 's'} left
               {slots ? ` · ${slots} active slots` : ''}
             </p>
@@ -237,7 +270,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
           {/* Layout A's category tug-of-war: bar = my chance of winning the category, with the selected pickup applied */}
           <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4 mb-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
-              <h3 className="text-sm font-semibold text-gray-300">Categories{pickSide && pick ? <span className="font-normal text-gray-400"> · with {pick.name}</span> : ''}</h3>
+              <h3 className="text-sm font-semibold text-gray-300">Categories{pickSide ? <span className="font-normal text-gray-400"> · with {pick.name}</span> : ''}</h3>
               <span className="text-[11px] text-gray-500">Bar = your chance of winning it. Your total left, theirs right.</span>
             </div>
             <div className="space-y-1">
@@ -250,15 +283,15 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 return (
                   <div key={k} className="grid grid-cols-[3.25rem_1fr_2.5rem_1fr_3.25rem] sm:grid-cols-[4rem_1fr_3rem_1fr_6rem] items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
                     <span className="text-right text-gray-200">{format(k, row.mine)}</span>
-                    <div className="relative h-4 bg-gray-800 rounded-sm" title={chance != null ? `${pct(chance)} to win ${meta[k]?.name || k}` : ''}>
+                    <div className="relative h-4 bg-gray-800 rounded-sm" title={chance != null ? `${pct(chance)} to win ${catTitle(k)}` : undefined}>
                       {chance != null && <div className="absolute right-0 top-0 bottom-0 bg-nba-orange rounded-l-sm transition-[width]" style={{ width: `${chance * 100}%` }} />}
                       {chance != null && (
                         <span className="absolute left-1 top-0 text-[10px] leading-4 font-bold text-white drop-shadow">
-                          {pct(chance)}{Math.abs(d) >= 0.005 && <span className={`ml-1 ${d > 0 ? 'text-green-300' : 'text-red-300'}`}>{d > 0 ? '+' : ''}{Math.round(d * 100)}</span>}
+                          {pct(chance)}{Math.abs(d) >= 0.005 && <span className={`ml-1 ${d > 0 ? 'text-green-300' : 'text-red-300'}`}>{pointsDelta(d)}</span>}
                         </span>
                       )}
                     </div>
-                    <span className="text-center font-semibold text-white">{meta[k]?.label || k}</span>
+                    <span className="text-center font-semibold text-white" title={catTitle(k)}>{catLabel(k)}</span>
                     <div className="h-4 bg-gray-800 rounded-sm">
                       {chance != null && <div className="h-full bg-opp rounded-r-sm transition-[width]" style={{ width: `${(1 - chance) * 100}%` }} />}
                     </div>
@@ -273,7 +306,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
             {!points && (
               <p className="text-[11px] text-gray-500 mt-2">
                 <span className="text-amber-300">swing</span> 40 to 60%: where a pickup matters · <span className="text-green-300">safe</span> 75%+ · <span className="text-red-300">long shot</span> under 30%
-                {Object.keys(meta).some(k => meta[k]?.inverse) && ' · lower wins in turnover-style categories'}
+                {inverseLabels.length > 0 && ` · lower wins in ${inverseLabels.join(', ')}`}
               </p>
             )}
           </div>
@@ -289,26 +322,28 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                   <option value="">Any position</option>
                   {positions.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <select value={filter.cat} onChange={(e) => setFilter(f => ({ ...f, cat: e.target.value }))} aria-label="Helps category"
-                  className="px-2 py-1 rounded-full text-xs bg-gray-700 border border-gray-500 text-gray-200">
-                  <option value="">Helps any</option>
-                  {cats.map(k => <option key={k} value={k}>Helps {meta[k]?.label || k}</option>)}
-                </select>
+                {!points && (
+                  <select value={filter.cat} onChange={(e) => setFilter(f => ({ ...f, cat: e.target.value }))} aria-label="Helps category"
+                    className="px-2 py-1 rounded-full text-xs bg-gray-700 border border-gray-500 text-gray-200">
+                    <option value="">Helps any</option>
+                    {cats.map(k => <option key={k} value={k}>Helps {catLabel(k)}</option>)}
+                  </select>
+                )}
               </div>
               <div className="relative mb-2">
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Any free agent..."
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Any free agent..." aria-label="Try any free agent"
                   className="w-full px-2 py-1 bg-gray-600 text-white text-xs rounded border border-gray-500" />
                 {matches.length > 0 && (
                   <div className="absolute z-10 left-0 right-0 mt-0.5 bg-gray-800 border border-gray-500 rounded shadow-xl">
                     {matches.map(p => (
-                      <div key={p} onClick={() => chooseManual(p)} className="px-2 py-1 text-xs text-white hover:bg-gray-600 cursor-pointer">{p}</div>
+                      <button key={p} type="button" onClick={() => chooseManual(p)} className="block w-full text-left px-2 py-1 text-xs text-white hover:bg-gray-600">{p}</button>
                     ))}
                   </div>
                 )}
               </div>
               <div className="space-y-1.5 max-h-[34rem] overflow-y-auto">
                 {manual && (
-                  <button onClick={() => choose(manual.name)} aria-pressed={selected === manual.name}
+                  <button onClick={() => setSelected(manual.name)} aria-pressed={selected === manual.name}
                     className={`w-full text-left rounded-lg border p-2 ${selected === manual.name ? 'border-nba-orange bg-gray-600' : 'border-gray-600 bg-gray-800'}`}>
                     <span className="text-sm font-medium text-white">{manual.name}</span>
                     <span className="ml-2 text-xs text-gray-400">your search</span>
@@ -318,11 +353,11 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                   const index = candidates.indexOf(c);
                   const on = selected === c.name;
                   return (
-                    <button key={c.name} onClick={() => choose(c.name)} aria-pressed={on}
+                    <button key={c.name} onClick={() => setSelected(c.name)} aria-pressed={on}
                       className={`w-full text-left rounded-lg border p-2 ${on ? 'border-nba-orange bg-gray-600' : 'border-gray-600 bg-gray-800 hover:border-gray-500'}`}>
                       <div className="flex items-baseline justify-between gap-2">
                         <span className="text-sm font-medium text-white truncate"><span className="text-gray-500 mr-1.5">{index + 1}</span>{c.name}</span>
-                        <span className={`text-sm font-bold shrink-0 ${deltaClass(c.gain)}`}>{points ? `${c.gain > 0 ? '+' : ''}${Math.round(c.gain * 100)}%` : signed(c.gain)}</span>
+                        <span className={`text-sm font-bold shrink-0 ${deltaClass(c.gain)}`}>{points ? `${pointsDelta(c.gain)}%` : signed(c.gain)}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-gray-400">
                         <span>{c.team_abv} · {c.positions.join('/')}</span>
@@ -333,7 +368,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                     </button>
                   );
                 })}
-                {!shown.length && !manual && <p className="text-xs text-gray-400 p-2">{candidates.length ? 'No candidate matches these filters.' : 'No pickup improves this week.'}</p>}
+                {!shown.length && !manual && <p className="text-xs text-gray-400 p-2">{candidates.length ? 'No candidate matches these filters.' : pickupsError || 'No pickup improves this week.'}</p>}
               </div>
               <p className="text-[11px] text-gray-500 mt-2">Ranked by {points ? 'the rise in your chance of winning the week' : 'extra categories you would expect to win'}, with the drop that suits each best.</p>
             </div>
@@ -369,53 +404,57 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                           <th className="text-left font-normal py-1">{points ? '' : 'Category'}</th>
                           {hasOpponent && <th className="text-right font-normal">You · {opponentLabel}</th>}
                           <th className="text-right font-normal">As is</th>
-                          {best && <th className="text-right font-normal">{same ? 'With him' : 'Best pick'}</th>}
-                          {!same && <th className="text-right font-normal">{pick.name.split(' ').slice(-1)[0]}</th>}
+                          {columns.map(col => <th key={col.key} className="text-right font-normal">{col.label}</th>)}
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="border-t border-gray-600/40 font-semibold">
-                          <td className="py-1 text-gray-300">{points ? 'Win the week' : 'Win the week · categories'}</td>
+                        {/* Points leagues skip it: their one category's chance is the week's (the FPTS row below) */}
+                        {!points && <tr className="border-t border-gray-600/40 font-semibold">
+                          <td className="py-1 text-gray-300">Win the week · categories</td>
                           {hasOpponent && <td></td>}
-                          <td className="text-right text-white">{baseChance != null ? pct(baseChance) : '-'}{!points && data.current.expected != null && <span className="text-gray-400 font-normal"> · {data.current.expected.toFixed(1)}</span>}</td>
-                          {best && <td className="text-right text-white">{bestSide ? <>{pct(weekChance(bestSide, points))}{!points && <span className="text-gray-400 font-normal"> · {bestSide.expected.toFixed(1)}</span>}</> : '...'}</td>}
-                          {!same && <td className="text-right text-white">{pickSide ? <>{pct(weekChance(pickSide, points))}{!points && <span className="text-gray-400 font-normal"> · {pickSide.expected.toFixed(1)}</span>}</> : '...'}</td>}
-                        </tr>
+                          {[{ key: 'now', side: data.current }, ...columns].map(col => {
+                            const chance = col.side && weekChance(col.side, points);
+                            return (
+                              <td key={col.key} className="text-right text-white">
+                                {col.side ? <>{chance != null ? pct(chance) : '-'}{col.side.expected != null && <span className="text-gray-400 font-normal"> · {col.side.expected.toFixed(1)}</span>}</> : waiting(col)}
+                              </td>
+                            );
+                          })}
+                        </tr>}
                         {cats.map(k => {
                           const base = data.current.categories[k];
-                          const cell = (side) => {
-                            if (!side) return <span className="text-gray-500">...</span>;
-                            const row = side.categories[k];
+                          const cell = (col) => {
+                            if (!col.side) return waiting(col);
+                            const row = col.side.categories[k];
                             if (row.chance == null) return format(k, row.mine);
                             const d = row.chance - (base.chance ?? row.chance);
-                            return <span className={chanceClass(row.chance)}>{pct(row.chance)}{Math.abs(d) >= 0.005 && <span className={`ml-1 text-xs ${deltaClass(d)}`}>{d > 0 ? '+' : ''}{Math.round(d * 100)}</span>}</span>;
+                            return <span className={chanceClass(row.chance)}>{pct(row.chance)}{Math.abs(d) >= 0.005 && <span className={`ml-1 text-xs ${deltaClass(d)}`}>{pointsDelta(d)}</span>}</span>;
                           };
                           const tag = tagFor(base.chance);
                           return (
                             <tr key={k} className="border-t border-gray-600/40">
-                              <td className="py-1 text-gray-400">{meta[k]?.label || k}{!points && tag && <span className={`ml-1.5 text-[9px] font-bold uppercase px-1 rounded ${tag[1]}`}>{tag[0]}</span>}</td>
+                              <td className="py-1 text-gray-400" title={catTitle(k)}>{points ? 'Win the week' : catLabel(k)}{!points && tag && <span className={`ml-1.5 text-[9px] font-bold uppercase px-1 rounded ${tag[1]}`}>{tag[0]}</span>}</td>
                               {hasOpponent && <td className="text-right text-xs text-gray-400">{format(k, base.mine)} · {format(k, base.theirs)}</td>}
                               <td className={`text-right ${chanceClass(base.chance)}`}>{base.chance != null ? pct(base.chance) : format(k, base.mine)}</td>
-                              {best && <td className="text-right">{cell(bestSide)}</td>}
-                              {!same && <td className="text-right">{cell(pickSide)}</td>}
+                              {columns.map(col => <td key={col.key} className="text-right">{cell(col)}</td>)}
                             </tr>
                           );
                         })}
                         <tr className="border-t border-gray-600/40">
                           <td className="py-1 text-gray-400">Games counted</td>
-                          {hasOpponent && <td className="text-right text-xs text-gray-400">{plays(+gamesCounted(data.current).toFixed(1))} · {data.opponent_players ? plays(+theirGames.toFixed(1)) : '-'}</td>}
-                          <td className="text-right text-gray-200">{plays(+gamesCounted(data.current).toFixed(1))}</td>
-                          {best && <td className="text-right text-gray-200">{bestSide ? plays(+gamesCounted(bestSide).toFixed(1)) : '...'}</td>}
-                          {!same && <td className="text-right text-gray-200">{pickSide ? plays(+gamesCounted(pickSide).toFixed(1)) : '...'}</td>}
+                          {hasOpponent && <td className="text-right text-xs text-gray-400">{gamesCounted(data.current.players)} · {data.opponent_players ? gamesCounted(data.opponent_players) : '-'}</td>}
+                          <td className="text-right text-gray-200">{gamesCounted(data.current.players)}</td>
+                          {columns.map(col => <td key={col.key} className="text-right text-gray-200">{col.side ? gamesCounted(col.side.players) : waiting(col)}</td>)}
                         </tr>
                       </tbody>
                     </table>
                   </div>
+                  {errorOf(pick) && <p className="text-xs text-red-300 mt-2">{errorOf(pick)}</p>}
                   {!points && <p className="text-[11px] text-gray-500 mt-2"><span className="text-amber-300">swing</span> = 40 to 60% as is: where a pickup matters. Small numbers beside a chance are the change from your roster as it is.</p>}
                 </div>
               ) : (
                 !loading && <div className="bg-gray-700 rounded-lg border border-gray-600 p-4 text-sm text-gray-400">
-                  {candidates.length ? 'Pick a free agent on the left.' : 'No free agent improves this week. Search one on the left to try him.'}
+                  {candidates.length ? 'Pick a free agent on the left.' : `${pickupsError ? `${pickupsError.replace(/\.?$/, '.')}` : 'No free agent improves this week.'} Search one on the left to try him.`}
                 </div>
               )}
 
@@ -432,47 +471,48 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                       </thead>
                       <tbody>
                         <tr className="border-t border-gray-600/40">
-                          <td className="py-1 text-gray-400 pr-2 whitespace-nowrap">Yours{pick.drop ? ` without ${pick.drop.split(' ').slice(-1)[0]}` : ''}</td>
-                          {perDay(withoutDrop).map((n, i) => (
-                            <td key={days[i]} className={`text-center ${slots && n < slots ? 'text-amber-300' : 'text-gray-200'}`} title={slots && n < slots ? 'Open slot: a pickup who plays this day adds a game' : ''}>{n}</td>
+                          <td className="py-1 text-gray-400 pr-2 whitespace-nowrap">Yours{pick.drop ? ` without ${lastName(pick.drop)}` : ''}</td>
+                          {mineByDay.map((n, i) => (
+                            <td key={days[i]} className={`text-center ${isOpen(n) ? 'text-amber-300' : 'text-gray-200'}`} title={isOpen(n) ? 'Open slot: a pickup who plays this day adds a game' : undefined}>{n}</td>
                           ))}
                         </tr>
                         <tr className="border-t border-gray-600/40">
-                          <td className="py-1 text-white pr-2 whitespace-nowrap">{pick.name.split(' ').slice(-1)[0]}</td>
-                          {days.map(d => {
-                            const plays_ = pickDays.includes(d);
-                            const open = slots && perDay(withoutDrop)[days.indexOf(d)] < slots;
-                            return <td key={d} className="text-center">{plays_ ? <span className={open ? 'text-green-400 font-bold' : 'text-gray-400'}>{open ? 'fills' : 'full'}</span> : ''}</td>;
+                          <td className="py-1 text-white pr-2 whitespace-nowrap">{lastName(pick.name)}</td>
+                          {days.map((d, i) => {
+                            if (!pickDays.includes(d)) return <td key={d}></td>;
+                            if (!openSlots) return <td key={d} className="text-center text-gray-200">plays</td>;
+                            const open = isOpen(mineByDay[i]);
+                            return <td key={d} className="text-center"><span className={open ? 'text-green-400 font-bold' : 'text-gray-400'}>{open ? 'fills' : 'full'}</span></td>;
                           })}
                         </tr>
                         {data.opponent_players && (
                           <tr className="border-t border-gray-600/40">
-                            <td className="py-1 text-opp pr-2 whitespace-nowrap">{opponentLabel}</td>
+                            <td className="py-1 text-opp pr-2 whitespace-nowrap max-w-[8rem] truncate" title={opponentLabel}>{opponentLabel}</td>
                             {perDay(data.opponent_players).map((n, i) => (
-                              <td key={days[i]} className={`text-center ${slots && n < slots ? 'text-amber-300' : 'text-gray-200'}`}>{n}</td>
+                              <td key={days[i]} className={`text-center ${isOpen(n) ? 'text-amber-300' : 'text-gray-200'}`}>{n}</td>
                             ))}
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-2">Players with a game each day{slots ? `; amber is under your ${slots} active slots, so a pickup who plays that day fills one` : ''}.</p>
+                  <p className="text-[11px] text-gray-500 mt-2">Healthy players with a game each day{openSlots ? `; amber is under your ${openSlots} active slots, so a pickup who plays that day fills one` : ''}.</p>
                 </div>
               )}
 
               <details className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4">
                 <summary className="cursor-pointer text-sm font-semibold text-gray-200">Matchup and both rosters</summary>
                 <div className="grid gap-4 sm:grid-cols-2 mt-3">
-                  <RosterTable title={pickSide && pick ? `Your roster with ${pick.name}` : 'Your roster'} players={(pickSide || data.current).players}
-                    days={days} nameClass="text-mine" dropName={pickSide ? pick?.drop : null} addName={pickSide ? pick?.name : null} />
+                  <RosterTable title={pickSide ? `Your roster with ${pick.name}` : 'Your roster'} players={(pickSide || data.current).players}
+                    days={days} nameClass="text-mine" lit="bg-nba-orange" dropName={pickSide ? pick?.drop : null} addName={pickSide ? pick?.name : null} />
                   {data.opponent_players
-                    ? <RosterTable title={opponentLabel} players={data.opponent_players} days={days} nameClass="text-opp" />
+                    ? <RosterTable title={opponentLabel} players={data.opponent_players} days={days} nameClass="text-opp" lit="bg-opp" />
                     : <p className="text-xs text-gray-400">{hasOpponent ? 'No roster for the opponent yet.' : 'No opponent set for this week.'}</p>}
                 </div>
                 {data.il?.length > 0 && <p className="text-xs text-gray-500 mt-3">Injured list (no spot, no games): {data.il.join(', ')}</p>}
                 <p className="text-xs text-gray-500 mt-2">
-                  {config.league?.settings?.roster?.daily_lineups
-                    ? 'Daily lineups: each day your best players who play and fit the starting slots count.'
+                  {daily
+                    ?'Daily lineups: each day your best players who play and fit the starting slots count.'
                     : 'Weekly lineup: your best starters who fit the slots play every game.'}
                 </p>
               </details>

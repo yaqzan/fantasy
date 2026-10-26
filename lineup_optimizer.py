@@ -175,11 +175,12 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
     label, theirs = week.opponent(opponent_abv, suffix)
     undroppable = get_undroppable_players(league)
     claims = claims_left(league, week_start)
+    mine = week.team(roster, suffix)
     result = {
         'week_start': week_start.isoformat(), 'week_end': week_end.isoformat(),
         'days': (week_end - week_start).days + 1, 'timeframe': timeframe,
         'opponent': label, 'scheduled_opponent': opponent_abv,
-        'current': _side_json(week, week.team(roster, suffix), theirs, suffix),
+        'current': _side_json(week, mine, theirs, suffix),
         'roster': roster, 'il': il, 'undroppable': undroppable, 'claims_per_week': league.claims_per_week,
         'claims_left': claims,
         'free_agents': sorted(get_available_players(league, week.stats),
@@ -187,8 +188,8 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
     }
     opponent_team = get_team_by_abv(league, opponent_abv) if opponent_abv else None
     if label and label != 'league average' and opponent_team is not None:
-        result['opponent_players'] = _side_json(week, week.team(_roster(opponent_team), suffix),
-                                                week.team(roster, suffix).totals, suffix)['players']
+        # players only: theirs=None skips the category chances this would throw away
+        result['opponent_players'] = _side_json(week, week.team(_roster(opponent_team), suffix), None, suffix)['players']
     if adds or drops:
         what_if = [p for p in roster if p not in drops] + [p for p in adds if p in week.stats and p not in roster]
         if len(what_if) > league.roster_size:
@@ -198,7 +199,7 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
             result['what_if'] = {**_side_json(week, week.team(what_if, suffix), theirs, suffix),
                                  'adds': list(adds), 'drops': list(drops)}
     if moves:
-        steps, final = best_moves(week, roster, theirs or week.team(roster, suffix).totals, suffix,
+        steps, final = best_moves(week, roster, theirs or mine.totals, suffix,
                                   undroppable, claims)
         result['moves'] = {**_side_json(week, week.team(final, suffix), theirs, suffix),
                            'steps': [{'add': m.add, 'drop': m.drop, 'gain': round(m.gain, 3),

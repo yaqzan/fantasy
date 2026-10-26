@@ -58,6 +58,17 @@ down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` 
   animate (`.pc-card` / `.pc-scrim` in `index.css`: ~160-190ms in, ~110-140ms out, none under
   reduced motion); the card unmounts after the close animation.
 
+## Lineup Optimizer = the Pickup Desk
+
+Owner picked design C of the 2026-10-18 mockups, plus A's category tug-of-war (2026-10-26). `components/LineupOptimizer.js`:
+scoreboard, **Categories** bars (bar = my chance of winning it, with the selected pickup applied), then the desk: candidates
+(`/api/pickups`, filters 4+ games / position / helps a category; a search box tries any free agent with a drop picker) beside
+a comparison of roster as is, the best pick and the selected one, a days table (his days against my open slots, daily-lineup
+leagues only), and a fold with both rosters. Previews are real `/api/analyze?add=&drop=` what-ifs, once per add+drop, never
+client maths (only the week-win chance is derived: Poisson-binomial over the category chances). Category order is
+`orderColumns`, not the alphabetical dict order. `/api/analyze` returns `opponent_players` and per-player `days`.
+Points leagues drop the category rows and the Helps filter.
+
 ## Deploying a change
 
 `npm --prefix frontend run build` empties `frontend/build` first, so the live site 404s for the whole
