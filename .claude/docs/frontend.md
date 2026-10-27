@@ -61,14 +61,17 @@ down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` 
 
 ## Lineup Optimizer = the Pickup Desk
 
-Owner picked design C of the 2026-10-18 mockups, plus A's category tug-of-war (2026-10-26). `components/LineupOptimizer.js`:
-scoreboard, **Categories** bars (bar = my chance of winning it, with the selected pickup applied), then the desk: candidates
-(`/api/pickups`, filters 4+ games / position / helps a category; a search box tries any free agent with a drop picker) beside
-a comparison of roster as is, the best pick and the selected one, a days table (his days against my open slots, daily-lineup
-leagues only), and a fold with both rosters. Previews are real `/api/analyze?add=&drop=` what-ifs, once per add+drop, never
-client maths (only the week-win chance is derived: Poisson-binomial over the category chances). Category order is
-`orderColumns`, not the alphabetical dict order. `/api/analyze` returns `opponent_players` and per-player `days`.
-Points leagues drop the category rows and the Helps filter.
+Owner picked design C of the 2026-10-18 mockups; the category view and comparison were merged 2026-10-26. `components/LineupOptimizer.js`:
+scoreboard header (You / week-win chip / opponent, one facts line: dates, claims left, games counted), then ONE category grid:
+a **Now** column of green/red/grey chips (green = 55%+ to win the category, red = 45% or less, grey between) beside two pick
+columns (the best pick and the selected one; the runner-up while the best is selected). A pick cell shows his chance and the
+change from Now, fades when little changes, rings when the category switches side; a Week row on top. Click a column
+header to select that pick. Below: candidates (`/api/pickups`, filters 4+ games / position / helps a category; a search box
+tries any free agent with a drop picker) beside the selected pick's header, a days table (his days against my open slots,
+daily-lineup leagues only) and a fold with both rosters. Previews are real `/api/analyze?add=&drop=` what-ifs, once per
+add+drop, never client maths (only the week-win chance is derived: Poisson-binomial over the category chances). Category
+order is `orderColumns`. `/api/analyze` returns `opponent_players` and per-player `days`. Points leagues have one row
+(Win the week) and no Helps filter.
 
 ## Deploying a change
 

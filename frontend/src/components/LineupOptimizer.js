@@ -7,11 +7,24 @@ import { orderColumns } from '../dailyLeaders';
 const pct = (x) => `${Math.round(x * 100)}%`;
 const signed = (x, digits = 2) => `${x > 0 ? '+' : x < 0 ? '-' : ''}${Math.abs(x).toFixed(digits)}`;
 const plays = (n) => (Number.isInteger(n) ? n : n.toFixed(1));
-const chanceClass = (chance) => chance == null ? 'text-gray-200' : chance > 0.55 ? 'text-emerald-300' : chance < 0.45 ? 'text-red-300' : 'text-gray-200';
 const deltaClass = (x) => x > 0.0005 ? 'text-green-400' : x < -0.0005 ? 'text-red-400' : 'text-gray-500';
 const pointsDelta = (d) => `${d > 0 ? '+' : ''}${Math.round(d * 100)}`;   // a chance change in percentage points
-const tagFor = (chance) => chance == null ? null : chance >= 0.75 ? ['safe', 'bg-green-900 text-green-200'] : chance <= 0.3 ? ['long shot', 'bg-red-900 text-red-200']
-  : chance > 0.4 && chance < 0.6 ? ['swing', 'bg-amber-900 text-amber-200'] : null;
+// Who is favoured in a category: green 55%+, red 45% or less, grey between (a toss-up).
+const lean = (chance) => chance == null ? 'even' : chance >= 0.55 ? 'win' : chance <= 0.45 ? 'lose' : 'even';
+const chipClass = (chance) => ({ win: 'bg-green-900/70 text-green-300', lose: 'bg-red-900/70 text-red-300', even: 'bg-gray-600 text-gray-300' })[lean(chance)];
+
+// One cell of the category grid: the chance as a coloured chip, the change from `base` beside it, a ring
+// when the category switches side (favoured / toss-up / against).
+const Chip = ({ chance, base, fallback = '-', bold }) => {
+  if (chance == null) return <div className="rounded bg-gray-600 text-gray-300 text-center py-1">{fallback}</div>;
+  const d = base == null ? 0 : chance - base;
+  const flipped = base != null && lean(chance) !== lean(base);
+  return (
+    <div className={`rounded text-center py-1 tabular-nums ${bold ? 'font-bold' : 'font-semibold'} ${chipClass(chance)} ${flipped ? 'ring-1 ring-gray-100' : ''} ${base != null && Math.abs(d) < 0.02 ? 'opacity-50' : ''}`}>
+      {pct(chance)}{Math.abs(d) >= 0.005 && <span className="ml-1 text-[10px] font-normal">{pointsDelta(d)}</span>}
+    </div>
+  );
+};
 
 // Chance of winning the week: a points league has one category (its chance is the week's); otherwise
 // the chance of winning more than half of the categories (Poisson-binomial on the category chances).
@@ -119,13 +132,16 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const best = candidates[0] || null;
   const pick = manual && manual.name === selected ? manual : candidates.find(c => c.name === selected) || null;
   const keyOf = (c) => `${c.name}|${c.drop || ''}`;
+  const pickIsBest = !!(pick && best && keyOf(pick) === keyOf(best));
+  // The two picks set beside "Now": the best, then the one being looked at (the runner-up while that is the best).
+  const second = pickIsBest ? candidates[1] || null : pick;
 
-  // The best pick and the one being looked at are scored as real what-ifs, once each. Requests are not
+  // The two compared picks are scored as real what-ifs, once each. Requests are not
   // cancelled when the selection moves on (that left a key asked but never answered: "..." for good);
   // an answer is dropped only once the matchup it was asked for has been replaced (week, stats, Refresh).
   useEffect(() => {
     if (!data || data !== loaded.current) return;   // a stale run in the same flush as a reload
-    [best, pick].filter(Boolean).forEach(c => {
+    [best, second].filter(Boolean).forEach(c => {
       const key = keyOf(c);
       if (asked.current.has(key)) return;
       asked.current.add(key);
@@ -141,7 +157,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
         });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, best?.name, best?.drop, pick?.name, pick?.drop]);
+  }, [data, best?.name, best?.drop, second?.name, second?.drop]);
 
   const days = data ? weekDays(data.week_start, data.week_end) : [];
   const opponentLabel = data?.opponent === 'league average' ? 'League avg' : data?.opponent;
@@ -149,16 +165,11 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const claims = data?.claims_per_week || config.capabilities?.claims_per_week || 1;
   const sideOf = (c) => { const s = c && previews[keyOf(c)]; return s && !s.error ? s : null; };
   const errorOf = (c) => (c && previews[keyOf(c)]?.error) || null;
-  const bestSide = sideOf(best);
   const pickSide = sideOf(pick);
-  const pickIsBest = !!(pick && best && keyOf(pick) === keyOf(best));
   const baseChance = weekChance(data?.current, points);
-  // The comparison columns beside "As is": the best pick, then the one being looked at when it differs.
-  const columns = [
-    ...(best ? [{ key: 'best', label: pickIsBest ? 'With him' : 'Best pick', side: bestSide, error: errorOf(best) }] : []),
-    ...(pick && !pickIsBest ? [{ key: 'pick', label: lastName(pick.name), side: pickSide, error: errorOf(pick) }] : []),
-  ];
-  const waiting = (col) => <span className="text-gray-500" title={col.error || 'Working it out'}>{col.error ? '-' : '...'}</span>;
+  // The columns beside "Now" in the category grid.
+  const columns = [best, second].filter(Boolean).map(c => ({ key: keyOf(c), item: c, side: sideOf(c), error: errorOf(c) }));
+  const pending = (col) => col.error ? '-' : '...';
 
   // A picked position filter stays listed after a week switch, so it can be seen and cleared.
   const positions = useMemo(() => [...new Set([...candidates.flatMap(c => c.positions), ...(filter.pos ? [filter.pos] : [])])].sort(),
@@ -227,88 +238,88 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
 
       {data && (
         <>
+          {/* Scoreboard: you, the week's chance, the opponent; the facts in one line */}
           <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4 mb-4">
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4">
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-mine">You</div>
-                {points ? (
-                  <div className="text-2xl sm:text-3xl font-bold text-mine">{data.current.categories.FPTS?.mine.toFixed(0)}</div>
-                ) : (
-                  <div className="text-2xl sm:text-3xl font-bold text-mine">{data.current.expected != null ? data.current.expected.toFixed(1) : '-'}</div>
-                )}
+                <div className="text-2xl sm:text-3xl font-bold text-mine">{points ? data.current.categories.FPTS?.mine.toFixed(0) : data.current.expected != null ? data.current.expected.toFixed(1) : '-'}</div>
                 <div className="text-xs text-gray-400">{points ? 'projected points' : 'categories expected'}</div>
               </div>
               <div className="text-center">
                 {baseChance != null ? (
-                  <>
-                    <div className="text-xs uppercase tracking-wide text-gray-400">Win the week</div>
-                    <div className={`text-xl sm:text-2xl font-bold ${chanceClass(baseChance)}`}>{pct(baseChance)}</div>
-                  </>
+                  <div className={`rounded-lg px-3 py-1.5 ${chipClass(baseChance)}`}>
+                    <div className="text-xl sm:text-2xl font-bold leading-none">{pct(baseChance)}</div>
+                    <div className="text-[11px]">to win the week</div>
+                  </div>
                 ) : <div className="text-xs text-gray-400 max-w-[8rem]">Opponent TBD: your projected week only</div>}
               </div>
               <div className="text-right min-w-0">
                 <div className="text-sm font-semibold text-opp truncate" title={hasOpponent ? opponentLabel : undefined}>{hasOpponent ? opponentLabel : 'Opponent'}</div>
-                {hasOpponent && (points ? (
-                  <div className="text-2xl sm:text-3xl font-bold text-opp">{data.current.categories.FPTS?.theirs?.toFixed(0)}</div>
-                ) : (
-                  <div className="text-2xl sm:text-3xl font-bold text-opp">{(cats.length - data.current.expected).toFixed(1)}</div>
-                ))}
+                {hasOpponent && <div className="text-2xl sm:text-3xl font-bold text-opp">{points ? data.current.categories.FPTS?.theirs?.toFixed(0) : (cats.length - data.current.expected).toFixed(1)}</div>}
                 <div className="text-xs text-gray-400">{hasOpponent ? (points ? 'projected points' : 'categories expected') : ''}</div>
               </div>
             </div>
-            <p className="text-xs text-gray-400 mt-3 pt-2 border-t border-gray-600">
-              {shortDate(data.week_start)} to {shortDate(data.week_end)} ({data.days} days)
-              {data.opponent === 'league average' && ` · the league's average team${data.scheduled_opponent ? ` (${data.scheduled_opponent} has no roster yet)` : ''}`}
-              {!data.scheduled_opponent && ' · no opponent in the schedule for this week'}
-              {' · '}Games counted <span className="text-gray-200">{gamesCounted(data.current.players)}</span>
-              {data.opponent_players && <> vs <span className="text-gray-200">{gamesCounted(data.opponent_players)}</span></>}
-              {' · '}<span className="text-gray-200">{data.claims_left ?? claims}</span> of {claims} claim{claims === 1 ? '' : 's'} left
-              {slots ? ` · ${slots} active slots` : ''}
+            <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-600 text-center">
+              {shortDate(data.week_start)} to {shortDate(data.week_end)}
+              {' · '}<span className="text-gray-200">{data.claims_left ?? claims}</span>/{claims} claim{claims === 1 ? '' : 's'} left
+              {' · '}<span title="Expected games counted, you vs them">{gamesCounted(data.current.players)}{data.opponent_players && <> vs {gamesCounted(data.opponent_players)}</>} games</span>
+              {data.opponent === 'league average' && ` · vs the league average${data.scheduled_opponent ? ` (${data.scheduled_opponent} has no roster yet)` : ''}`}
+              {!data.scheduled_opponent && ' · no opponent scheduled'}
             </p>
           </div>
 
-          {/* Layout A's category tug-of-war: bar = my chance of winning the category, with the selected pickup applied */}
+          {/* Categories and the comparison in one grid: where you stand now, beside the two picks (owner, 2026-10-26) */}
           <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4 mb-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
-              <h3 className="text-sm font-semibold text-gray-300">Categories{pickSide ? <span className="font-normal text-gray-400"> · with {pick.name}</span> : ''}</h3>
-              <span className="text-[11px] text-gray-500">Bar = your chance of winning it. Your total left, theirs right.</span>
-            </div>
-            <div className="space-y-1">
+            <div className="grid grid-cols-[4.5rem_repeat(3,minmax(0,1fr))] sm:grid-cols-[6.5rem_repeat(3,minmax(0,1fr))] gap-1 items-center text-sm">
+              <div className="text-xs text-gray-400">{points ? '' : 'Category'}</div>
+              <div className="text-center text-xs text-gray-400 pb-1">Now</div>
+              {[0, 1].map(i => {
+                const col = columns[i];
+                if (!col) return <div key={i}></div>;
+                return (
+                  <button key={col.key} onClick={() => setSelected(col.item.name)} aria-pressed={selected === col.item.name}
+                    title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
+                    className={`min-w-0 text-center text-xs pb-1 ${selected === col.item.name ? 'text-nba-orange font-semibold' : 'text-gray-200'}`}>
+                    <span className="block truncate">+ {lastName(col.item.name)}{col.item === best && <span className="ml-1 text-green-300">best</span>}</span>
+                    <span className="block truncate text-[10px] text-red-400">{col.item.drop ? `- ${lastName(col.item.drop)}` : 'open spot'}</span>
+                  </button>
+                );
+              })}
+              {columns.length < 2 && columns.length > 0 && <div></div>}
+
+              {!points && (
+                <>
+                  <div className="font-semibold text-gray-200">Week</div>
+                  <Chip chance={baseChance} bold />
+                  {columns.map(col => <Chip key={col.key} chance={col.side && weekChance(col.side, points)} base={baseChance} fallback={pending(col)} bold />)}
+                  {columns.length < 2 && <div></div>}
+                </>
+              )}
               {cats.map(k => {
                 const base = data.current.categories[k];
-                const row = (pickSide || data.current).categories[k];
-                const chance = row.chance;
-                const d = chance != null && pickSide ? chance - (base.chance ?? chance) : 0;
-                const tag = chance != null && !points ? tagFor(chance) : null;
                 return (
-                  <div key={k} className="grid grid-cols-[3.25rem_1fr_2.5rem_1fr_3.25rem] sm:grid-cols-[4rem_1fr_3rem_1fr_6rem] items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
-                    <span className="text-right text-gray-200">{format(k, row.mine)}</span>
-                    <div className="relative h-4 bg-gray-800 rounded-sm" title={chance != null ? `${pct(chance)} to win ${catTitle(k)}` : undefined}>
-                      {chance != null && <div className="absolute right-0 top-0 bottom-0 bg-nba-orange rounded-l-sm transition-[width]" style={{ width: `${chance * 100}%` }} />}
-                      {chance != null && (
-                        <span className="absolute left-1 top-0 text-[10px] leading-4 font-bold text-white drop-shadow">
-                          {pct(chance)}{Math.abs(d) >= 0.005 && <span className={`ml-1 ${d > 0 ? 'text-green-300' : 'text-red-300'}`}>{pointsDelta(d)}</span>}
-                        </span>
-                      )}
+                  <React.Fragment key={k}>
+                    <div className="min-w-0 border-t border-gray-600/40 pt-1" title={catTitle(k)}>
+                      <span className="font-semibold text-gray-100">{points ? 'Win the week' : catLabel(k)}</span>
+                      {hasOpponent && <span className="block text-[10px] text-gray-500 truncate">{format(k, base.mine)} v {format(k, base.theirs)}</span>}
                     </div>
-                    <span className="text-center font-semibold text-white" title={catTitle(k)}>{catLabel(k)}</span>
-                    <div className="h-4 bg-gray-800 rounded-sm">
-                      {chance != null && <div className="h-full bg-opp rounded-r-sm transition-[width]" style={{ width: `${(1 - chance) * 100}%` }} />}
-                    </div>
-                    <span className="text-gray-300 flex items-center gap-1">
-                      <span>{row.theirs != null ? format(k, row.theirs) : ''}</span>
-                      {tag && <span className={`hidden sm:inline text-[9px] font-bold uppercase px-1 rounded ${tag[1]}`}>{tag[0]}</span>}
-                    </span>
-                  </div>
+                    <Chip chance={base.chance} fallback={format(k, base.mine)} />
+                    {columns.map(col => {
+                      const row = col.side?.categories[k];
+                      return <Chip key={col.key} chance={row?.chance} base={base.chance} fallback={row ? format(k, row.mine) : pending(col)} />;
+                    })}
+                    {columns.length < 2 && <div></div>}
+                  </React.Fragment>
                 );
               })}
             </div>
-            {!points && (
-              <p className="text-[11px] text-gray-500 mt-2">
-                <span className="text-amber-300">swing</span> 40 to 60%: where a pickup matters · <span className="text-green-300">safe</span> 75%+ · <span className="text-red-300">long shot</span> under 30%
-                {inverseLabels.length > 0 && ` · lower wins in ${inverseLabels.join(', ')}`}
-              </p>
-            )}
+            {columns.map(col => col.error && <p key={col.key} className="text-xs text-red-300 mt-2">{col.item.name}: {col.error}</p>)}
+            <p className="text-[11px] text-gray-500 mt-2">
+              Chance to win each category. <span className="text-green-300">Green</span> favoured (55%+), <span className="text-red-300">red</span> against (45% or less), grey a toss-up.
+              Small number: change from Now; faded means little change; ringed means the category switches side.
+              {inverseLabels.length > 0 && ` Lower wins in ${inverseLabels.join(', ')}.`}
+            </p>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] items-start">
@@ -377,7 +388,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
             <div className="space-y-4 min-w-0">
               {pick ? (
                 <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <h3 className="text-lg font-bold text-white">{pick.name}
                       {!pick.manual && <span className="ml-2 text-xs font-normal text-gray-400">{pick.team_abv} · {pick.positions.join('/')}</span>}
                       {pick.name === best?.name && <span className="ml-2 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-green-900 text-green-200">best</span>}
@@ -396,61 +407,6 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                       </span>
                     )}
                   </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[22rem]">
-                      <thead>
-                        <tr className="text-xs text-gray-400">
-                          <th className="text-left font-normal py-1">{points ? '' : 'Category'}</th>
-                          {hasOpponent && <th className="text-right font-normal">You · {opponentLabel}</th>}
-                          <th className="text-right font-normal">As is</th>
-                          {columns.map(col => <th key={col.key} className="text-right font-normal">{col.label}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {/* Points leagues skip it: their one category's chance is the week's (the FPTS row below) */}
-                        {!points && <tr className="border-t border-gray-600/40 font-semibold">
-                          <td className="py-1 text-gray-300">Win the week · categories</td>
-                          {hasOpponent && <td></td>}
-                          {[{ key: 'now', side: data.current }, ...columns].map(col => {
-                            const chance = col.side && weekChance(col.side, points);
-                            return (
-                              <td key={col.key} className="text-right text-white">
-                                {col.side ? <>{chance != null ? pct(chance) : '-'}{col.side.expected != null && <span className="text-gray-400 font-normal"> · {col.side.expected.toFixed(1)}</span>}</> : waiting(col)}
-                              </td>
-                            );
-                          })}
-                        </tr>}
-                        {cats.map(k => {
-                          const base = data.current.categories[k];
-                          const cell = (col) => {
-                            if (!col.side) return waiting(col);
-                            const row = col.side.categories[k];
-                            if (row.chance == null) return format(k, row.mine);
-                            const d = row.chance - (base.chance ?? row.chance);
-                            return <span className={chanceClass(row.chance)}>{pct(row.chance)}{Math.abs(d) >= 0.005 && <span className={`ml-1 text-xs ${deltaClass(d)}`}>{pointsDelta(d)}</span>}</span>;
-                          };
-                          const tag = tagFor(base.chance);
-                          return (
-                            <tr key={k} className="border-t border-gray-600/40">
-                              <td className="py-1 text-gray-400" title={catTitle(k)}>{points ? 'Win the week' : catLabel(k)}{!points && tag && <span className={`ml-1.5 text-[9px] font-bold uppercase px-1 rounded ${tag[1]}`}>{tag[0]}</span>}</td>
-                              {hasOpponent && <td className="text-right text-xs text-gray-400">{format(k, base.mine)} · {format(k, base.theirs)}</td>}
-                              <td className={`text-right ${chanceClass(base.chance)}`}>{base.chance != null ? pct(base.chance) : format(k, base.mine)}</td>
-                              {columns.map(col => <td key={col.key} className="text-right">{cell(col)}</td>)}
-                            </tr>
-                          );
-                        })}
-                        <tr className="border-t border-gray-600/40">
-                          <td className="py-1 text-gray-400">Games counted</td>
-                          {hasOpponent && <td className="text-right text-xs text-gray-400">{gamesCounted(data.current.players)} · {data.opponent_players ? gamesCounted(data.opponent_players) : '-'}</td>}
-                          <td className="text-right text-gray-200">{gamesCounted(data.current.players)}</td>
-                          {columns.map(col => <td key={col.key} className="text-right text-gray-200">{col.side ? gamesCounted(col.side.players) : waiting(col)}</td>)}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  {errorOf(pick) && <p className="text-xs text-red-300 mt-2">{errorOf(pick)}</p>}
-                  {!points && <p className="text-[11px] text-gray-500 mt-2"><span className="text-amber-300">swing</span> = 40 to 60% as is: where a pickup matters. Small numbers beside a chance are the change from your roster as it is.</p>}
                 </div>
               ) : (
                 !loading && <div className="bg-gray-700 rounded-lg border border-gray-600 p-4 text-sm text-gray-400">
