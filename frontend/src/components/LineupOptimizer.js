@@ -75,6 +75,14 @@ const DayDots = ({ days, played, lit = 'bg-nba-orange' }) => (
   </span>
 );
 
+// A whole-card control that holds a PlayerName button: a div (a button can't nest in a button) that still tabs and presses.
+const CardButton = ({ onClick, children, ...props }) => (
+  <div role="button" tabIndex={0} onClick={onClick} {...props}
+    onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); onClick(); } }}>
+    {children}
+  </div>
+);
+
 const RosterTable = ({ title, players: all, days, nameClass, lit, dropName, addName }) => {
   const players = all.filter(p => p.name !== dropName);   // shown struck through at the bottom instead
   return (
@@ -365,12 +373,12 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 if (!col) return <div key={i}></div>;
                 const on = selected === col.item.name;
                 return (
-                  <button key={col.key} onClick={() => setSelected(col.item.name)} aria-pressed={on} title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
-                    className={`min-w-0 text-center text-xs pb-1 border-b ${on ? 'border-nba-orange' : 'border-gray-600'}`}>
-                    <span className={`block break-words font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {col.item.name}</span>
+                  <CardButton key={col.key} onClick={() => setSelected(col.item.name)} aria-pressed={on} title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
+                    className={`min-w-0 text-center text-xs pb-1 border-b cursor-pointer ${on ? 'border-nba-orange' : 'border-gray-600'}`}>
+                    <span className={`block break-words font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ <PlayerName name={col.item.name} /></span>
                     {col.item.day && <span className="block text-[10px] text-gray-400">{col.item.day > (progress.today || data.week_start) ? `${dayName(col.item.day)} ${shortDate(col.item.day)}` : `before 7pm (${shortDate(col.item.day)})`}</span>}
-                    <span className="block break-words text-[10px] text-red-400">{col.item.drop ? `- ${col.item.drop}` : 'open spot'}</span>
-                  </button>
+                    <span className="block break-words text-[10px] text-red-400">{col.item.drop ? <>- <PlayerName name={col.item.drop} /></> : 'open spot'}</span>
+                  </CardButton>
                 );
               })}
               {columns.length < 2 && <div></div>}
@@ -437,20 +445,20 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
               </div>
               <div className="space-y-1.5 max-h-[34rem] overflow-y-auto">
                 {manual && (
-                  <button onClick={() => setSelected(manual.name)} aria-pressed={selected === manual.name}
-                    className={`w-full text-left rounded-lg border p-2 ${selected === manual.name ? 'border-nba-orange bg-gray-600' : 'border-gray-600 bg-gray-800'}`}>
-                    <span className="text-sm font-medium text-white">{manual.name}</span>
+                  <CardButton onClick={() => setSelected(manual.name)} aria-pressed={selected === manual.name}
+                    className={`w-full text-left rounded-lg border p-2 cursor-pointer ${selected === manual.name ? 'border-nba-orange bg-gray-600' : 'border-gray-600 bg-gray-800'}`}>
+                    <span className="text-sm font-medium text-white"><PlayerName name={manual.name} /></span>
                     <span className="ml-2 text-xs text-gray-400">your search</span>
-                  </button>
+                  </CardButton>
                 )}
                 {shown.map(c => {
                   const index = candidates.indexOf(c);
                   const on = selected === c.name;
                   return (
-                    <button key={c.name} onClick={() => setSelected(c.name)} aria-pressed={on}
-                      className={`w-full text-left rounded-lg border p-2 ${on ? 'border-nba-orange bg-gray-600' : 'border-gray-600 bg-gray-800 hover:border-gray-500'}`}>
+                    <CardButton key={c.name} onClick={() => setSelected(c.name)} aria-pressed={on}
+                      className={`w-full text-left rounded-lg border p-2 cursor-pointer ${on ? 'border-nba-orange bg-gray-600' : 'border-gray-600 bg-gray-800 hover:border-gray-500'}`}>
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-sm font-medium text-white truncate"><span className="text-gray-500 mr-1.5">{index + 1}</span>{c.name}</span>
+                        <span className="text-sm font-medium text-white truncate"><span className="text-gray-500 mr-1.5">{index + 1}</span><PlayerName name={c.name} /></span>
                         <span className={`text-sm font-bold shrink-0 ${deltaClass(c.gain)}`}>{points ? `${pointsDelta(c.gain)}%` : signed(c.gain)}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-gray-400">
@@ -460,7 +468,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                         <DayDots days={days} played={c.days} />
                         {c.small_sample && <span className="text-amber-400" title="Small sample: his numbers come from only a few games">{c.gp} GP</span>}
                       </div>
-                    </button>
+                    </CardButton>
                   );
                 })}
                 {!shown.length && !manual && <p className="text-xs text-gray-400 p-2">{candidates.length ? 'No candidate matches these filters.' : pickupsError || 'No pickup improves this week.'}</p>}
