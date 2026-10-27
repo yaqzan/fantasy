@@ -142,6 +142,17 @@ stats) is shared by all leagues.
   Wednesday also gets his Monday line and one dropped Tuesday is missing; a past day's daily lineup assumes the best
   fitting players with a line started (the lineup you set is not read); wins count once a game is final. Before the
   first game the week is the pure projection as always.
+- **Mid-week pickup timing** (owner 2026-10-26): a claim has a DAY. The add plays from it, the drop until the day before
+  (`player_week_games(windows=)`, `_claim_windows`); a game under way is closed to new lineups (only players already in that
+  day's lineup keep it) and its players can't be dropped that day (`Week.can_drop_on`); the earliest claim is today
+  (`Week.start_day`), so a game that has tipped never counts for an add. `rank_moves` returns ONE `Move` per candidate: his
+  best (drop, day). Stage 1 scores every drop at the add's first catchable game (`add_games`); later days evaluate every drop
+  who plays between the previous option and that day, plus drops locked at the first (verified against a full search of all
+  drops x days: 0 misses in all three leagues). `best_moves`/`plan_stage` chain claims with windows + ghosts (dropped players
+  still playing earlier days) and emit `day`. `/api/analyze?day=YYYY-MM-DD` is the what-if's claim date (default now); its
+  `what_if` has `day`, `day_options`; `/api/pickups` rows have `day`, `day_options`, `days` from the claim day, and the payload `today`.
+  Assumes a claim takes effect at once (if the platform processes claims overnight, today's games don't count). Weekly-lineup
+  leagues swap for the whole week (no day options). Cost: `/api/pickups` ~1.1-1.6 s.
 - **Opponent** (`Week.opponent`): the week's scheduled opponent once its roster is in, else the
   average of the league's other teams still playing, else none (the Lineup Optimizer shows my
   totals only, "opponent TBD"; pickups judge against a copy of my team).

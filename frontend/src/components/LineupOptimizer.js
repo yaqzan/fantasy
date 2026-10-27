@@ -63,7 +63,9 @@ const DayDots = ({ days, played, lit = 'bg-nba-orange' }) => (
   </span>
 );
 
-const RosterTable = ({ title, players, days, nameClass, lit, dropName, addName }) => (
+const RosterTable = ({ title, players: all, days, nameClass, lit, dropName, addName }) => {
+  const players = all.filter(p => p.name !== dropName);   // shown struck through at the bottom instead
+  return (
   <div className="min-w-0">
     <h4 className={`text-sm font-semibold mb-1 ${nameClass}`}>{title}</h4>
     <div className="text-xs space-y-0.5">
@@ -83,7 +85,8 @@ const RosterTable = ({ title, players, days, nameClass, lit, dropName, addName }
       {dropName && <div className="text-red-400 line-through opacity-70">{dropName}</div>}
     </div>
   </div>
-);
+  );
+};
 
 // Lineup Optimizer = the pickup desk (owner picked design C, 2026-10-26): the claim leads. Left, the
 // week's candidates (Weekly Pickups' model) with filters; right, the one you're looking at beside the
@@ -102,11 +105,27 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const [view, setView] = useLeagueViewState(league?.id, 'lineup', {
     week: defaultWeekStart(weeks), statType: config.default_stat_type || 'projected',
   }, (picked) => validWeek(weeks)(validStat(config)(picked)));
+  // No claims left this week: the page opens on next week instead (a pickup can only help then), and a note offers the
+  // way back to this week's chances. The owner's own week choice always wins.
+  // On a week's last day the default opens on next week (its lineups are set), but a claim you still hold can catch
+  // today's games: open on this week then, with a note, and move on to next week only when no claim is left.
+  const lastDay = (() => {
+    const t = new Date();
+    const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    const i = weeks.findIndex(w => w.start <= today && today <= w.end);
+    return i >= 0 && weeks[i].end === today && weeks[i + 1] && view.week === weeks[i + 1].start ? { current: weeks[i].start, next: weeks[i + 1].start, reason: 'last-day' } : null;
+  })();
+  const [weekOverride, setWeekOverride] = useState(lastDay?.current || null);   // a week start shown instead of view.week
+  const [autoNote, setAutoNote] = useState(lastDay);       // {current, next, reason}: the week we left and the one we moved to
+  const weekChosen = useRef(false);                         // the owner picked a week himself: never switch for him
+  const autoTried = useRef(false);
+  const activeWeek = weekOverride || view.week;
   const [data, setData] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [pickupsError, setPickupsError] = useState(null);   // why there are no candidates (e.g. every player undroppable)
   const [selected, setSelected] = useState(null);     // a candidate name, or the manual pick's
   const [manual, setManual] = useState(null);         // {name, drop}: a free agent outside the top candidates
+  const [dayPick, setDayPick] = useState({});         // name -> the day the owner moved a pickup's claim to
   const [previews, setPreviews] = useState({});       // 'add|drop' -> the what-if side, or {error}
   const [filter, setFilter] = useState({ games: false, cat: '', pos: '' });
   const [search, setSearch] = useState('');
@@ -118,11 +137,22 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true); setError(null); setData(null); setCandidates([]); setPickupsError(null); setSelected(null); setManual(null);
+    let switched = false;   // moved on to another week: the next run owns the loading flag
+    setLoading(true); setError(null); setData(null); setCandidates([]); setPickupsError(null); setSelected(null); setManual(null); setDayPick({});
     setPreviews({}); asked.current = new Set();
-    Promise.all([analyze(view.week, view.statType), getPickups(view.week, view.statType).catch(err => ({ error: errorMessage(err) }))])
+    Promise.all([analyze(activeWeek, view.statType), getPickups(activeWeek, view.statType).catch(err => ({ error: errorMessage(err) }))])
       .then(([matchup, pickups]) => {
         if (cancelled) return;
+        if (matchup.claims_left === 0 && !weekChosen.current && !autoTried.current) {
+          autoTried.current = true;
+          const i = weeks.findIndex(w => w.start === activeWeek);
+          if (i >= 0 && weeks[i + 1]) {
+            setAutoNote({ current: activeWeek, next: weeks[i + 1].start, reason: 'no-claims' });
+            setWeekOverride(weeks[i + 1].start);   // the effect runs again on the new week
+            switched = true;
+            return;
+          }
+        }
         loaded.current = matchup;
         setData(matchup);
         setPickupsError(pickups?.error || null);
@@ -131,16 +161,20 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
         setSelected(list[0]?.name || null);
       })
       .catch(err => { if (!cancelled) setError(errorMessage(err)); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled && !switched) setLoading(false); });
     return () => { cancelled = true; loaded.current = null; };
-  }, [view.week, view.statType, reload]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWeek, view.statType, reload]);
 
-  const best = candidates[0] || null;
-  const pick = manual && manual.name === selected ? manual : candidates.find(c => c.name === selected) || null;
-  const keyOf = (c) => `${c.name}|${c.drop || ''}`;
-  const pickIsBest = !!(pick && best && keyOf(pick) === keyOf(best));
+  // A claim has a day (mid-week: the pickup plays from it, the drop until the day before); the ranking suggests one
+  // and the owner can move it. Every pick carries its effective day.
+  const withDay = (c) => c && dayPick[c.name] ? { ...c, day: dayPick[c.name] } : c;
+  const best = withDay(candidates[0]) || null;
+  const pick = withDay(manual && manual.name === selected ? manual : candidates.find(c => c.name === selected)) || null;
+  const keyOf = (c) => `${c.name}|${c.drop || ''}|${c.day || ''}`;
+  const pickIsBest = !!(pick && best && pick.name === best.name && (pick.drop || '') === (best.drop || ''));
   // The two picks set beside "Now": the best, then the one being looked at (the runner-up while that is the best).
-  const second = pickIsBest ? candidates[1] || null : pick;
+  const second = pickIsBest ? withDay(candidates[1]) || null : pick;
 
   // The two compared picks are scored as real what-ifs, once each. Requests are not
   // cancelled when the selection moves on (that left a key asked but never answered: "..." for good);
@@ -151,7 +185,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
       const key = keyOf(c);
       if (asked.current.has(key)) return;
       asked.current.add(key);
-      analyze(view.week, view.statType, { adds: [c.name], drops: c.drop ? [c.drop] : [] })
+      analyze(activeWeek, view.statType, { adds: [c.name], drops: c.drop ? [c.drop] : [], day: c.day })
         .then(result => {
           if (loaded.current !== data) return;
           setPreviews(prev => ({ ...prev, [key]: result.what_if?.error ? { error: result.what_if.error } : result.what_if }));
@@ -163,7 +197,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
         });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, best?.name, best?.drop, second?.name, second?.drop]);
+  }, [data, best?.name, best?.drop, best?.day, second?.name, second?.drop, second?.day]);
 
   const days = data ? weekDays(data.week_start, data.week_end) : [];
   const opponentLabel = data?.opponent === 'league average' ? 'League avg' : data?.opponent;
@@ -225,18 +259,22 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
 
   // Healthy players with a game each day, for you without the drop (the open days are where a pickup streams) and for them.
   const perDay = (players) => days.map(day => players.filter(p => !p.injured && (p.days || []).includes(day)).length);
-  const mineByDay = perDay(data ? data.current.players.filter(p => !(pick?.drop && p.name === pick.drop)) : []);
+  const mineByDay = days.map(day => data ? data.current.players.filter(p => !p.injured && (p.days || []).includes(day)
+    && !(pick?.drop === p.name && (!pick.day || day >= pick.day))).length : 0);
   const isOpen = (n) => !!openSlots && n < openSlots;
   const past = (day) => !!progress.started && day < progress.today;   // already played: nothing left to fill
 
   const pickPlayers = pickSide?.players.find(p => p.name === pick?.name);
-  const pickDays = pick?.days || pickPlayers?.days || [];
+  const pickDays = (pickPlayers?.open_days || pick?.days || []).filter(d => !pick?.day || d >= pick.day);
+  // his possible claim days: from the ranking, else from any preview of him (kept while a moved day loads)
+  const dayOptions = pick?.day_options || Object.entries(previews).map(([k, v]) => k.startsWith(`${pick?.name}|`) && v?.day_options?.[pick.name]).find(Boolean) || [];
+  const dayName = (d) => new Date(`${d}T12:00`).toLocaleDateString('en-US', { weekday: 'short' });
 
   return (
     <div className="bg-gray-800 rounded-lg shadow-xl p-3 sm:p-6">
       <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-4">
         <h2 className="text-2xl font-bold text-nba-orange mr-2 sm:mr-4">Lineup Optimizer</h2>
-        <WeekSelect weeks={weeks} value={view.week} onChange={(week) => setView({ week })} />
+        <WeekSelect weeks={weeks} value={activeWeek} onChange={(week) => { weekChosen.current = true; setAutoNote(null); setWeekOverride(null); setView({ week }); }} />
         <div className="flex items-center space-x-2">
           <span className="text-sm text-gray-300">Stats:</span>
           <select value={view.statType} onChange={(e) => setView({ statType: e.target.value })} className={selectClass}>
@@ -250,6 +288,17 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
         <div className="mb-4 p-3 rounded bg-red-900/40 border border-red-700 text-red-200 text-sm flex items-center justify-between gap-2">
           <span>{error}</span>
           {onEditLeague && <button onClick={onEditLeague} className="btn-secondary text-xs shrink-0">League settings</button>}
+        </div>
+      )}
+      {data && autoNote && (activeWeek === autoNote.next || activeWeek === autoNote.current) && (
+        <div className="mb-4 p-3 rounded bg-gray-700 border border-gray-600 text-sm text-gray-200 flex flex-wrap items-center justify-between gap-2">
+          <span>{activeWeek === autoNote.next
+            ? (autoNote.reason === 'last-day' ? 'Next week.' : 'No claims left this week, so this is next week.')
+            : (autoNote.reason === 'last-day' ? "Last day of this week and you still have a claim: it can catch tonight's games."
+              : 'This week: no claims left, so a pickup cannot change these chances.')}</span>
+          <button onClick={() => setWeekOverride(activeWeek === autoNote.next ? autoNote.current : autoNote.next)} className="btn-secondary text-xs shrink-0">
+            {activeWeek === autoNote.next ? (autoNote.reason === 'last-day' ? 'Back to this week' : "See this week's chances") : 'Next week'}
+          </button>
         </div>
       )}
       {loading && !data && <div className="py-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-nba-orange"></div></div>}
@@ -307,7 +356,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 return (
                   <button key={col.key} onClick={() => setSelected(col.item.name)} aria-pressed={on} title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
                     className={`min-w-0 text-center text-xs pb-1 border-b ${on ? 'border-nba-orange' : 'border-gray-600'}`}>
-                    <span className={`block truncate font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {lastName(col.item.name)}</span>
+                    <span className={`block truncate font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {lastName(col.item.name)}{col.item.day && col.item.day > (progress.today || data.week_start) && <span className="font-normal text-gray-400"> {dayName(col.item.day)}</span>}</span>
                     <span className="block truncate text-[10px] text-red-400">{col.item.drop ? `- ${lastName(col.item.drop)}` : 'open spot'}</span>
                   </button>
                 );
@@ -395,6 +444,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-gray-400">
                         <span>{c.team_abv} · {c.positions.join('/')}</span>
                         <span>{plays(c.plays)}/{c.games} games</span>
+                        {c.day > (progress.today || data.week_start) && <span className="text-nba-orange" title="The best day to claim him: he replaces the drop from then">from {dayName(c.day)}</span>}
                         <DayDots days={days} played={c.days} />
                         {c.small_sample && <span className="text-amber-400" title="Small sample: his numbers come from only a few games">{c.gp} GP</span>}
                       </div>
@@ -429,6 +479,15 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                       </span>
                     )}
                   </div>
+                  {dayOptions.length > 1 && (
+                    <label className="mt-2 text-xs text-gray-300 flex items-center gap-1.5">Claim on
+                      <select value={pick.day || dayOptions[0]} onChange={(e) => setDayPick(m => ({ ...m, [pick.name]: e.target.value }))} className={selectClass}
+                        aria-label="Claim day">
+                        {dayOptions.map(d => <option key={d} value={d}>{dayName(d)} {shortDate(d)}{d === (progress.today || data.week_start) ? ' (now)' : ''}</option>)}
+                      </select>
+                      <span className="text-gray-500">he plays from then; {pick.drop ? `${lastName(pick.drop)} plays until the day before` : 'no drop'}</span>
+                    </label>
+                  )}
                 </div>
               ) : (
                 !loading && <div className="bg-gray-700 rounded-lg border border-gray-600 p-4 text-sm text-gray-400">

@@ -360,7 +360,8 @@ def _lineup_chance(rank, slots, availability):
 
 
 def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=(),
-                      availability=1.0, variance=False, day_weights=None, tipped=(), locked=(), taken=None):
+                      availability=1.0, variance=False, day_weights=None, tipped=(), locked=(), taken=None,
+                      windows=None):
     """Games and expected wins each rostered player contributes over the week.
 
     Daily lineups: each day only the players whose team plays and who make that day's lineup count
@@ -381,6 +382,10 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
     (he is in the game), and its full win chance (a win is one result at the final buzzer, so it is not
     scaled by the share left). `taken` {day: slots already filled that day by played games} lowers the
     slots later games on that day compete for (daily lineups).
+
+    `windows` {player: (first day, last day)}, either end None = open: a mid-week pickup plays only from
+    the day he is added, a drop only until the day before. A game in `tipped` ignores them (a game
+    that has started stays with the lineup it started in).
     """
     weight = (lambda team, day: day_weights.get((team, day), 1.0)) if day_weights else (lambda team, day: 1.0)
     games = {p: 0 for p in roster}
@@ -391,15 +396,20 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
     if not league.daily_lineups:
         for p in players:
             team = player_stats[p]['TEAM']
-            days = schedule.get(team, {})
+            first, last = windows.get(p, (None, None)) if windows else (None, None)
+            days = {d: v for d, v in schedule.get(team, {}).items() if not ((first and d < first) or (last and d > last))}
             share = sum(weight(team, d) for d in days)
             games[p], wins[p] = share * availability, sum(v * weight(team, d) for d, v in days.items()) * availability
             game_var[p] = share * availability * (1 - availability)
         return out()
     by_day = {}
+    windows = windows or {}
     for p in _by_score(players, player_stats, last_n_games):
         team = player_stats[p]['TEAM']
+        first, last = windows.get(p, (None, None))
         for day, p_win in schedule.get(team, {}).items():
+            if ((first and day < first) or (last and day > last)) and (team, day) not in tipped:
+                continue
             by_day.setdefault(day, []).append((p, p_win, weight(team, day), (team, day) in tipped))
     slots = league.slots
     taken = taken or {}

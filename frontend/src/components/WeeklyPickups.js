@@ -138,7 +138,9 @@ const WeeklyPickups = ({ config }) => {
                     <td className={`table-cell text-center font-semibold ${p.gain > 0 ? 'text-green-400' : 'text-gray-400'}`}>
                       {points ? `${p.gain > 0 ? '+' : ''}${Math.round(p.gain * 100)}%` : `${p.gain > 0 ? '+' : ''}${p.gain.toFixed(2)}`}
                     </td>
-                    <td className="table-cell text-gray-300">{p.drop || 'open spot'}</td>
+                    <td className="table-cell text-gray-300">{p.drop || 'open spot'}
+                      {p.day > (data.today || data.week_start) && <span className="ml-1 text-xs text-nba-orange" title="Claim him on this day: the drop plays until then">from {new Date(`${p.day}T12:00`).toLocaleDateString('en-US', { weekday: 'short' })}</span>}
+                    </td>
                     <td className="table-cell">
                       <div className="flex flex-wrap gap-1">
                         {moves.map(([cat, v]) => (

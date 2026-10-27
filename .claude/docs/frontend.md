@@ -68,7 +68,7 @@ chips (green = 55%+ to win the category, red = 45% or less, grey between) and a 
 one; the runner-up while the best is selected) with his chance and its change from Now (faded when little moves), same row
 order, no captions or Helps/Costs headings (owner, 2026-10-26). A Week row on top. Once games are played the header shows
 categories ahead now (points so far in a points league) and each category label shows both sides' totals so far
-(`progress`, `now_mine`/`now_theirs` from `/api/analyze`, see leagues.md "A week under way"). Click a column header to select that pick. Below: candidates (`/api/pickups`, filters 4+ games / position / helps a category; a search box
+(`progress`, `now_mine`/`now_theirs` from `/api/analyze`, see leagues.md "A week under way"). Click a column header to select that pick. A pick has a **claim day** (the ranking's best; "from Tue" on candidates and column headers; a "Claim on" select moves it, previews are keyed add|drop|day). **Pickup-aware week:** with no claims left (`claims_left === 0`) the page opens on next week and a banner offers this week's chances; on a week's last day it opens on THIS week while a claim remains (a stored next-week choice is overridden then); the owner's WeekSelect choice stops any auto-switch (lost when the tab unmounts). Below: candidates (`/api/pickups`, filters 4+ games / position / helps a category; a search box
 tries any free agent with a drop picker) beside the selected pick's header, a days table (his days against my open slots,
 daily-lineup leagues only) and a fold with both rosters. Previews are real `/api/analyze?add=&drop=` what-ifs, once per
 add+drop, never client maths (only the week-win chance is derived: Poisson-binomial over the category chances). Category

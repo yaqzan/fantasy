@@ -618,13 +618,17 @@ def _requested_week(league, week_start_param):
 @fantasy_api.route('/analyze')
 def analyze():
     """Lineup Optimizer: my week against the opponent (lineup_optimizer.get_matchup). add/drop
-    (repeatable): a what-if roster. moves=true: the best pickups for the week's claims."""
+    (repeatable): a what-if roster (day: when the claim is made). moves=true: the best pickups for the week's claims."""
     from lineup_optimizer import get_matchup
     league = current_league()
     week_start, week_end, opponent = _requested_week(league, request.args.get('week_start'))
+    try:   # day=YYYY-MM-DD: the what-if's claim date (a pickup plays from it, a drop until the day before)
+        claim_day = date.fromisoformat(request.args['day']) if request.args.get('day') else None
+    except ValueError:
+        return jsonify({'error': 'day must be YYYY-MM-DD'}), 400
     result = get_matchup(league, request.args.get('timeframe') or default_stat_type(league), week_start, week_end, opponent,
                          adds=request.args.getlist('add'), drops=request.args.getlist('drop'),
-                         moves=request.args.get('moves', 'false').lower() == 'true')
+                         moves=request.args.get('moves', 'false').lower() == 'true', day=claim_day)
     if 'error' in result:
         return jsonify(result), 422
     result['categories'] = category_meta(league.categories)

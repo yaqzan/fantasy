@@ -158,12 +158,13 @@ export const calculateCustomAuctionValues = async (priceExponent, puntCategories
 
 // The week's matchup (weekStart null: the current week). moves: also the best pickups for the week's
 // claims. adds/drops: a what-if roster (repeated query params, which Flask reads with getlist).
-export const analyze = async (weekStart = null, timeframe = 'projected', { moves = false, adds = [], drops = [] } = {}) => {
+export const analyze = async (weekStart = null, timeframe = 'projected', { moves = false, adds = [], drops = [], day = null } = {}) => {
   const params = new URLSearchParams({ timeframe });
   if (weekStart) params.append('week_start', weekStart);
   if (moves) params.append('moves', 'true');
   adds.forEach(p => params.append('add', p));
   drops.forEach(p => params.append('drop', p));
+  if (day) params.append('day', day);   // the what-if's claim date: adds play from it, drops until the day before
   const response = await api.get('/analyze', { params });
   return response.data;
 };
