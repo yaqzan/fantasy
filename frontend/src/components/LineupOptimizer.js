@@ -356,7 +356,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                   <button key={col.key} onClick={() => setSelected(col.item.name)} aria-pressed={on} title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
                     className={`min-w-0 text-center text-xs pb-1 border-b ${on ? 'border-nba-orange' : 'border-gray-600'}`}>
                     <span className={`block break-words font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {col.item.name}</span>
-                    {col.item.day && <span className="block text-[10px] text-gray-400">{col.item.day > (progress.today || data.week_start) ? `from ${dayName(col.item.day)} ${shortDate(col.item.day)}` : `now (${shortDate(col.item.day)})`}</span>}
+                    {col.item.day && <span className="block text-[10px] text-gray-400">{col.item.day > (progress.today || data.week_start) ? `${dayName(col.item.day)} ${shortDate(col.item.day)}` : `before 7pm (${shortDate(col.item.day)})`}</span>}
                     <span className="block break-words text-[10px] text-red-400">{col.item.drop ? `- ${col.item.drop}` : 'open spot'}</span>
                   </button>
                 );
