@@ -19,7 +19,7 @@ from player_stats import (league_player_stats, week_schedule, player_week_games,
                           average_week_totals, category_win_chances, category_margins, small_sample_floor, STAT_SUFFIXES, default_stat_type)
 from week_actuals import week_actuals, lineup_of
 from fantasy_team_helper import (get_all_my_team_players, my_il_players, claims_left, get_available_players, get_waiver_dates, get_current_fantasy_week_dates,
-                                 get_undroppable_players, get_injured_players, get_team_by_abv)
+                                 get_undroppable_players, get_injured_players, get_day_to_day_players, get_team_by_abv)
 
 Side = namedtuple('Side', 'totals games wins carried')  # a roster's week: team_week_totals, games, wins per player, the played part (week_actuals)
 # One pickup (add) for one drop (None = open spot), made on `day`: the add plays from that day, the drop until
@@ -57,6 +57,7 @@ class Week:
         self.stats = league_player_stats(league)
         self.schedule = week_schedule(week_start, week_end)
         self.injured = set(get_injured_players())
+        self.doubtful = get_day_to_day_players()   # {name: chance he plays his next game}
         # A week under way: games already played are facts (self.actual), the model projects only the rest.
         self.actual = week_actuals(week_start, week_end)
         self.remaining, self.day_weights = self.actual.remaining(self.schedule) if self.actual else (self.schedule, None)
@@ -108,7 +109,7 @@ class Week:
         games, wins, game_var = player_week_games(players, self.stats, self.remaining, league, suffix, self.injured,
                                                   availability=AVAILABILITY, variance=True, day_weights=self.day_weights,
                                                   tipped=self.actual.tipped if self.actual else (), locked=locked, taken=taken,
-                                                  windows=windows)
+                                                  windows=windows, doubtful=self.doubtful)
         totals = team_week_totals(players, self.stats, games, wins, league.categories, suffix, game_var, carried)
         return Side(totals, games, wins, carried)
 

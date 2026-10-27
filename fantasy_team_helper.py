@@ -149,10 +149,19 @@ def get_waiver_dates(league):
     return {r.player.name: r.waiver_until for r in rows}
 
 
+# Yahoo statuses for a player who may play his next game -> assumed chance he does. Not calibrated: no status history is kept.
+DAY_TO_DAY_CHANCE = {'P': 0.9, 'Q': 0.5, 'DTD': 0.5, 'GTD': 0.5, 'D': 0.2}
+
+
 def get_injured_players():
-    """Injured players (NBA-wide, not per league): flagged by hand, or Yahoo lists him Out (pull_yahoo sync)."""
-    return [player.name for player in Player.select(Player.name).where(
-        (Player.injured == 1) | Player.injury_status.in_(('O', 'INJ')))]
+    """Players Yahoo lists Out (NBA-wide, not per league; pull_yahoo sync, hourly). Hand flags (Player.injured) are ignored."""
+    return [player.name for player in Player.select(Player.name).where(Player.injury_status.in_(('O', 'INJ')))]
+
+
+def get_day_to_day_players():
+    """{name: chance he plays his next game} for the players Yahoo lists day-to-day."""
+    return {player.name: DAY_TO_DAY_CHANCE[player.injury_status] for player in
+            Player.select(Player.name, Player.injury_status).where(Player.injury_status.in_(list(DAY_TO_DAY_CHANCE)))}
 
 
 def get_available_players(league, player_stats):

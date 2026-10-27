@@ -36,8 +36,8 @@ def test_rosters_keep_slot_positions_and_cant_cut():
     [team] = parse_rosters(ET.fromstring(ROSTERS.encode()))
     assert (team['team_id'], team['name']) == ('3', 'Team Three')
     luka, center = team['players']
-    assert luka == {'name': 'Luka Dončić', 'positions': ['PG', 'SG', 'G'], 'undroppable': True, 'il': False}
-    assert center == {'name': 'Test Center', 'positions': ['C'], 'undroppable': False, 'il': False}
+    assert luka == {'name': 'Luka Dončić', 'positions': ['PG', 'SG', 'G'], 'undroppable': True, 'status': '', 'il': False}
+    assert center == {'name': 'Test Center', 'positions': ['C'], 'undroppable': False, 'status': '', 'il': False}
 
 
 def test_settings_starting_slots():

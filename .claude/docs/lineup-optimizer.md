@@ -23,7 +23,7 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 - Previews are real `/api/analyze?add=&drop=&day=` calls; the page never does model maths (only the week-win chance, Poisson-binomial).
 - Mid-week the roster is today's (no transaction history); past daily lineups assume the best-fitting players started.
 - Yahoo waiver players: `pull_yahoo.py sync` stores the day they clear in `league_player_flags.waiver_until`; `Week.add_days` never offers a claim before it (a claim lands that day). Stale until the next sync.
-- Injuries: `players.injury_status` is Yahoo's status for every player (O / INJ = out), refreshed by the hourly Yahoo sync; `get_injured_players` = owner flag OR Yahoo out. Yahoo gives no return date, so a short absence also reads as out all week (ESPN's injuries feed has the timeline in free text: not wired).
+- Injuries: `players.injury_status` is Yahoo's status for every player, refreshed by the hourly Yahoo sync. O / INJ = out all week (`get_injured_players`; the owner's hand flags are ignored here). P / Q / D / DTD / GTD = may play his next game only, at `DAY_TO_DAY_CHANCE` (.9 / .5 / .2 / .5; guesses, uncalibrated) via `player_week_games(doubtful=)`. Yahoo gives no return date, so a short absence reads as out all week (ESPN's injuries feed has the timeline in free text: not wired).
 - A claim is assumed to take effect at once; a player in a started game can't be dropped that day.
 - Fantrax leagues report no claims used, so "no claims left -> next week" only fires for Yahoo (Courtside).
 - A stored next-week choice is overridden on a week's last day while a claim remains; the owner's own week choice is lost on tab unmount.

@@ -361,7 +361,7 @@ def _lineup_chance(rank, slots, availability):
 
 def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=(),
                       availability=1.0, variance=False, day_weights=None, tipped=(), locked=(), taken=None,
-                      windows=None):
+                      windows=None, doubtful=None):
     """Games and expected wins each rostered player contributes over the week.
 
     Daily lineups: each day only the players whose team plays and who make that day's lineup count
@@ -386,7 +386,11 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
     `windows` {player: (first day, last day)}, either end None = open: a mid-week pickup plays only from
     the day he is added, a drop only until the day before. A game in `tipped` ignores them (a game
     that has started stays with the lineup it started in).
+
+    `doubtful` {player: chance he plays}: day-to-day. It applies to his next game only (the one the status is about);
+    his later games count as for anyone else.
     """
+    doubtful = doubtful or {}
     weight = (lambda team, day: day_weights.get((team, day), 1.0)) if day_weights else (lambda team, day: 1.0)
     games = {p: 0 for p in roster}
     wins = {p: 0.0 for p in roster}
@@ -400,13 +404,20 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
             days = {d: v for d, v in schedule.get(team, {}).items() if not ((first and d < first) or (last and d > last))}
             share = sum(weight(team, d) for d in days)
             games[p], wins[p] = share * availability, sum(v * weight(team, d) for d, v in days.items()) * availability
+            if p in doubtful and days:
+                nxt = min(days)
+                games[p] -= (1 - doubtful[p]) * availability * weight(team, nxt)
+                wins[p] -= (1 - doubtful[p]) * availability * days[nxt] * weight(team, nxt)
             game_var[p] = share * availability * (1 - availability)
         return out()
     by_day = {}
     windows = windows or {}
+    next_game = {}    # day-to-day players: the day of the game their status is about
     for p in _by_score(players, player_stats, last_n_games):
         team = player_stats[p]['TEAM']
         first, last = windows.get(p, (None, None))
+        if p in doubtful:
+            next_game[p] = min((d for d in schedule.get(team, {}) if not (first and d < first)), default=None)
         for day, p_win in schedule.get(team, {}).items():
             if ((first and day < first) or (last and day > last)) and (team, day) not in tipped:
                 continue
@@ -428,11 +439,14 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
         if availability >= 1:
             playing = {p: (p_win, w) for p, p_win, w in entries}
             for p in fill_slots(list(playing), slots, player_stats):
-                games[p] += playing[p][1]
-                wins[p] += playing[p][0] * playing[p][1]
+                f = doubtful[p] if next_game.get(p) == day else 1.0
+                games[p] += playing[p][1] * f
+                wins[p] += playing[p][0] * playing[p][1] * f
             continue
         for rank, (p, p_win, w) in enumerate(entries):
             chance = _lineup_chance(rank, n_slots, availability) * w
+            if next_game.get(p) == day:
+                chance *= doubtful[p]
             games[p] += chance
             wins[p] += chance * p_win
             game_var[p] += chance * (1 - chance)
