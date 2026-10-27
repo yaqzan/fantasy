@@ -43,7 +43,7 @@ Tap a player's name on Daily Leaders or Player Rankings (`PlayerName`) -> `compo
 down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` (or `?name=`), `player_card.py`.
 
 - **Phones fit 9 stats** (8.15rem label + 1.85rem stat columns, `--pc-*` in index.css; sm+ keeps 11rem/2.75rem).
-- **Averages** (games and minutes sit in the label's sub-line, no Min column; the game log tacks minutes on after the date) in the league's categories, Daily Leaders' column order (points leagues: FPTS first):
+- **Averages** (games, mpg and age (`72 games · 32mpg · 24 yo`) sit in the label's sub-line, no Min column; the game log tacks minutes on after the date) in the league's categories, Daily Leaders' column order (points leagues: FPTS first):
   "<season> Season", then "<season> Running Projection" (the `'_projected'` timeframe: projection moved by his
   preseason and then his games, projections.md "In-season update"; the plain projection until either exists).
   Behind "N other seasons": "<season> Preseason" (at his projected minutes: preseason minutes are rotations)

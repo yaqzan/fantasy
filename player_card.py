@@ -91,9 +91,11 @@ def _cell(cat, line, league):
     return '–' if v is None else (round(v, 1) if isinstance(v, float) else v)
 
 
-def _note(games, minutes):
-    """The sub-label under an average row: games and minutes a game."""
-    return ' · '.join(x for x in (f'{games:.0f} g' if games else '', f'{minutes:.0f} min' if minutes else '') if x) or None
+def _note(games, minutes, age):
+    """The sub-label under an average row: games, minutes a game, age."""
+    parts = (f"{games:.0f} game{'' if round(games) == 1 else 's'}" if games else '', f'{minutes:.0f}mpg' if minutes else '',
+             f'{age:.0f} yo' if age else '')
+    return ' · '.join(x for x in parts if x) or None
 
 
 def _teams():
@@ -155,6 +157,9 @@ def card(league, player_id=None, name=None):
     games = [game(r, 'regular', l) for r, l in zip(rs_rows, rs_lines)] + \
             [game(r, 'preseason', l) for r, l in zip(pre_rows, pre_lines)]
 
+    last = (PlayerSeason.select(PlayerSeason.season, PlayerSeason.age).where((PlayerSeason.player_id == player.id) & PlayerSeason.age.is_null(False))
+            .order_by(PlayerSeason.season.desc()).first())  # his age this season: his last recorded one plus the years since
+    age_now = last.age + int(season[:4]) - int(last.season[:4]) if last else None
     year = season  # '2026-27', how the card names seasons
     proj_min = stats.get('MIN_proj') or 0
     rows = []
@@ -163,20 +168,20 @@ def card(league, player_id=None, name=None):
         values = _average(cats, rs_lines, league, scale=scale)
         if 'BLKA' in values and values['BLKA'] is None:  # the NBA gives totals only: the player's stored ones
             values['BLKA'] = stats.get('BLKA')
-        rows.append({'key': 'season', 'label': f'{year} Season', 'note': _note(n, values['MIN']), 'values': values})
+        rows.append({'key': 'season', 'label': f'{year} Season', 'note': _note(n, values['MIN'], age_now), 'values': values})
     # Running Projection: the projection moved by his preseason and then by his games this season (the
     # '_projected' timeframe); before either exists, the plain projection under the same name.
     running = (stats.get('PRE_G') or rs_lines) and 'GP_proj' in stats and any(stats.get(f'{c}_projected') is not None for c in cats)
     sfx = '_projected' if running else '_proj'
     if running or any(stats.get(f'{c}_proj') is not None for c in cats):
-        rows.append({'key': 'adj', 'label': f'{year} Running Projection', 'note': _note(stats.get('GP' + sfx), stats.get('MIN' + sfx)),
+        rows.append({'key': 'adj', 'label': f'{year} Running Projection', 'note': _note(stats.get('GP' + sfx), stats.get('MIN' + sfx), age_now),
                      'title': 'The projection moved by his preseason and then by his games this season, each stat weighted '
                               'by how much that has predicted the rest of the season (projections.md "In-season update")',
                      'values': {'MIN': stats.get('MIN' + sfx) or None, **{c: stats.get(c + sfx) for c in cats}}})
     if pre_lines:
         pre_min = sum(l['MIN'] for l in pre_lines)
         rows.append({'key': 'pre', 'label': f'{year} Preseason',
-                     'note': _note(len(pre_lines), proj_min or pre_min / len(pre_lines)),
+                     'note': _note(len(pre_lines), proj_min or pre_min / len(pre_lines), age_now),
                      'title': (f'{len(pre_lines)} preseason games, {pre_min} minutes, scaled to his projected '
                                f'{proj_min:.0f} minutes a game' if proj_min else None),
                      'values': _average(cats, pre_lines, league, minutes=proj_min or None, scale=scale)})
@@ -190,7 +195,7 @@ def card(league, player_id=None, name=None):
         line['_unknown'] = {'TECH'} if s.tech is None else set()
         values = _average(cats, [line], league, scale=scale)
         rows.append({'key': f'y{s.season}', 'label': s.season,
-                     'note': f"{_note(s.gp, values['MIN'])} · {s.team}" if s.team else _note(s.gp, values['MIN']),
+                     'note': _note(s.gp, values['MIN'], s.age),
                      'values': values})
 
     team = owners(league).get(player.id)
