@@ -164,11 +164,11 @@ function Averages({ card, columns }) {
 function GameLog({ card, columns, points }) {
   const row = (g, i) => (
     <tr key={`${g.kind}${g.date}`} className={`border-t ${g.kind === 'preseason' ? 'opacity-50 border-gray-700' : i === 5 || i === 10 ? 'border-dashed border-gray-500' : 'border-gray-700'}`}>
-      <td className={`${STICKY} pl-2 pr-1 sm:pl-3 sm:pr-2 py-1 text-left sm:whitespace-nowrap ${g.date === TODAY() ? TODAY_MARK : ''}`}>
+      <td className={`${STICKY} pl-2 pr-1 sm:pl-3 sm:pr-2 py-1 text-left whitespace-nowrap text-[10px] sm:text-xs ${g.date === TODAY() ? TODAY_MARK : ''}`}>
         <span className="text-gray-300">{shortDate(g.date)}</span>
         <span className="text-gray-500 text-[10px] ml-1">{g.opp || ''}</span>
         <span className={`text-[10px] ml-1 ${g.w ? 'text-green-400' : 'text-red-400'}`}>{g.w ? 'W' : 'L'}</span>
-        {g.min != null && <span className="text-[10px] ml-1.5 text-sky-300/70 font-medium">{g.min}m</span>}
+        {g.min != null && <span className="text-[10px] ml-1 text-sky-300/70 font-medium">{g.min}m</span>}
       </td>
       {columns.map(c => (
         <td key={c.key} className={`text-center px-0 sm:px-0.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white bg-white/10' : 'text-gray-200'} `}
@@ -192,7 +192,7 @@ function GameLog({ card, columns, points }) {
       <tbody>
         {(card.upcoming || []).map(u => (
           <tr key={`up${u.date}`} className="border-t border-gray-700 text-gray-500">
-            <td className={`${STICKY} pl-2 pr-1 sm:pl-3 sm:pr-2 py-1 text-left sm:whitespace-nowrap ${u.date === TODAY() ? TODAY_MARK : ''}`}>
+            <td className={`${STICKY} pl-2 pr-1 sm:pl-3 sm:pr-2 py-1 text-left whitespace-nowrap text-[10px] sm:text-xs ${u.date === TODAY() ? TODAY_MARK : ''}`}>
               <span>{shortDate(u.date)}</span><span className="text-[10px] ml-1">{u.opp}</span>
             </td>
             {columns.map(c => <td key={c.key} className={c.key === 'FPTS' ? 'bg-white/10' : ''} />)}

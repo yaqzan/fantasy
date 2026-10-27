@@ -116,5 +116,5 @@
 @keyframes pc-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .pc-fade { animation: none; } }
 
-.pc-table { --pc-label: 7rem; --pc-stat: 1.9rem; }
+.pc-table { --pc-label: 7.25rem; --pc-stat: 1.85rem; }
 @media (min-width: 640px) { .pc-table { --pc-label: 11rem; --pc-stat: 2.75rem; } }
