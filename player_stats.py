@@ -360,7 +360,7 @@ def _lineup_chance(rank, slots, availability):
 
 
 def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=(),
-                      availability=1.0, variance=False):
+                      availability=1.0, variance=False, day_weights=None, tipped=(), locked=(), taken=None):
     """Games and expected wins each rostered player contributes over the week.
 
     Daily lineups: each day only the players whose team plays and who make that day's lineup count
@@ -372,7 +372,17 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
     fractionally (daily lineups: his chance of being available and above the cut, a bench player
     covering for absent starters; positions are ignored then). With `variance`, also returns
     {player: variance of his games} (sum of p(1-p) over days) for team_week_totals.
+
+    `day_weights` {(NBA team, day): share of that game still to play}: a week already under way passes
+    only its unplayed days in `schedule` (a game in progress with its remaining share here; the played
+    part is counted from real box scores, see week_actuals.py). Absent = 1.0.
+    A game in progress ((team, day) in `tipped`) is closed to new lineups: only the players in `locked`
+    ({(player, day)}: already in that day's lineup) get its remaining share, with no availability discount
+    (he is in the game), and its full win chance (a win is one result at the final buzzer, so it is not
+    scaled by the share left). `taken` {day: slots already filled that day by played games} lowers the
+    slots later games on that day compete for (daily lineups).
     """
+    weight = (lambda team, day: day_weights.get((team, day), 1.0)) if day_weights else (lambda team, day: 1.0)
     games = {p: 0 for p in roster}
     wins = {p: 0.0 for p in roster}
     game_var = {p: 0.0 for p in roster}
@@ -380,42 +390,60 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
     out = lambda: (games, wins, game_var) if variance else (games, wins)  # noqa: E731
     if not league.daily_lineups:
         for p in players:
-            days = schedule.get(player_stats[p]['TEAM'], {})
-            games[p], wins[p] = len(days) * availability, sum(days.values()) * availability
-            game_var[p] = len(days) * availability * (1 - availability)
+            team = player_stats[p]['TEAM']
+            days = schedule.get(team, {})
+            share = sum(weight(team, d) for d in days)
+            games[p], wins[p] = share * availability, sum(v * weight(team, d) for d, v in days.items()) * availability
+            game_var[p] = share * availability * (1 - availability)
         return out()
     by_day = {}
     for p in _by_score(players, player_stats, last_n_games):
-        for day, p_win in schedule.get(player_stats[p]['TEAM'], {}).items():
-            by_day.setdefault(day, []).append((p, p_win))
+        team = player_stats[p]['TEAM']
+        for day, p_win in schedule.get(team, {}).items():
+            by_day.setdefault(day, []).append((p, p_win, weight(team, day), (team, day) in tipped))
     slots = league.slots
-    for entries in by_day.values():
-        if availability >= 1:
-            playing = dict(entries)
-            for p in fill_slots(list(playing), slots, player_stats):
-                games[p] += 1
-                wins[p] += playing[p]
+    taken = taken or {}
+    for day, entries in by_day.items():
+        open_entries = []
+        for p, p_win, w, live in entries:
+            if not live:
+                open_entries.append((p, p_win, w))
+            elif (p, day) in locked:
+                games[p] += w
+                wins[p] += p_win
+        entries = open_entries
+        n_slots = len(slots) - taken.get(day, 0)
+        if n_slots <= 0:
             continue
-        for rank, (p, p_win) in enumerate(entries):
-            chance = _lineup_chance(rank, len(slots), availability)
+        if availability >= 1:
+            playing = {p: (p_win, w) for p, p_win, w in entries}
+            for p in fill_slots(list(playing), slots, player_stats):
+                games[p] += playing[p][1]
+                wins[p] += playing[p][0] * playing[p][1]
+            continue
+        for rank, (p, p_win, w) in enumerate(entries):
+            chance = _lineup_chance(rank, n_slots, availability) * w
             games[p] += chance
             wins[p] += chance * p_win
             game_var[p] += chance * (1 - chance)
     return out()
 
-def calculate_team_totals(roster, player_stats, player_games, player_wins, categories, last_n_games=''):
+def calculate_team_totals(roster, player_stats, player_games, player_wins, categories, last_n_games='', carried=None):
     """Category totals for a group of players. Counting stats are per-game rate x games; ratios are
-    built from summed components; wins are summed expected wins. Pass games of 1 for per-game totals."""
+    built from summed components; wins are summed expected wins. Pass games of 1 for per-game totals.
+    `carried` {stat: total}: what the week's played games already added (real box scores, raw stat
+    names plus 'WIN%' for wins); it joins the projected part before ratios are formed."""
     players = [p for p in roster if p in player_stats]
+    carried = carried or {}
 
     def total(stat):
-        return sum((player_stats[p].get(f'{stat}{last_n_games}', 0) or 0) * player_games.get(p, 0) for p in players)
+        return carried.get(stat, 0) + sum((player_stats[p].get(f'{stat}{last_n_games}', 0) or 0) * player_games.get(p, 0) for p in players)
 
     totals = {'TOT': sum(player_games.get(p, 0) for p in players)}
     for category in categories:
         key = f'{category}{last_n_games}'
         if category == 'WIN%':
-            totals[key] = sum(player_wins.get(p, 0) for p in players)
+            totals[key] = carried.get('WIN%', 0) + sum(player_wins.get(p, 0) for p in players)
         elif category == 'TS%':
             denominator = 2 * (total('FGA') + 0.44 * total('FTA'))
             totals[key] = total('PTS') / denominator if denominator else 0
@@ -437,13 +465,16 @@ def calculate_team_totals(roster, player_stats, player_games, player_wins, categ
             totals[key] = total(category)
     return totals
 
-def team_week_totals(players, player_stats, player_games, player_wins, categories, last_n_games='', game_var=None):
+def team_week_totals(players, player_stats, player_games, player_wins, categories, last_n_games='', game_var=None, carried=None):
     """{category: (total, variance)} for a team's week: calculate_team_totals' totals, and how far
     each can swing on game-to-game noise (CATEGORY_CATALOG `noise` / `attempt_sd`; wins as coin
     flips at each game's win chance). `game_var`: {player: variance of games played}
-    (player_week_games(variance=True)); a count's variance gains per-game value^2 x that."""
+    (player_week_games(variance=True)); a count's variance gains per-game value^2 x that.
+    `carried`: the played part of the week (calculate_team_totals); it adds to the totals but not to the
+    variance, since a played game no longer swings."""
     n = last_n_games
-    totals = calculate_team_totals(players, player_stats, player_games, player_wins, categories, n)
+    carried = carried or {}
+    totals = calculate_team_totals(players, player_stats, player_games, player_wins, categories, n, carried)
     played = [p for p in players if p in player_stats and player_games.get(p)]
 
     def per_game(p, terms):
@@ -459,7 +490,9 @@ def team_week_totals(players, player_stats, player_games, player_wins, categorie
                 variance += player_games[p] * q * (1 - q) + (game_var or {}).get(p, 0.0) * q * q
         elif spec['kind'] == 'ratio':
             attempts = sum(player_games[p] * per_game(p, spec['attempts']) for p in played)
-            variance = spec['attempt_sd'] ** 2 / attempts if attempts else 0.0
+            done = sum(coef * carried.get(stat, 0) for stat, coef in spec['attempts'])
+            # only the unplayed attempts swing the final rate: SD^2 x left / (played + left)^2 (= SD^2 / left with nothing played)
+            variance = spec['attempt_sd'] ** 2 * attempts / (attempts + done) ** 2 if attempts else 0.0
         else:
             variance = sum(player_games[p] * per_game(p, spec['noise']) for p in played)
             if game_var:

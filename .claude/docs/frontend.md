@@ -62,11 +62,13 @@ down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` 
 ## Lineup Optimizer = the Pickup Desk
 
 Owner picked design C of the 2026-10-18 mockups; the category view and comparison were merged 2026-10-26. `components/LineupOptimizer.js`:
-scoreboard header (You / week-win chip / opponent, one facts line: dates, claims left, games counted), then ONE category grid:
-a **Now** list of green/red/grey chips (green = 55%+ to win the category, red = 45% or less, grey between) beside a card per
-pick (the best, and the selected one; the runner-up while the best is selected). A card leads with his week-win chip and its
-change, then Helps / Costs (before -> after chips, change of 2+ points) and the unchanged categories faded below. No
-captions ("now ahead" etc.): colour alone says who wins (owner, 2026-10-26). Click a card header to select that pick. Below: candidates (`/api/pickups`, filters 4+ games / position / helps a category; a search box
+scoreboard header (You / week-win chip / opponent, one facts line: dates, live and final games, claims left, games left), then
+ONE category grid sorted by your chance as it stands (green on top, red at the bottom): a **Now** column of green/red/grey
+chips (green = 55%+ to win the category, red = 45% or less, grey between) and a column per pick (the best, and the selected
+one; the runner-up while the best is selected) with his chance and its change from Now (faded when little moves), same row
+order, no captions or Helps/Costs headings (owner, 2026-10-26). A Week row on top. Once games are played the header shows
+categories ahead now (points so far in a points league) and each category label shows both sides' totals so far
+(`progress`, `now_mine`/`now_theirs` from `/api/analyze`, see leagues.md "A week under way"). Click a column header to select that pick. Below: candidates (`/api/pickups`, filters 4+ games / position / helps a category; a search box
 tries any free agent with a drop picker) beside the selected pick's header, a days table (his days against my open slots,
 daily-lineup leagues only) and a fold with both rosters. Previews are real `/api/analyze?add=&drop=` what-ifs, once per
 add+drop, never client maths (only the week-win chance is derived: Poisson-binomial over the category chances). Category

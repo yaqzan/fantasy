@@ -129,6 +129,19 @@ stats) is shared by all leagues.
   teammates' correlated nights). Log-loss .644 -> .577. Still a little overconfident at 90%+. Wins
   (WIN%) weren't backtested. Known-injured players still count 0 for the whole week (the flag has no
   per-game dates).
+- **A week under way** (`week_actuals.py`, owner 2026-10-26): the Lineup Optimizer works mid-week and mid-game.
+  Played games are facts: Daily Leaders' ESPN slates (`daily_leaders.slate`, matched to rosters by `norm_name`) give
+  every line; final games count as their box score, a game in progress as its box score so far plus the share
+  still to play (`game_left`, by clock), and only unplayed games stay projected (`Week.remaining`, `day_weights`
+  into `player_week_games`). The played part rides as `carried` through `calculate_team_totals`/`team_week_totals`
+  (ratios are formed from played + projected components; a ratio's variance only from the unplayed attempts), so
+  a category's chance converges to 0/100% as the week ends. `/api/analyze` adds `progress` (started, live, final,
+  partial), `current.leading` (categories I lead now) and per-category `now_mine`/`now_theirs`; `mine`/`theirs` stay
+  whole-week totals. What-ifs pass `owned=` (today's roster): a pickup adds only unplayed games, a dropped player keeps
+  the games he already played for you. **Limits:** rosters are today's (no transaction history), so a player added
+  Wednesday also gets his Monday line and one dropped Tuesday is missing; a past day's daily lineup assumes the best
+  fitting players with a line started (the lineup you set is not read); wins count once a game is final. Before the
+  first game the week is the pure projection as always.
 - **Opponent** (`Week.opponent`): the week's scheduled opponent once its roster is in, else the
   average of the league's other teams still playing, else none (the Lineup Optimizer shows my
   totals only, "opponent TBD"; pickups judge against a copy of my team).

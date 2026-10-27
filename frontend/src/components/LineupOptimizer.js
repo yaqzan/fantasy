@@ -20,6 +20,18 @@ const Chip = ({ chance, fallback = '-', bold, faded }) => (
   </span>
 );
 
+// A pick's cell in the category grid: his chance chip and its change from Now (faded when little moves).
+const Cell = ({ chance, base, fallback = '-', bold }) => {
+  const d = chance != null && base != null ? chance - base : 0;
+  return (
+    <div className="flex items-center justify-center gap-1 border-t border-gray-600/40 pt-1">
+      <Chip chance={chance} fallback={fallback} bold={bold} faded={Math.abs(d) < 0.02} />
+      {Math.abs(d) >= 0.005 && <span className={`text-[10px] font-semibold tabular-nums ${deltaClass(d)}`}>{pointsDelta(d)}</span>}
+    </div>
+  );
+};
+
+
 // Chance of winning the week: a points league has one category (its chance is the week's); otherwise
 // the chance of winning more than half of the categories (Poisson-binomial on the category chances).
 const weekChance = (side, points) => {
@@ -161,6 +173,16 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const errorOf = (c) => (c && previews[keyOf(c)]?.error) || null;
   const pickSide = sideOf(pick);
   const baseChance = weekChance(data?.current, points);
+  const progress = data?.progress || { started: false };
+  // The sides' scores: what each has so far once a game is played, else the projection.
+  const nowTotal = (side) => points ? data.current.categories.FPTS?.[side === 'mine' ? 'now_mine' : 'now_theirs'] : null;
+  const scoreMine = !data ? null : progress.started
+    ? (points ? nowTotal('mine')?.toFixed(0) : data.current.leading)
+    : (points ? data.current.categories.FPTS?.mine.toFixed(0) : data.current.expected?.toFixed(1));
+  const scoreTheirs = !data ? null : progress.started
+    ? (points ? nowTotal('theirs')?.toFixed(0) : data.current.leading != null ? data.categories.length - data.current.leading : null)
+    : (points ? data.current.categories.FPTS?.theirs?.toFixed(0) : data.current.expected != null ? (data.categories.length - data.current.expected).toFixed(1) : null);
+  const scoreLabel = points ? (progress.started ? 'points so far' : 'projected points') : (progress.started ? 'categories ahead now' : 'categories expected');
   // The columns beside "Now" in the category grid.
   const columns = [best, second].filter(Boolean).map(c => ({ key: keyOf(c), item: c, side: sideOf(c), error: errorOf(c) }));
   const pending = (col) => col.error ? '-' : '...';
@@ -196,6 +218,8 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   // Daily Leaders' column order (PTS, REB, A-TO, STL, BLK, then the rest): the categories object arrives key-sorted.
   const cats = data ? orderColumns(data.categories).map(c => c.key) : [];
   const catLabel = (k) => meta[k]?.label || k;
+  // Green on top, red at the bottom: by your chance as it stands now (Daily Leaders' order breaks ties).
+  const sortedCats = [...cats].sort((x, y) => (data.current.categories[y].chance ?? -1) - (data.current.categories[x].chance ?? -1));
   // Inverse categories (turnovers, times blocked...): the server's chance already means "lower wins".
   const catTitle = (k) => `${meta[k]?.name || k}${meta[k]?.inverse ? ': lower wins' : ''}`;
 
@@ -203,6 +227,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const perDay = (players) => days.map(day => players.filter(p => !p.injured && (p.days || []).includes(day)).length);
   const mineByDay = perDay(data ? data.current.players.filter(p => !(pick?.drop && p.name === pick.drop)) : []);
   const isOpen = (n) => !!openSlots && n < openSlots;
+  const past = (day) => !!progress.started && day < progress.today;   // already played: nothing left to fill
 
   const pickPlayers = pickSide?.players.find(p => p.name === pick?.name);
   const pickDays = pick?.days || pickPlayers?.days || [];
@@ -231,13 +256,14 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
 
       {data && (
         <>
-          {/* Scoreboard: you, the week's chance, the opponent; the facts in one line */}
+          {/* Scoreboard: you, the week's chance, the opponent; the facts in one line. Once games are played the
+              sides show what each has so far (categories led now; points so far), the chance is of the whole week. */}
           <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4 mb-4">
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4">
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-mine">You</div>
-                <div className="text-2xl sm:text-3xl font-bold text-mine">{points ? data.current.categories.FPTS?.mine.toFixed(0) : data.current.expected != null ? data.current.expected.toFixed(1) : '-'}</div>
-                <div className="text-xs text-gray-400">{points ? 'projected points' : 'categories expected'}</div>
+                <div className="text-2xl sm:text-3xl font-bold text-mine">{scoreMine != null ? scoreMine : '-'}</div>
+                <div className="text-xs text-gray-400">{scoreLabel}</div>
               </div>
               <div className="text-center">
                 {baseChance != null ? (
@@ -249,82 +275,73 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
               </div>
               <div className="text-right min-w-0">
                 <div className="text-sm font-semibold text-opp truncate" title={hasOpponent ? opponentLabel : undefined}>{hasOpponent ? opponentLabel : 'Opponent'}</div>
-                {hasOpponent && <div className="text-2xl sm:text-3xl font-bold text-opp">{points ? data.current.categories.FPTS?.theirs?.toFixed(0) : (cats.length - data.current.expected).toFixed(1)}</div>}
-                <div className="text-xs text-gray-400">{hasOpponent ? (points ? 'projected points' : 'categories expected') : ''}</div>
+                {hasOpponent && <div className="text-2xl sm:text-3xl font-bold text-opp">{scoreTheirs != null ? scoreTheirs : '-'}</div>}
+                <div className="text-xs text-gray-400">{hasOpponent ? scoreLabel : ''}</div>
               </div>
             </div>
             <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-600 text-center">
               {shortDate(data.week_start)} to {shortDate(data.week_end)}
+              {progress.started && (progress.live > 0
+                ? <>{' · '}<span className="text-green-400">{progress.live} live</span>{progress.final > 0 && ` · ${progress.final} final`}</>
+                : ` · ${progress.final} games final`)}
               {' · '}<span className="text-gray-200">{data.claims_left ?? claims}</span>/{claims} claim{claims === 1 ? '' : 's'} left
-              {' · '}<span title="Expected games counted, you vs them">{gamesCounted(data.current.players)}{data.opponent_players && <> vs {gamesCounted(data.opponent_players)}</>} games</span>
+              {' · '}<span title="Games still to play, expected: you vs them">{gamesCounted(data.current.players)}{data.opponent_players && <> vs {gamesCounted(data.opponent_players)}</>} games{progress.started ? ' left' : ''}</span>
               {data.opponent === 'league average' && ` · vs the league average${data.scheduled_opponent ? ` (${data.scheduled_opponent} has no roster yet)` : ''}`}
               {!data.scheduled_opponent && ' · no opponent scheduled'}
+              {progress.partial && <span className="text-amber-400" title="Some box scores could not be loaded; those games are still projected"> · partial</span>}
             </p>
           </div>
 
-          {/* Categories and the comparison in one panel (owner, 2026-10-26): Now on the left, a card per pick on the right.
-              A pick's categories split into helps / costs / unchanged; colour alone says who wins, no captions. */}
+          {/* Categories and the comparison in one grid (owner, 2026-10-26): categories sorted by your chance (green at
+              the top, red at the bottom) in a Now column, and the same rows for two picks with the chance after
+              adding him and its change. Colour alone says who wins. Once games are played, the label shows each
+              side's total so far. */}
           <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4 mb-4">
-            <div className="grid grid-cols-[4.75rem_minmax(0,1fr)_minmax(0,1fr)] sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-4 items-start">
-              <div>
-                <div className="h-14 flex flex-col justify-end pb-1.5 text-xs text-gray-400">Now{!points && baseChance != null && <Chip chance={baseChance} bold />}</div>
-                {cats.map(k => {
-                  const base = data.current.categories[k];
-                  return (
-                    <div key={k} className="flex items-center justify-between gap-1 py-0.5 text-sm"
-                      title={`${catTitle(k)}${hasOpponent ? `: ${format(k, base.mine)} v ${format(k, base.theirs)}` : ''}`}>
-                      <span className="font-semibold text-gray-100">{points ? 'Week' : catLabel(k)}</span>
-                      <Chip chance={base.chance} fallback={format(k, base.mine)} />
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="grid grid-cols-[4.5rem_repeat(3,minmax(0,1fr))] sm:grid-cols-[7rem_repeat(3,minmax(0,1fr))] gap-x-1.5 gap-y-1 items-center text-sm">
+              <div></div>
+              <div className="text-center text-xs text-gray-400 pb-1">Now</div>
               {[0, 1].map(i => {
                 const col = columns[i];
                 if (!col) return <div key={i}></div>;
                 const on = selected === col.item.name;
-                const rows = col.side ? cats.map(k => {
-                  const from = data.current.categories[k].chance;
-                  const to = col.side.categories[k].chance;
-                  return { k, from, to, d: from != null && to != null ? to - from : 0 };
-                }) : [];
-                const helps = rows.filter(r => r.d >= 0.02).sort((x, y) => y.d - x.d);
-                const costs = rows.filter(r => r.d <= -0.02).sort((x, y) => x.d - y.d);
-                const same = rows.filter(r => Math.abs(r.d) < 0.02);
-                const weekAfter = col.side ? weekChance(col.side, points) : null;
-                const line = (r, faded) => (
-                  <div key={r.k} className={`flex items-center gap-1 py-0.5 text-xs sm:text-sm ${faded ? 'opacity-50' : ''}`}>
-                    <span className="w-9 shrink-0 font-semibold text-gray-100">{points ? 'Week' : catLabel(r.k)}</span>
-                    {!faded && <span className={`tabular-nums ${chipClass(r.from).split(' ')[1]}`}>{r.from != null ? Math.round(r.from * 100) : '-'}</span>}
-                    {!faded && <span className="text-gray-500">→</span>}
-                    <Chip chance={r.to} />
-                  </div>
-                );
                 return (
-                  <div key={col.key} className="min-w-0">
-                    <button onClick={() => setSelected(col.item.name)} aria-pressed={on} title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
-                      className={`w-full h-14 text-left flex flex-col justify-end pb-1.5 border-b ${on ? 'border-nba-orange' : 'border-gray-600'}`}>
-                      <span className="flex items-center gap-1.5 min-w-0">
-                        {weekAfter != null ? <Chip chance={weekAfter} bold /> : <span className="text-gray-400 text-xs">{pending(col)}</span>}
-                        {weekAfter != null && baseChance != null && Math.abs(weekAfter - baseChance) >= 0.005 &&
-                          <span className={`text-xs font-semibold ${deltaClass(weekAfter - baseChance)}`}>{pointsDelta(weekAfter - baseChance)}</span>}
-                      </span>
-                      <span className="truncate text-xs"><span className={`font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {lastName(col.item.name)}</span>
-                        <span className="text-red-400"> - {col.item.drop ? lastName(col.item.drop) : 'open'}</span></span>
-                    </button>
-                    {col.side ? (
-                      <>
-                        {helps.length > 0 && <div className="mt-1.5 text-[10px] uppercase tracking-wide text-gray-500">Helps</div>}
-                        {helps.map(r => line(r))}
-                        {costs.length > 0 && <div className="mt-1.5 text-[10px] uppercase tracking-wide text-gray-500">Costs</div>}
-                        {costs.map(r => line(r))}
-                        {same.length > 0 && <div className="mt-1.5">{same.map(r => line(r, true))}</div>}
-                      </>
-                    ) : col.error ? <p className="text-xs text-red-300 mt-2">{col.error}</p> : <p className="text-xs text-gray-500 mt-2">...</p>}
-                  </div>
+                  <button key={col.key} onClick={() => setSelected(col.item.name)} aria-pressed={on} title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
+                    className={`min-w-0 text-center text-xs pb-1 border-b ${on ? 'border-nba-orange' : 'border-gray-600'}`}>
+                    <span className={`block truncate font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {lastName(col.item.name)}</span>
+                    <span className="block truncate text-[10px] text-red-400">{col.item.drop ? `- ${lastName(col.item.drop)}` : 'open spot'}</span>
+                  </button>
+                );
+              })}
+              {columns.length < 2 && <div></div>}
+
+              {!points && (
+                <>
+                  <div className="font-semibold text-gray-200">Week</div>
+                  <div className="text-center"><Chip chance={baseChance} bold /></div>
+                  {columns.map(col => <Cell key={col.key} chance={col.side && weekChance(col.side, points)} base={baseChance} fallback={pending(col)} bold />)}
+                  {columns.length < 2 && <div></div>}
+                </>
+              )}
+              {sortedCats.map(k => {
+                const base = data.current.categories[k];
+                const soFar = progress.started && base.now_mine != null && hasOpponent;
+                return (
+                  <React.Fragment key={k}>
+                    <div className="min-w-0 border-t border-gray-600/40 pt-1" title={`${catTitle(k)}${hasOpponent ? `. Week: ${format(k, base.mine)} v ${format(k, base.theirs)}` : ''}`}>
+                      <span className="font-semibold text-gray-100">{points ? 'Week' : catLabel(k)}</span>
+                      {soFar && <span className="block text-[10px] text-gray-400 truncate tabular-nums">{format(k, base.now_mine)} v {format(k, base.now_theirs)}</span>}
+                    </div>
+                    <div className="text-center border-t border-gray-600/40 pt-1"><Chip chance={base.chance} fallback={format(k, base.mine)} /></div>
+                    {columns.map(col => {
+                      const row = col.side?.categories[k];
+                      return <Cell key={col.key} chance={row?.chance} base={base.chance} fallback={row ? format(k, row.mine) : pending(col)} />;
+                    })}
+                    {columns.length < 2 && <div></div>}
+                  </React.Fragment>
                 );
               })}
             </div>
+            {columns.map(col => col.error && <p key={col.key} className="text-xs text-red-300 mt-2">{col.item.name}: {col.error}</p>)}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] items-start">
@@ -433,14 +450,14 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                       <tbody>
                         <tr className="border-t border-gray-600/40">
                           <td className="py-1 text-gray-400 pr-2 whitespace-nowrap">Yours{pick.drop ? ` without ${lastName(pick.drop)}` : ''}</td>
-                          {mineByDay.map((n, i) => (
+                          {mineByDay.map((n, i) => past(days[i]) ? <td key={days[i]} className="text-center text-gray-600">-</td> : (
                             <td key={days[i]} className={`text-center ${isOpen(n) ? 'text-amber-300' : 'text-gray-200'}`} title={isOpen(n) ? 'Open slot: a pickup who plays this day adds a game' : undefined}>{n}</td>
                           ))}
                         </tr>
                         <tr className="border-t border-gray-600/40">
                           <td className="py-1 text-white pr-2 whitespace-nowrap">{lastName(pick.name)}</td>
                           {days.map((d, i) => {
-                            if (!pickDays.includes(d)) return <td key={d}></td>;
+                            if (past(d) || !pickDays.includes(d)) return <td key={d}></td>;
                             if (!openSlots) return <td key={d} className="text-center text-gray-200">plays</td>;
                             const open = isOpen(mineByDay[i]);
                             return <td key={d} className="text-center"><span className={open ? 'text-green-400 font-bold' : 'text-gray-400'}>{open ? 'fills' : 'full'}</span></td>;
@@ -449,7 +466,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                         {data.opponent_players && (
                           <tr className="border-t border-gray-600/40">
                             <td className="py-1 text-opp pr-2 whitespace-nowrap max-w-[8rem] truncate" title={opponentLabel}>{opponentLabel}</td>
-                            {perDay(data.opponent_players).map((n, i) => (
+                            {perDay(data.opponent_players).map((n, i) => past(days[i]) ? <td key={days[i]} className="text-center text-gray-600">-</td> : (
                               <td key={days[i]} className={`text-center ${isOpen(n) ? 'text-amber-300' : 'text-gray-200'}`}>{n}</td>
                             ))}
                           </tr>
