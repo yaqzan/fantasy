@@ -167,7 +167,8 @@ function GameLog({ card, columns, points }) {
       <td className={`${STICKY} pl-2 pr-1 sm:pl-3 sm:pr-2 py-1 text-left whitespace-nowrap text-[10px] sm:text-xs ${g.date === TODAY() ? TODAY_MARK : ''}`}>
         <span className="text-gray-300">{shortDate(g.date)}</span>
         <span className="text-gray-500 text-[10px] ml-1">{g.opp || ''}</span>
-        <span className={`text-[10px] ml-1 ${g.w ? 'text-green-400' : 'text-red-400'}`}>{g.w ? 'W' : 'L'}</span>
+        {g.live ? <span className="text-[10px] ml-1 font-semibold text-red-400">LIVE</span>
+          : g.w !== null && g.w !== undefined && <span className={`text-[10px] ml-1 ${g.w ? 'text-green-400' : 'text-red-400'}`}>{g.w ? 'W' : 'L'}</span>}
         {g.min != null && <span className="text-[10px] ml-1 text-sky-300/70 font-medium">{g.min}m</span>}
       </td>
       {columns.map(c => (

@@ -10,8 +10,9 @@ Deltas are against the season once he has DELTA_SEASON_GAMES games, else against
 Each game is scored exactly as Daily Leaders scores it (daily_leaders.score_line): summed category z
 in category leagues, fantasy points in points leagues."""
 from datetime import date
+from types import SimpleNamespace
 
-from daily_leaders import _ratio, game_value, league_scale, league_stats, owners, score_line
+from daily_leaders import _ratio, game_value, league_scale, league_stats, nba_today, owners, score_line, slate
 from fantasy_database import Game, GameLine, Player, PlayerSeason, PreseasonLine, Team
 from fantasy_team_helper import get_current_fantasy_week_dates
 from game_log import season_label
@@ -209,6 +210,31 @@ def card(league, player_id=None, name=None):
                 upcoming.append(item)
             else:
                 break
+
+    # Tonight's game, live or final but not yet in game_lines (that lands after the night): the line
+    # Daily Leaders holds, so the log shows it as it happens.
+    today = nba_today().isoformat()
+    tonight = next((u for u in upcoming if u['date'] == today), None)
+    if tonight:
+        try:
+            from projections import norm_name
+            cur = slate(nba_today())
+            me = norm_name(player.name)
+            state = {t['abbr']: g['state'] for g in cur['scoreboard'] for t in g['teams']}
+            line = next((l for lines in cur['games'].values() for l in lines.values() if norm_name(l['name']) == me), None)
+        except Exception:  # ESPN hiccup: the log just lacks tonight's row
+            line = None
+        if line:
+            line = {**line, '_unknown': set()}
+            live = SimpleNamespace(game_date=nba_today(), team=player.team, w=line['W'], min=line['MIN'],
+                                   plus_minus=line['PLUS_MINUS'], matchup=None)
+            opp[live.game_date] = tonight['opp']
+            row = game(live, 'regular', line)
+            row['live'] = state.get(line['team']) == 'in'
+            if line['W'] is None and 'WIN%' in row['cells']:
+                row['cells']['WIN%'] = '…'  # the result isn't known until the game ends
+            games.insert(0, row)
+            upcoming.remove(tonight)
     upcoming.reverse()  # newest first like the log: the next game sits right above the last one played
     return {
         'upcoming': upcoming,
