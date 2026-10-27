@@ -63,10 +63,10 @@ down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` 
 
 Owner picked design C of the 2026-10-18 mockups; the category view and comparison were merged 2026-10-26. `components/LineupOptimizer.js`:
 scoreboard header (You / week-win chip / opponent, one facts line: dates, claims left, games counted), then ONE category grid:
-a **Now** column of green/red/grey chips (green = 55%+ to win the category, red = 45% or less, grey between) beside two pick
-columns (the best pick and the selected one; the runner-up while the best is selected). A pick cell shows his chance and the
-change from Now, fades when little changes, rings when the category switches side; a Week row on top. Click a column
-header to select that pick. Below: candidates (`/api/pickups`, filters 4+ games / position / helps a category; a search box
+a **Now** list of green/red/grey chips (green = 55%+ to win the category, red = 45% or less, grey between) beside a card per
+pick (the best, and the selected one; the runner-up while the best is selected). A card leads with his week-win chip and its
+change, then Helps / Costs (before -> after chips, change of 2+ points) and the unchanged categories faded below. No
+captions ("now ahead" etc.): colour alone says who wins (owner, 2026-10-26). Click a card header to select that pick. Below: candidates (`/api/pickups`, filters 4+ games / position / helps a category; a search box
 tries any free agent with a drop picker) beside the selected pick's header, a days table (his days against my open slots,
 daily-lineup leagues only) and a fold with both rosters. Previews are real `/api/analyze?add=&drop=` what-ifs, once per
 add+drop, never client maths (only the week-win chance is derived: Poisson-binomial over the category chances). Category

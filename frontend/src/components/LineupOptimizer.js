@@ -13,18 +13,12 @@ const pointsDelta = (d) => `${d > 0 ? '+' : ''}${Math.round(d * 100)}`;   // a c
 const lean = (chance) => chance == null ? 'even' : chance >= 0.55 ? 'win' : chance <= 0.45 ? 'lose' : 'even';
 const chipClass = (chance) => ({ win: 'bg-green-900/70 text-green-300', lose: 'bg-red-900/70 text-red-300', even: 'bg-gray-600 text-gray-300' })[lean(chance)];
 
-// One cell of the category grid: the chance as a coloured chip, the change from `base` beside it, a ring
-// when the category switches side (favoured / toss-up / against).
-const Chip = ({ chance, base, fallback = '-', bold }) => {
-  if (chance == null) return <div className="rounded bg-gray-600 text-gray-300 text-center py-1">{fallback}</div>;
-  const d = base == null ? 0 : chance - base;
-  const flipped = base != null && lean(chance) !== lean(base);
-  return (
-    <div className={`rounded text-center py-1 tabular-nums ${bold ? 'font-bold' : 'font-semibold'} ${chipClass(chance)} ${flipped ? 'ring-1 ring-gray-100' : ''} ${base != null && Math.abs(d) < 0.02 ? 'opacity-50' : ''}`}>
-      {pct(chance)}{Math.abs(d) >= 0.005 && <span className="ml-1 text-[10px] font-normal">{pointsDelta(d)}</span>}
-    </div>
-  );
-};
+// A chance as a coloured chip: the colour is the whole message (green favoured, red against, grey toss-up).
+const Chip = ({ chance, fallback = '-', bold, faded }) => (
+  <span className={`inline-block min-w-[2.75rem] rounded text-center py-0.5 px-1 tabular-nums ${bold ? 'font-bold' : 'font-semibold'} ${chipClass(chance)} ${faded ? 'opacity-50' : ''}`}>
+    {chance == null ? fallback : pct(chance)}
+  </span>
+);
 
 // Chance of winning the week: a points league has one category (its chance is the week's); otherwise
 // the chance of winning more than half of the categories (Poisson-binomial on the category chances).
@@ -204,7 +198,6 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const catLabel = (k) => meta[k]?.label || k;
   // Inverse categories (turnovers, times blocked...): the server's chance already means "lower wins".
   const catTitle = (k) => `${meta[k]?.name || k}${meta[k]?.inverse ? ': lower wins' : ''}`;
-  const inverseLabels = cats.filter(k => meta[k]?.inverse).map(catLabel);
 
   // Healthy players with a game each day, for you without the drop (the open days are where a pickup streams) and for them.
   const perDay = (players) => days.map(day => players.filter(p => !p.injured && (p.days || []).includes(day)).length);
@@ -269,57 +262,69 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
             </p>
           </div>
 
-          {/* Categories and the comparison in one grid: where you stand now, beside the two picks (owner, 2026-10-26) */}
+          {/* Categories and the comparison in one panel (owner, 2026-10-26): Now on the left, a card per pick on the right.
+              A pick's categories split into helps / costs / unchanged; colour alone says who wins, no captions. */}
           <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4 mb-4">
-            <div className="grid grid-cols-[4.5rem_repeat(3,minmax(0,1fr))] sm:grid-cols-[6.5rem_repeat(3,minmax(0,1fr))] gap-1 items-center text-sm">
-              <div className="text-xs text-gray-400">{points ? '' : 'Category'}</div>
-              <div className="text-center text-xs text-gray-400 pb-1">Now</div>
+            <div className="grid grid-cols-[4.75rem_minmax(0,1fr)_minmax(0,1fr)] sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-4 items-start">
+              <div>
+                <div className="h-14 flex flex-col justify-end pb-1.5 text-xs text-gray-400">Now{!points && baseChance != null && <Chip chance={baseChance} bold />}</div>
+                {cats.map(k => {
+                  const base = data.current.categories[k];
+                  return (
+                    <div key={k} className="flex items-center justify-between gap-1 py-0.5 text-sm"
+                      title={`${catTitle(k)}${hasOpponent ? `: ${format(k, base.mine)} v ${format(k, base.theirs)}` : ''}`}>
+                      <span className="font-semibold text-gray-100">{points ? 'Week' : catLabel(k)}</span>
+                      <Chip chance={base.chance} fallback={format(k, base.mine)} />
+                    </div>
+                  );
+                })}
+              </div>
               {[0, 1].map(i => {
                 const col = columns[i];
                 if (!col) return <div key={i}></div>;
-                return (
-                  <button key={col.key} onClick={() => setSelected(col.item.name)} aria-pressed={selected === col.item.name}
-                    title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
-                    className={`min-w-0 text-center text-xs pb-1 ${selected === col.item.name ? 'text-nba-orange font-semibold' : 'text-gray-200'}`}>
-                    <span className="block truncate">+ {lastName(col.item.name)}{col.item === best && <span className="ml-1 text-green-300">best</span>}</span>
-                    <span className="block truncate text-[10px] text-red-400">{col.item.drop ? `- ${lastName(col.item.drop)}` : 'open spot'}</span>
-                  </button>
+                const on = selected === col.item.name;
+                const rows = col.side ? cats.map(k => {
+                  const from = data.current.categories[k].chance;
+                  const to = col.side.categories[k].chance;
+                  return { k, from, to, d: from != null && to != null ? to - from : 0 };
+                }) : [];
+                const helps = rows.filter(r => r.d >= 0.02).sort((x, y) => y.d - x.d);
+                const costs = rows.filter(r => r.d <= -0.02).sort((x, y) => x.d - y.d);
+                const same = rows.filter(r => Math.abs(r.d) < 0.02);
+                const weekAfter = col.side ? weekChance(col.side, points) : null;
+                const line = (r, faded) => (
+                  <div key={r.k} className={`flex items-center gap-1 py-0.5 text-xs sm:text-sm ${faded ? 'opacity-50' : ''}`}>
+                    <span className="w-9 shrink-0 font-semibold text-gray-100">{points ? 'Week' : catLabel(r.k)}</span>
+                    {!faded && <span className={`tabular-nums ${chipClass(r.from).split(' ')[1]}`}>{r.from != null ? Math.round(r.from * 100) : '-'}</span>}
+                    {!faded && <span className="text-gray-500">→</span>}
+                    <Chip chance={r.to} />
+                  </div>
                 );
-              })}
-              {columns.length < 2 && columns.length > 0 && <div></div>}
-
-              {!points && (
-                <>
-                  <div className="font-semibold text-gray-200">Week</div>
-                  <Chip chance={baseChance} bold />
-                  {columns.map(col => <Chip key={col.key} chance={col.side && weekChance(col.side, points)} base={baseChance} fallback={pending(col)} bold />)}
-                  {columns.length < 2 && <div></div>}
-                </>
-              )}
-              {cats.map(k => {
-                const base = data.current.categories[k];
                 return (
-                  <React.Fragment key={k}>
-                    <div className="min-w-0 border-t border-gray-600/40 pt-1" title={catTitle(k)}>
-                      <span className="font-semibold text-gray-100">{points ? 'Win the week' : catLabel(k)}</span>
-                      {hasOpponent && <span className="block text-[10px] text-gray-500 truncate">{format(k, base.mine)} v {format(k, base.theirs)}</span>}
-                    </div>
-                    <Chip chance={base.chance} fallback={format(k, base.mine)} />
-                    {columns.map(col => {
-                      const row = col.side?.categories[k];
-                      return <Chip key={col.key} chance={row?.chance} base={base.chance} fallback={row ? format(k, row.mine) : pending(col)} />;
-                    })}
-                    {columns.length < 2 && <div></div>}
-                  </React.Fragment>
+                  <div key={col.key} className="min-w-0">
+                    <button onClick={() => setSelected(col.item.name)} aria-pressed={on} title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
+                      className={`w-full h-14 text-left flex flex-col justify-end pb-1.5 border-b ${on ? 'border-nba-orange' : 'border-gray-600'}`}>
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        {weekAfter != null ? <Chip chance={weekAfter} bold /> : <span className="text-gray-400 text-xs">{pending(col)}</span>}
+                        {weekAfter != null && baseChance != null && Math.abs(weekAfter - baseChance) >= 0.005 &&
+                          <span className={`text-xs font-semibold ${deltaClass(weekAfter - baseChance)}`}>{pointsDelta(weekAfter - baseChance)}</span>}
+                      </span>
+                      <span className="truncate text-xs"><span className={`font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {lastName(col.item.name)}</span>
+                        <span className="text-red-400"> - {col.item.drop ? lastName(col.item.drop) : 'open'}</span></span>
+                    </button>
+                    {col.side ? (
+                      <>
+                        {helps.length > 0 && <div className="mt-1.5 text-[10px] uppercase tracking-wide text-gray-500">Helps</div>}
+                        {helps.map(r => line(r))}
+                        {costs.length > 0 && <div className="mt-1.5 text-[10px] uppercase tracking-wide text-gray-500">Costs</div>}
+                        {costs.map(r => line(r))}
+                        {same.length > 0 && <div className="mt-1.5">{same.map(r => line(r, true))}</div>}
+                      </>
+                    ) : col.error ? <p className="text-xs text-red-300 mt-2">{col.error}</p> : <p className="text-xs text-gray-500 mt-2">...</p>}
+                  </div>
                 );
               })}
             </div>
-            {columns.map(col => col.error && <p key={col.key} className="text-xs text-red-300 mt-2">{col.item.name}: {col.error}</p>)}
-            <p className="text-[11px] text-gray-500 mt-2">
-              Chance to win each category. <span className="text-green-300">Green</span> favoured (55%+), <span className="text-red-300">red</span> against (45% or less), grey a toss-up.
-              Small number: change from Now; faded means little change; ringed means the category switches side.
-              {inverseLabels.length > 0 && ` Lower wins in ${inverseLabels.join(', ')}.`}
-            </p>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] items-start">
