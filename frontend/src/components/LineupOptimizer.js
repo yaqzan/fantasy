@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { analyze, getPickups, errorMessage } from '../services/api';
 import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
+import { PlayerName } from './PlayerCard';
 import { WeekSelect, defaultWeekStart, validWeek, selectClass, shortDate, weekdayLetter, weekDays } from '../weeks';
 import { orderColumns } from '../dailyLeaders';
 
@@ -83,7 +84,7 @@ const RosterTable = ({ title, players: all, days, nameClass, lit, dropName, addN
       {players.map(p => (
         <div key={p.name} className={`flex items-center justify-between gap-2 ${p.plays ? '' : 'opacity-50'}`}>
           <span className="truncate text-gray-200">
-            {p.name}{p.name === addName && <span className="ml-1 text-green-400">add</span>}
+            <PlayerName name={p.name} />{p.name === addName && <span className="ml-1 text-green-400">add</span>}
             <span className="text-gray-500"> {p.positions.join('/')}</span>
             {p.injured && <span className="text-red-400"> INJ</span>}
           </span>
@@ -93,7 +94,7 @@ const RosterTable = ({ title, players: all, days, nameClass, lit, dropName, addN
           </span>
         </div>
       ))}
-      {dropName && <div className="text-red-400 line-through opacity-70">{dropName}</div>}
+      {dropName && <div className="text-red-400 line-through opacity-70"><PlayerName name={dropName} /></div>}
     </div>
   </div>
   );
@@ -472,7 +473,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
               {pick ? (
                 <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <h3 className="text-lg font-bold text-white">{pick.name}
+                    <h3 className="text-lg font-bold text-white"><PlayerName name={pick.name} />
                       {!pick.manual && <span className="ml-2 text-xs font-normal text-gray-400">{pick.team_abv} · {pick.positions.join('/')}</span>}
                       {pick.name === best?.name && <span className="ml-2 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-green-900 text-green-200">best</span>}
                     </h3>
@@ -525,7 +526,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                           ))}
                         </tr>
                         <tr className="border-t border-gray-600/40">
-                          <td className="py-1 text-white pr-2 whitespace-nowrap">{pick.name}</td>
+                          <td className="py-1 text-white pr-2 whitespace-nowrap"><PlayerName name={pick.name} /></td>
                           {days.map((d, i) => {
                             if (past(d) || !pickDays.includes(d)) return <td key={d}></td>;
                             if (!openSlots) return <td key={d} className="text-center text-gray-200">plays</td>;
