@@ -63,6 +63,8 @@ def upgrade_schema(DB):
         ops.append(migrator.add_column('players', 'positions', CharField(max_length=16, null=True)))
     if 'injured_return' not in {c.name for c in DB.get_columns('players')}:
         ops.append(migrator.add_column('players', 'injured_return', CharField(max_length=16, null=True)))
+    if 'injury_status' not in player_cols:
+        ops.append(migrator.add_column('players', 'injury_status', CharField(max_length=4, null=True)))
     if 'positions' not in {c.name for c in DB.get_columns('league_player_flags')}:
         ops.append(migrator.add_column('league_player_flags', 'positions', CharField(max_length=32, null=True)))
     if 'waiver_until' not in {c.name for c in DB.get_columns('league_player_flags')}:

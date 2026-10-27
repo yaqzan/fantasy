@@ -85,6 +85,7 @@ class Player(BaseModel):
     w_10 = IntegerField(null=True)
     injured = IntegerField(null=True)  # BOOL field (0/1)
     injured_games_to_miss = IntegerField(null=True)
+    injury_status = CharField(max_length=4, null=True)  # Yahoo's status for him ('O', 'INJ', 'DTD'...), refreshed hourly by pull_yahoo sync; null = healthy
     injured_return = CharField(max_length=16, null=True)  # month he is expected back ('Jan'), 'season', or null = no timetable
     undroppable = IntegerField(null=True)  # legacy, pre-leagues; now per league in league_player_flags
     api_updated_at = DateTimeField(null=True)

@@ -58,6 +58,7 @@ COOKIE_FILE = os.path.join(ROOT, 'yahoo_web.cookie')
 ADP_DIR = os.path.join(ROOT, '.cache')
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0'
 NS = {'y': 'http://fantasysports.yahooapis.com/fantasy/v2/base.rng'}
+OUT_STATUSES = ('O', 'INJ')  # Yahoo statuses that mean he is not playing
 PAGE = 25  # Yahoo's maximum players per request
 
 load_dotenv(os.path.join(ROOT, '.env'))
@@ -163,12 +164,13 @@ def _text(node, path):
 
 
 def parse_player(node):
-    """{name, positions, undroppable, il} from a Yahoo <player>. Positions keep the ones lineup slots
+    """{name, positions, undroppable, status, il} from a Yahoo <player>. Positions keep the ones lineup slots
     understand (PG SG G SF PF F C); Util, IL and BN aren't positions. il: sits in the injured-list slot."""
     positions = [p.text for p in node.findall('y:eligible_positions/y:position', NS)]
     return {'name': _text(node, 'y:name/y:full'),
             'positions': [p for p in positions if p in ('PG', 'SG', 'G', 'SF', 'PF', 'F', 'C')],
             'undroppable': _text(node, 'y:is_undroppable') == '1',
+            'status': _text(node, 'y:status'),    # '' healthy; O / INJ out, DTD / GTD day to day, NA not active
             'il': _text(node, 'y:selected_position/y:position') in ('IL', 'IL+')}
 
 
@@ -279,6 +281,7 @@ def sync(yahoo_league, apply):
     yahoo_slots = parse_slots(fetch(f'league/{key}/settings'))
     ids = name_index()
     players_by_id = {p.id: p for p in Player.select(Player.id, Player.name)}
+    stored_status = {p.id: p.injury_status for p in Player.select(Player.id, Player.injury_status)}
 
     def ours(yahoo_name):
         return players_by_id.get(ids.get(norm_name(yahoo_name)))
@@ -355,6 +358,18 @@ def sync(yahoo_league, apply):
                 undroppable_adds += 1
                 if apply:
                     set_league_flags(league, player.id, undroppable=True)
+        statuses = {}
+        for p in [p for t in rosters for p in t['players']] + free:
+            if ours(p['name']):
+                statuses[ours(p['name']).id] = p['status'] or None
+        status_changes = 0
+        for pid, status in statuses.items():
+            if (stored_status.get(pid) or None) != status:
+                status_changes += 1
+                if apply:
+                    Player.update(injury_status=status).where(Player.id == pid).execute()
+        print(f'  injury status: {sum(1 for v in statuses.values() if v in OUT_STATUSES)} out, {status_changes} to update')
+        changes += status_changes
         on_waivers = {ours(n).id: day for n, day in waiver_players(key).items() if ours(n)}
         waiver_changes = 0
         for pid in set(on_waivers) | {pid for pid, f in flags.items() if f.waiver_until}:

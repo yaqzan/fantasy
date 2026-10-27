@@ -150,8 +150,9 @@ def get_waiver_dates(league):
 
 
 def get_injured_players():
-    """Injured players (NBA-wide, not per league)."""
-    return [player.name for player in Player.select(Player.name).where(Player.injured == 1)]
+    """Injured players (NBA-wide, not per league): flagged by hand, or Yahoo lists him Out (pull_yahoo sync)."""
+    return [player.name for player in Player.select(Player.name).where(
+        (Player.injured == 1) | Player.injury_status.in_(('O', 'INJ')))]
 
 
 def get_available_players(league, player_stats):
