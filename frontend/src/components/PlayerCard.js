@@ -98,12 +98,12 @@ const TODAY_MARK = 'shadow-[inset_2px_0_0_rgb(var(--accent))]';  // today's row 
 const auraStyle = (z) => { const a = zAura(z); return a ? { color: a.color, textShadow: a.glow, fontWeight: a.weight } : undefined; };
 const STICKY = 'sticky left-0 z-[1] bg-gray-800';
 
-// Averages and game log share one column layout (label, Min, categories) so the columns line up.
-const tableStyle = (n) => ({ minWidth: `calc(7.5rem + 2.25rem + ${n} * 2.75rem)` });
+// Averages and game log share one column layout (label with games and minutes, categories) so the columns line up.
+const tableStyle = (n) => ({ minWidth: `calc(11rem + ${n} * 2.75rem)` });
 function Cols({ n, extra = 0 }) {
   return (
     <colgroup>
-      <col style={{ width: '7.5rem' }} /><col style={{ width: '2.25rem' }} />
+      <col style={{ width: '11rem' }} />
       {Array.from({ length: n }, (_, i) => <col key={i} style={{ width: '2.75rem' }} />)}
       {extra > 0 && <col style={{ width: '2.5rem' }} />}
     </colgroup>
@@ -127,7 +127,6 @@ function Averages({ card, columns }) {
       <thead>
         <tr>
           <th className={`${STICKY} bg-th text-left pl-3 pr-2 py-1.5`} />
-          <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0.5 py-1.5">Min</th>
           {columns.map(c => <th key={c.key} className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0.5 py-1.5" title={c.name}>{c.label}</th>)}
         </tr>
       </thead>
@@ -138,7 +137,6 @@ function Averages({ card, columns }) {
               <span className="text-gray-300 text-[11px]">{r.label}</span>
               {r.note && <span className="block text-[10px] text-gray-500 leading-tight">{r.note}</span>}
             </td>
-            <td className="text-center px-0.5 py-1.5 text-gray-400">{r.values.MIN ? Math.round(r.values.MIN) : '–'}</td>
             {columns.map(c => (
               <td key={c.key} className={`text-center px-0.5 py-1.5 whitespace-nowrap ${c.key === 'FPTS' ? 'bg-white/10' : ''}`}>
                 <span className={r.key === card.delta_base ? 'font-semibold' : ''} style={auraStyle(r.values._z?.[c.key])}>{fmtAvg(c, r.values[c.key])}</span>
@@ -169,8 +167,8 @@ function GameLog({ card, columns, points }) {
         <span className="text-gray-300">{shortDate(g.date)}</span>
         <span className="text-gray-500 text-[10px] ml-1">{g.opp || ''}</span>
         <span className={`text-[10px] ml-1 ${g.w ? 'text-green-400' : 'text-red-400'}`}>{g.w ? 'W' : 'L'}</span>
+        {g.min != null && <span className="text-[10px] ml-1.5 text-sky-300/70 font-medium">{g.min}m</span>}
       </td>
-      <td className="text-center px-0.5 py-1 text-gray-400">{g.min}</td>
       {columns.map(c => (
         <td key={c.key} className={`text-center px-0.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white bg-white/10' : 'text-gray-200'} `}
             title={!points && g.z?.[c.key] != null ? `z ${signed(g.z[c.key])}` : undefined}>
@@ -186,7 +184,6 @@ function GameLog({ card, columns, points }) {
       <thead>
         <tr>
           <th className={`${STICKY} bg-th text-onth text-left pl-3 pr-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide`}>Game</th>
-          <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0.5">Min</th>
           {columns.map(c => <th key={c.key} className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-1.5" title={c.name}>{c.label}</th>)}
           {!points && <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0.5 border-l border-gray-700" title="Summed category z, as on Daily Leaders">Z</th>}
         </tr>
@@ -197,7 +194,6 @@ function GameLog({ card, columns, points }) {
             <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap ${u.date === TODAY() ? TODAY_MARK : ''}`}>
               <span>{shortDate(u.date)}</span><span className="text-[10px] ml-1">{u.opp}</span>
             </td>
-            <td className="py-1" />
             {columns.map(c => <td key={c.key} className={c.key === 'FPTS' ? 'bg-white/10' : ''} />)}
             {!points && <td className="border-l border-gray-700" />}
           </tr>

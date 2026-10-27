@@ -42,7 +42,7 @@ Tap a player's name on Daily Leaders or Player Rankings (`PlayerName`) -> `compo
 (design A of the 2026-10-17 mockups: centred card from `sm`, bottom sheet on phones, drag the header
 down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` (or `?name=`), `player_card.py`.
 
-- **Averages** in the league's categories, Daily Leaders' column order (points leagues: FPTS first):
+- **Averages** (games and minutes sit in the label's sub-line, no Min column; the game log tacks minutes on after the date) in the league's categories, Daily Leaders' column order (points leagues: FPTS first):
   "<year> Season", then "<year> Running Projection" (the `'_projected'` timeframe: projection moved by his
   preseason and then his games, projections.md "In-season update"; the plain projection until either exists).
   Behind "N other seasons": "<year> Preseason" (at his projected minutes: preseason minutes are rotations)

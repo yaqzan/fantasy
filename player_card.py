@@ -90,6 +90,11 @@ def _cell(cat, line, league):
     return '–' if v is None else (round(v, 1) if isinstance(v, float) else v)
 
 
+def _note(games, minutes):
+    """The sub-label under an average row: games and minutes a game."""
+    return ' · '.join(x for x in (f'{games:.0f} g' if games else '', f'{minutes:.0f} min' if minutes else '') if x) or None
+
+
 def _teams():
     """(NBA abbreviation -> full name, full name -> NBA abbreviation)."""
     full = {}
@@ -157,20 +162,20 @@ def card(league, player_id=None, name=None):
         values = _average(cats, rs_lines, league, scale=scale)
         if 'BLKA' in values and values['BLKA'] is None:  # the NBA gives totals only: the player's stored ones
             values['BLKA'] = stats.get('BLKA')
-        rows.append({'key': 'season', 'label': f'{year} Season', 'note': f'{n} g', 'values': values})
+        rows.append({'key': 'season', 'label': f'{year} Season', 'note': _note(n, values['MIN']), 'values': values})
     # Running Projection: the projection moved by his preseason and then by his games this season (the
     # '_projected' timeframe); before either exists, the plain projection under the same name.
     running = (stats.get('PRE_G') or rs_lines) and 'GP_proj' in stats and any(stats.get(f'{c}_projected') is not None for c in cats)
     sfx = '_projected' if running else '_proj'
     if running or any(stats.get(f'{c}_proj') is not None for c in cats):
-        rows.append({'key': 'adj', 'label': f'{year} Running Projection', 'note': f"{stats.get('MIN' + sfx) or 0:.0f} min",
+        rows.append({'key': 'adj', 'label': f'{year} Running Projection', 'note': _note(stats.get('GP' + sfx), stats.get('MIN' + sfx)),
                      'title': 'The projection moved by his preseason and then by his games this season, each stat weighted '
                               'by how much that has predicted the rest of the season (projections.md "In-season update")',
                      'values': {'MIN': stats.get('MIN' + sfx) or None, **{c: stats.get(c + sfx) for c in cats}}})
     if pre_lines:
         pre_min = sum(l['MIN'] for l in pre_lines)
         rows.append({'key': 'pre', 'label': f'{year} Preseason',
-                     'note': f'{len(pre_lines)} g, per {proj_min:.0f} min' if proj_min else f'{len(pre_lines)} g',
+                     'note': _note(len(pre_lines), proj_min or pre_min / len(pre_lines)),
                      'title': (f'{len(pre_lines)} preseason games, {pre_min} minutes, scaled to his projected '
                                f'{proj_min:.0f} minutes a game' if proj_min else None),
                      'values': _average(cats, pre_lines, league, minutes=proj_min or None, scale=scale)})
@@ -182,8 +187,10 @@ def card(league, player_id=None, name=None):
                 'TECH': s.tech or 0, 'BLKA': s.blka, 'W': s.w, 'PLUS_MINUS': 0, 'DD2': s.dd2, 'TD3': s.td3}
         line = {k: v / s.gp for k, v in line.items()}  # totals -> one average game; pooled ratios are unchanged
         line['_unknown'] = {'TECH'} if s.tech is None else set()
-        rows.append({'key': f'y{s.season}', 'label': s.season, 'note': f'{s.gp} g · {s.team or ""}'.rstrip(' ·'),
-                     'values': _average(cats, [line], league, scale=scale)})
+        values = _average(cats, [line], league, scale=scale)
+        rows.append({'key': f'y{s.season}', 'label': s.season,
+                     'note': f"{_note(s.gp, values['MIN'])} · {s.team}" if s.team else _note(s.gp, values['MIN']),
+                     'values': values})
 
     team = owners(league).get(player.id)
     nxt, upcoming = None, []  # next game, and his team's games to the end of this fantasy week (not yet in the log)
