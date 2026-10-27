@@ -45,6 +45,7 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
   reintroduce league constants in `fantasy_config.py` (it holds NBA-wide settings only).
 
 Detail: leagues, categories, daily vs weekly lineups -> `.claude/docs/leagues.md`.
+Lineup Optimizer / Pickup Desk (file map, traps; read before touching `lineup_optimizer.py`, `week_actuals.py` or `LineupOptimizer.js`) -> `.claude/docs/lineup-optimizer.md`.
 Projections (players, rookies, team wins, sources, backtests) -> `.claude/docs/projections.md`.
 Draft strategy: what the room pays for, price-tier returns, category pairs, anchor builds -> `.claude/docs/draft-strategy.md`.
 Frontend colour schemes (CSS variables behind the Tailwind classes), logo -> `.claude/docs/frontend.md`.
