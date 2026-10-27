@@ -44,9 +44,9 @@ down 80px to close; Esc, the scrim or x also close). `GET /api/player-card?id=` 
 
 - **Phones fit 9 stats** (7.25rem label + 1.85rem stat columns, `--pc-*` in index.css; sm+ keeps 11rem/2.75rem).
 - **Averages** (games and minutes sit in the label's sub-line, no Min column; the game log tacks minutes on after the date) in the league's categories, Daily Leaders' column order (points leagues: FPTS first):
-  "<year> Season", then "<year> Running Projection" (the `'_projected'` timeframe: projection moved by his
+  "<yy-yy> Season", then "<yy-yy> Running Projection" (the `'_projected'` timeframe: projection moved by his
   preseason and then his games, projections.md "In-season update"; the plain projection until either exists).
-  Behind "N other seasons": "<year> Preseason" (at his projected minutes: preseason minutes are rotations)
+  Behind "N other seasons": "<yy-yy> Preseason" (at his projected minutes: preseason minutes are rotations)
   and the older seasons (the latest past one stays visible). Delta under each vs the season from 10 games,
   else vs the running projection; percentages in points; grey under 6% / 1 point. Values are tinted with
   Daily Leaders' `zAura` (z of the average game; none on the Running Projection row). The same name labels
