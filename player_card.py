@@ -90,6 +90,11 @@ def _cell(cat, line, league):
     return '–' if v is None else (round(v, 1) if isinstance(v, float) else v)
 
 
+def _short(season):
+    """'2026-27' -> '26-27'."""
+    return f"{season[2:4]}-{season[5:7]}"
+
+
 def _note(games, minutes):
     """The sub-label under an average row: games and minutes a game."""
     return ' · '.join(x for x in (f'{games:.0f} g' if games else '', f'{minutes:.0f} min' if minutes else '') if x) or None
@@ -154,7 +159,7 @@ def card(league, player_id=None, name=None):
     games = [game(r, 'regular', l) for r, l in zip(rs_rows, rs_lines)] + \
             [game(r, 'preseason', l) for r, l in zip(pre_rows, pre_lines)]
 
-    year = int(season[:4]) + 1  # '2026-27' -> 2027, how the card names the current season
+    year = _short(season)  # '2026-27' -> '26-27', how the card names seasons
     proj_min = stats.get('MIN_proj') or 0
     rows = []
     n = len(rs_lines)
@@ -188,7 +193,7 @@ def card(league, player_id=None, name=None):
         line = {k: v / s.gp for k, v in line.items()}  # totals -> one average game; pooled ratios are unchanged
         line['_unknown'] = {'TECH'} if s.tech is None else set()
         values = _average(cats, [line], league, scale=scale)
-        rows.append({'key': f'y{s.season}', 'label': s.season,
+        rows.append({'key': f'y{s.season}', 'label': _short(s.season),
                      'note': f"{_note(s.gp, values['MIN'])} · {s.team}" if s.team else _note(s.gp, values['MIN']),
                      'values': values})
 
