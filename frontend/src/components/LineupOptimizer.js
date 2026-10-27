@@ -48,7 +48,6 @@ const weekChance = (side, points) => {
   return dist.slice(Math.floor(chances.length / 2) + 1).reduce((a, b) => a + b, 0);
 };
 const gamesCounted = (players) => plays(+(players || []).reduce((sum, p) => sum + p.plays, 0).toFixed(1));
-const lastName = (name) => name.split(' ').slice(-1)[0];
 
 // A player's week as one dot per day: lit where his team plays.
 const DayDots = ({ days, played, lit = 'bg-nba-orange' }) => (
@@ -356,8 +355,9 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 return (
                   <button key={col.key} onClick={() => setSelected(col.item.name)} aria-pressed={on} title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
                     className={`min-w-0 text-center text-xs pb-1 border-b ${on ? 'border-nba-orange' : 'border-gray-600'}`}>
-                    <span className={`block truncate font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {lastName(col.item.name)}{col.item.day && col.item.day > (progress.today || data.week_start) && <span className="font-normal text-gray-400"> {dayName(col.item.day)}</span>}</span>
-                    <span className="block truncate text-[10px] text-red-400">{col.item.drop ? `- ${lastName(col.item.drop)}` : 'open spot'}</span>
+                    <span className={`block break-words font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {col.item.name}</span>
+                    {col.item.day && <span className="block text-[10px] text-gray-400">{col.item.day > (progress.today || data.week_start) ? `from ${dayName(col.item.day)} ${shortDate(col.item.day)}` : `now (${shortDate(col.item.day)})`}</span>}
+                    <span className="block break-words text-[10px] text-red-400">{col.item.drop ? `- ${col.item.drop}` : 'open spot'}</span>
                   </button>
                 );
               })}
@@ -485,7 +485,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                         aria-label="Claim day">
                         {dayOptions.map(d => <option key={d} value={d}>{dayName(d)} {shortDate(d)}{d === (progress.today || data.week_start) ? ' (now)' : ''}</option>)}
                       </select>
-                      <span className="text-gray-500">he plays from then; {pick.drop ? `${lastName(pick.drop)} plays until the day before` : 'no drop'}</span>
+                      <span className="text-gray-500">he plays from then; {pick.drop ? `${pick.drop} plays until the day before` : 'no drop'}</span>
                     </label>
                   )}
                 </div>
@@ -508,13 +508,13 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                       </thead>
                       <tbody>
                         <tr className="border-t border-gray-600/40">
-                          <td className="py-1 text-gray-400 pr-2 whitespace-nowrap">Yours{pick.drop ? ` without ${lastName(pick.drop)}` : ''}</td>
+                          <td className="py-1 text-gray-400 pr-2 whitespace-nowrap">Yours{pick.drop ? ` without ${pick.drop}` : ''}</td>
                           {mineByDay.map((n, i) => past(days[i]) ? <td key={days[i]} className="text-center text-gray-600">-</td> : (
                             <td key={days[i]} className={`text-center ${isOpen(n) ? 'text-amber-300' : 'text-gray-200'}`} title={isOpen(n) ? 'Open slot: a pickup who plays this day adds a game' : undefined}>{n}</td>
                           ))}
                         </tr>
                         <tr className="border-t border-gray-600/40">
-                          <td className="py-1 text-white pr-2 whitespace-nowrap">{lastName(pick.name)}</td>
+                          <td className="py-1 text-white pr-2 whitespace-nowrap">{pick.name}</td>
                           {days.map((d, i) => {
                             if (past(d) || !pickDays.includes(d)) return <td key={d}></td>;
                             if (!openSlots) return <td key={d} className="text-center text-gray-200">plays</td>;
