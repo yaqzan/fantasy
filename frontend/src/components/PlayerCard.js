@@ -99,13 +99,14 @@ const auraStyle = (z) => { const a = zAura(z); return a ? { color: a.color, text
 const STICKY = 'sticky left-0 z-[1] bg-gray-800';
 
 // Averages and game log share one column layout (label with games and minutes, categories) so the columns line up.
-const tableStyle = (n) => ({ minWidth: `calc(11rem + ${n} * 2.75rem)` });
+// Phones: a 7rem label and 1.9rem stat columns, so 9 stats fill a 390px sheet; sm and up keep the roomy sizes (index.css --pc-*).
+const tableStyle = (n) => ({ minWidth: `calc(var(--pc-label) + ${n} * var(--pc-stat))` });
 function Cols({ n, extra = 0 }) {
   return (
     <colgroup>
-      <col style={{ width: '11rem' }} />
-      {Array.from({ length: n }, (_, i) => <col key={i} style={{ width: '2.75rem' }} />)}
-      {extra > 0 && <col style={{ width: '2.5rem' }} />}
+      <col style={{ width: 'var(--pc-label)' }} />
+      {Array.from({ length: n }, (_, i) => <col key={i} style={{ width: 'var(--pc-stat)' }} />)}
+      {extra > 0 && <col style={{ width: 'var(--pc-stat)' }} />}
     </colgroup>
   );
 }
@@ -122,7 +123,7 @@ function Averages({ card, columns }) {
   const rows = [...main, ...(history[0] ? [history[0]] : []), ...(older ? rest : [])];
   const hidden = rest.length;
   return (
-    <table className="w-full table-fixed border-collapse tabular-nums text-xs" style={tableStyle(columns.length)}>
+    <table className="pc-table w-full table-fixed border-collapse tabular-nums text-[11px] sm:text-xs" style={tableStyle(columns.length)}>
       <Cols n={columns.length} />
       <thead>
         <tr>
@@ -133,12 +134,12 @@ function Averages({ card, columns }) {
       <tbody>
         {rows.map(r => (
           <tr key={r.key} className="border-t border-gray-700">
-            <td className={`${STICKY} pl-3 pr-2 py-1.5 text-left whitespace-nowrap`} title={r.title || undefined}>
+            <td className={`${STICKY} pl-2 pr-1 sm:pl-3 sm:pr-2 py-1.5 text-left`} title={r.title || undefined}>
               <span className="text-gray-300 text-[11px]">{r.label}</span>
               {r.note && <span className="block text-[10px] text-gray-500 leading-tight">{r.note}</span>}
             </td>
             {columns.map(c => (
-              <td key={c.key} className={`text-center px-0.5 py-1.5 whitespace-nowrap ${c.key === 'FPTS' ? 'bg-white/10' : ''}`}>
+              <td key={c.key} className={`text-center px-0 sm:px-0.5 py-1.5 whitespace-nowrap ${c.key === 'FPTS' ? 'bg-white/10' : ''}`}>
                 <span className={r.key === card.delta_base ? 'font-semibold' : ''} style={auraStyle(r.values._z?.[c.key])}>{fmtAvg(c, r.values[c.key])}</span>
                 {base && r !== base ? <Delta c={c} v={r.values[c.key]} base={base.values[c.key]} />
                   : <span className="block text-[10px] leading-tight">&nbsp;</span>}
@@ -163,35 +164,35 @@ function Averages({ card, columns }) {
 function GameLog({ card, columns, points }) {
   const row = (g, i) => (
     <tr key={`${g.kind}${g.date}`} className={`border-t ${g.kind === 'preseason' ? 'opacity-50 border-gray-700' : i === 5 || i === 10 ? 'border-dashed border-gray-500' : 'border-gray-700'}`}>
-      <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap ${g.date === TODAY() ? TODAY_MARK : ''}`}>
+      <td className={`${STICKY} pl-2 pr-1 sm:pl-3 sm:pr-2 py-1 text-left sm:whitespace-nowrap ${g.date === TODAY() ? TODAY_MARK : ''}`}>
         <span className="text-gray-300">{shortDate(g.date)}</span>
         <span className="text-gray-500 text-[10px] ml-1">{g.opp || ''}</span>
         <span className={`text-[10px] ml-1 ${g.w ? 'text-green-400' : 'text-red-400'}`}>{g.w ? 'W' : 'L'}</span>
         {g.min != null && <span className="text-[10px] ml-1.5 text-sky-300/70 font-medium">{g.min}m</span>}
       </td>
       {columns.map(c => (
-        <td key={c.key} className={`text-center px-0.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white bg-white/10' : 'text-gray-200'} `}
+        <td key={c.key} className={`text-center px-0 sm:px-0.5 py-1 whitespace-nowrap ${c.key === 'FPTS' ? 'font-semibold text-white bg-white/10' : 'text-gray-200'} `}
             title={!points && g.z?.[c.key] != null ? `z ${signed(g.z[c.key])}` : undefined}>
           <span style={points ? undefined : auraStyle(g.z?.[c.key])}>{c.key === 'FPTS' && typeof g.cells[c.key] === 'number' ? Math.round(g.cells[c.key]) : g.cells[c.key]}</span>
         </td>
       ))}
-      {!points && <td className={`text-center px-0.5 py-1 font-semibold text-white border-l border-gray-700`}><span style={auraStyle(g.value / 3)}>{signed(g.value.toFixed(1))}</span></td>}
+      {!points && <td className={`text-center px-0 sm:px-0.5 py-1 font-semibold text-white border-l border-gray-700`}><span style={auraStyle(g.value / 3)}>{signed(g.value.toFixed(1))}</span></td>}
     </tr>
   );
   return (
-    <table className="w-full table-fixed border-collapse tabular-nums text-xs" style={tableStyle(columns.length)}>
+    <table className="pc-table w-full table-fixed border-collapse tabular-nums text-[11px] sm:text-xs" style={tableStyle(columns.length)}>
       <Cols n={columns.length} extra={points ? 0 : 1} />
       <thead>
         <tr>
           <th className={`${STICKY} bg-th text-onth text-left pl-3 pr-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide`}>Game</th>
-          {columns.map(c => <th key={c.key} className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-1.5" title={c.name}>{c.label}</th>)}
+          {columns.map(c => <th key={c.key} className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0 sm:px-1.5" title={c.name}>{c.label}</th>)}
           {!points && <th className="bg-th text-onth text-[10px] font-semibold uppercase tracking-wide px-0.5 border-l border-gray-700" title="Summed category z, as on Daily Leaders">Z</th>}
         </tr>
       </thead>
       <tbody>
         {(card.upcoming || []).map(u => (
           <tr key={`up${u.date}`} className="border-t border-gray-700 text-gray-500">
-            <td className={`${STICKY} pl-3 pr-2 py-1 text-left whitespace-nowrap ${u.date === TODAY() ? TODAY_MARK : ''}`}>
+            <td className={`${STICKY} pl-2 pr-1 sm:pl-3 sm:pr-2 py-1 text-left sm:whitespace-nowrap ${u.date === TODAY() ? TODAY_MARK : ''}`}>
               <span>{shortDate(u.date)}</span><span className="text-[10px] ml-1">{u.opp}</span>
             </td>
             {columns.map(c => <td key={c.key} className={c.key === 'FPTS' ? 'bg-white/10' : ''} />)}
