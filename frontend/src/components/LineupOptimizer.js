@@ -2,23 +2,24 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { analyze, getPickups, errorMessage } from '../services/api';
 import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
 import { WeekSelect, defaultWeekStart, validWeek, selectClass, shortDate, weekdayLetter, weekDays } from '../weeks';
-import { orderColumns } from '../dailyLeaders';
+import { orderColumns, zAura } from '../dailyLeaders';
 
 const pct = (x) => `${Math.round(x * 100)}%`;
 const signed = (x, digits = 2) => `${x > 0 ? '+' : x < 0 ? '-' : ''}${Math.abs(x).toFixed(digits)}`;
 const plays = (n) => (Number.isInteger(n) ? n : n.toFixed(1));
 const deltaClass = (x) => x > 0.0005 ? 'text-green-400' : x < -0.0005 ? 'text-red-400' : 'text-gray-500';
 const pointsDelta = (d) => `${d > 0 ? '+' : ''}${Math.round(d * 100)}`;   // a chance change in percentage points
-// Who is favoured in a category: green 55%+, red 45% or less, grey between (a toss-up).
-const lean = (chance) => chance == null ? 'even' : chance >= 0.55 ? 'win' : chance <= 0.45 ? 'lose' : 'even';
-const chipClass = (chance) => ({ win: 'bg-green-900/70 text-green-300', lose: 'bg-red-900/70 text-red-300', even: 'bg-gray-600 text-gray-300' })[lean(chance)];
-
-// A chance as a coloured chip: the colour is the whole message (green favoured, red against, grey toss-up).
-const Chip = ({ chance, fallback = '-', bold, faded }) => (
-  <span className={`inline-block min-w-[2.75rem] rounded text-center py-0.5 px-1 tabular-nums ${bold ? 'font-bold' : 'font-semibold'} ${chipClass(chance)} ${faded ? 'opacity-50' : ''}`}>
-    {chance == null ? fallback : pct(chance)}
-  </span>
-);
+// A chance as a Daily Leaders aura (owner, 2026-10-27): no fill, the number is tinted on a gradient of how far it is from a toss-up
+// (green favoured, red against, grey near 50%) and glows at the high end. 72% is ~1 SD, 95% full.
+const Chip = ({ chance, fallback = '-', bold, faded }) => {
+  const aura = chance == null ? null : zAura((chance - 0.5) / 0.225);
+  return (
+    <span className={`inline-block min-w-[2.75rem] text-center py-0.5 px-1 tabular-nums ${bold ? 'font-bold' : 'font-semibold'} ${aura ? '' : 'text-gray-300'} ${faded ? 'opacity-50' : ''}`}
+      style={aura ? { color: aura.color, textShadow: aura.glow } : undefined}>
+      {chance == null ? fallback : pct(chance)}
+    </span>
+  );
+};
 
 // A pick's cell in the category grid: his chance chip and its change from Now (faded when little moves).
 const Cell = ({ chance, base, fallback = '-', bold }) => {
@@ -315,9 +316,9 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
               </div>
               <div className="text-center">
                 {baseChance != null ? (
-                  <div className={`rounded-lg px-3 py-1.5 ${chipClass(baseChance)}`}>
-                    <div className="text-xl sm:text-2xl font-bold leading-none">{pct(baseChance)}</div>
-                    <div className="text-[11px]">to win the week</div>
+                  <div className="px-3 py-1.5">
+                    <div className="text-2xl sm:text-3xl font-bold leading-none"><Chip chance={baseChance} bold /></div>
+                    <div className="text-[11px] text-gray-400">to win the week</div>
                   </div>
                 ) : <div className="text-xs text-gray-400 max-w-[8rem]">Opponent TBD: your projected week only</div>}
               </div>
@@ -356,7 +357,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                   <button key={col.key} onClick={() => setSelected(col.item.name)} aria-pressed={on} title={`Add ${col.item.name}${col.item.drop ? `, drop ${col.item.drop}` : ''}`}
                     className={`min-w-0 text-center text-xs pb-1 border-b ${on ? 'border-nba-orange' : 'border-gray-600'}`}>
                     <span className={`block break-words font-semibold ${on ? 'text-nba-orange' : 'text-gray-100'}`}>+ {col.item.name}</span>
-                    {col.item.day && <span className="block text-[10px] text-gray-400">{col.item.day > (progress.today || data.week_start) ? `from ${dayName(col.item.day)} ${shortDate(col.item.day)}` : `now (${shortDate(col.item.day)})`}</span>}
+                    {col.item.day && <span className="block text-[10px] text-gray-400">{col.item.day > (progress.today || data.week_start) ? `${dayName(col.item.day)} ${shortDate(col.item.day)}` : `before 7pm (${shortDate(col.item.day)})`}</span>}
                     <span className="block break-words text-[10px] text-red-400">{col.item.drop ? `- ${col.item.drop}` : 'open spot'}</span>
                   </button>
                 );
