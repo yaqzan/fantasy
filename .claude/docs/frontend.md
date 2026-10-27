@@ -74,6 +74,7 @@ daily-lineup leagues only) and a fold with both rosters. Previews are real `/api
 add+drop, never client maths (only the week-win chance is derived: Poisson-binomial over the category chances). Category
 order is `orderColumns`. `/api/analyze` returns `opponent_players` and per-player `days`. Points leagues have one row
 (Win the week) and no Helps filter.
+Scoreboard (owner, 2026-10-27): no date/claims/games footer line (the week dropdown has the dates). Under each side's score: `n/N claims` (`claims_left`, `opponent_claims_left`) and `left/total games` (expected games still to play over played + left; played = `games_played` from week_actuals `carried['GP']`). A footer only shows live games, league-average / no-opponent notes, partial box scores.
 
 ## Deploying a change
 

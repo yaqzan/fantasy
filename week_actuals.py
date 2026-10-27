@@ -136,6 +136,7 @@ class WeekActuals:
                     carried[stat] += line.get(stat) or 0
                 carried['AST-TOV'] += (line.get('AST') or 0) - (line.get('TOV') or 0)
                 carried['WIN%'] += line.get('W') or 0
+                carried['GP'] += 1    # player-games counted so far (the page's games played)
                 if league.is_points:
                     carried['FPTS'] += fantasy_points(line, league.point_weights)
         self._cache[key] = dict(carried)

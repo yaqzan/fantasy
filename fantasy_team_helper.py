@@ -96,11 +96,11 @@ def my_il_players(league):
         (FantasyTeamPlayer.fantasy_team_id == team.id) & (FantasyTeamPlayer.il == True))}  # noqa: E712
 
 
-def claims_left(league, week_start):
-    """Pickups I have left in the week starting `week_start`: the league's claims_per_week, less what the platform
-    says I've used when its count is for that week (pull_yahoo.py sync); else the full allowance."""
+def claims_left(league, week_start, team_abv=None):
+    """Pickups a team (default mine) has left in the week starting `week_start`: the league's claims_per_week, less what
+    the platform says it has used when its count is for that week (pull_yahoo.py sync); else the full allowance."""
     per_week = league.claims_per_week
-    team = get_team_by_abv(league, league.my_team)
+    team = get_team_by_abv(league, team_abv or league.my_team)
     if not team or team.adds_used is None or not team.adds_week:
         return per_week
     starts = sorted(s for s, _ in league.schedule)

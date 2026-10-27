@@ -47,7 +47,19 @@ const weekChance = (side, points) => {
   });
   return dist.slice(Math.floor(chances.length / 2) + 1).reduce((a, b) => a + b, 0);
 };
-const gamesCounted = (players) => plays(+(players || []).reduce((sum, p) => sum + p.plays, 0).toFixed(1));
+// Games still to play over the week's total (played + still to come), as whole numbers: 25/36.
+const gamesFraction = (players, played) => {
+  const left = (players || []).reduce((sum, p) => sum + p.plays, 0);
+  return { left: Math.round(left), total: Math.round(left + (played || 0)) };
+};
+
+// Under a side's score: its claims left and games still to play over the week's total.
+const TeamFacts = ({ claims, perWeek, games, right }) => (
+  <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400 tabular-nums ${right ? 'justify-end' : ''}`}>
+    {claims != null && <span title="Pickup claims left this week"><span className="font-semibold text-gray-100">{claims}</span>/{perWeek} claim{perWeek === 1 ? '' : 's'}</span>}
+    <span title="Games still to play (expected) over the week's total"><span className="font-semibold text-gray-100">{games.left}</span>/{games.total} games</span>
+  </div>
+);
 
 // A player's week as one dot per day: lit where his team plays.
 const DayDots = ({ days, played, lit = 'bg-nba-orange' }) => (
@@ -215,7 +227,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const scoreTheirs = !data ? null : progress.started
     ? (points ? nowTotal('theirs')?.toFixed(0) : data.current.leading != null ? data.categories.length - data.current.leading : null)
     : (points ? data.current.categories.FPTS?.theirs?.toFixed(0) : data.current.expected != null ? (data.categories.length - data.current.expected).toFixed(1) : null);
-  const scoreLabel = points ? (progress.started ? 'points so far' : 'projected points') : (progress.started ? 'categories ahead now' : 'categories expected');
+  const scoreLabel = points ? (progress.started ? '' : 'projected points') : (progress.started ? 'categories ahead now' : 'categories expected');
   // The columns beside "Now" in the category grid.
   const columns = [best, second].filter(Boolean).map(c => ({ key: keyOf(c), item: c, side: sideOf(c), error: errorOf(c) }));
   const pending = (col) => col.error ? '-' : '...';
@@ -312,6 +324,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 <div className="text-sm font-semibold text-mine">You</div>
                 <div className="text-2xl sm:text-3xl font-bold text-mine">{scoreMine != null ? scoreMine : '-'}</div>
                 <div className="text-xs text-gray-400">{scoreLabel}</div>
+                <TeamFacts claims={data.claims_left ?? claims} perWeek={claims} games={gamesFraction(data.current.players, data.current.games_played)} />
               </div>
               <div className="text-center">
                 {baseChance != null ? (
@@ -325,19 +338,17 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 <div className="text-sm font-semibold text-opp truncate" title={hasOpponent ? opponentLabel : undefined}>{hasOpponent ? opponentLabel : 'Opponent'}</div>
                 {hasOpponent && <div className="text-2xl sm:text-3xl font-bold text-opp">{scoreTheirs != null ? scoreTheirs : '-'}</div>}
                 <div className="text-xs text-gray-400">{hasOpponent ? scoreLabel : ''}</div>
+                {data.opponent_players && <TeamFacts right claims={data.opponent_claims_left} perWeek={claims} games={gamesFraction(data.opponent_players, data.opponent_games_played)} />}
               </div>
             </div>
-            <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-600 text-center">
-              {shortDate(data.week_start)} to {shortDate(data.week_end)}
-              {progress.started && (progress.live > 0
-                ? <>{' · '}<span className="text-green-400">{progress.live} live</span>{progress.final > 0 && ` · ${progress.final} final`}</>
-                : ` · ${progress.final} games final`)}
-              {' · '}<span className="text-gray-200">{data.claims_left ?? claims}</span>/{claims} claim{claims === 1 ? '' : 's'} left
-              {' · '}<span title="Games still to play, expected: you vs them">{gamesCounted(data.current.players)}{data.opponent_players && <> vs {gamesCounted(data.opponent_players)}</>} games{progress.started ? ' left' : ''}</span>
-              {data.opponent === 'league average' && ` · vs the league average${data.scheduled_opponent ? ` (${data.scheduled_opponent} has no roster yet)` : ''}`}
-              {!data.scheduled_opponent && ' · no opponent scheduled'}
-              {progress.partial && <span className="text-amber-400" title="Some box scores could not be loaded; those games are still projected"> · partial</span>}
-            </p>
+            {(progress.live > 0 || data.opponent === 'league average' || !data.scheduled_opponent || progress.partial) && (
+              <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-600 text-center">
+                {progress.live > 0 && <span className="text-green-400">{progress.live} live</span>}
+                {data.opponent === 'league average' && `${progress.live > 0 ? ' · ' : ''}vs the league average${data.scheduled_opponent ? ` (${data.scheduled_opponent} has no roster yet)` : ''}`}
+                {!data.scheduled_opponent && `${progress.live > 0 ? ' · ' : ''}no opponent scheduled`}
+                {progress.partial && <span className="text-amber-400" title="Some box scores could not be loaded; those games are still projected"> · partial</span>}
+              </p>
+            )}
           </div>
 
           {/* Categories and the comparison in one grid (owner, 2026-10-26): categories sorted by your chance (green at

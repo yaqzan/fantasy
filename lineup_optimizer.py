@@ -265,6 +265,7 @@ def _side_json(week, side, theirs, suffix, theirs_now=None):
     mine_now = week.so_far(side.carried)
     return {
         'expected': round(sum(chances.values()), 2) if theirs else None,
+        'games_played': int(side.carried.get('GP', 0)) if side.carried else 0,
         'leading': _leading(mine_now, theirs_now, league) if mine_now and theirs_now else None,
         'categories': {c: {'mine': side.totals[c][0], 'theirs': theirs[c][0] if theirs else None,
                            'chance': round(chances[c], 3) if theirs else None,
@@ -338,7 +339,10 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
     opponent_team = get_team_by_abv(league, opponent_abv) if opponent_abv else None
     if label and label != 'league average' and opponent_team is not None:
         # players only: theirs=None skips the category chances this would throw away
-        result['opponent_players'] = _side_json(week, week.team(_roster(opponent_team), suffix), None, suffix)['players']
+        their_side = _side_json(week, week.team(_roster(opponent_team), suffix), None, suffix)
+        result['opponent_players'] = their_side['players']
+        result['opponent_games_played'] = their_side['games_played']
+        result['opponent_claims_left'] = claims_left(league, week_start, opponent_abv)
     if adds or drops:
         added = [p for p in adds if p in week.stats and p not in roster]
         what_if = [p for p in roster if p not in drops] + added
