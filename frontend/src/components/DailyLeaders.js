@@ -342,12 +342,11 @@ const DailyLeaders = ({ config }) => {
             <span className="sm:hidden">{short}</span><span className="hidden sm:inline">{label}</span>{key !== 'all' && counts[key] ? <span className="hidden sm:inline opacity-70"> {counts[key]}</span> : ''}
           </button>
         ))}
-        {(ownerOn.length > 0 || gameId !== null) && (
-          <button onClick={() => { setView({ owner: 'all' }); setGameId(null); }}
-                  className="shrink-0 px-1.5 sm:px-2.5 py-1 rounded-full border border-gray-600 text-xs font-medium text-gray-300 hover:text-white">
-            Clear
-          </button>
-        )}
+        <button onClick={() => { setView({ owner: 'all' }); setGameId(null); }}
+                disabled={!(ownerOn.length > 0 || gameId !== null)}
+                className={`shrink-0 px-1.5 sm:px-2.5 py-1 rounded-full border border-gray-600 text-xs font-medium text-gray-300 hover:text-white ${ownerOn.length > 0 || gameId !== null ? '' : 'invisible'}`}>
+          Clear
+        </button>
         <div className="shrink-0 flex rounded-full border border-gray-600 text-xs overflow-hidden"
              title="Best: what he put up tonight in this league's scoring. Pace: how far ahead of his own per-minute norm.">
           {[['val', 'Best'], ['pace', 'Pace']].map(([key, label]) => (
