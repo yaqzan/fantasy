@@ -21,11 +21,11 @@ export default function useLeagueViewState(leagueId, tab, defaults, sanitize = (
 
 // The stats choices every tab offers. 'projected' is THE projection: the model moved by this season's preseason
 // games and then by his real games, with extra weight on the last 10 (backend inseason.py). The rest are plain averages.
-// The NBA season now running as '26-27' (the season starts in October).
+// The NBA season now running as '2026-27' (the season starts in October).
 export const seasonLabel = () => {
   const d = new Date();
   const y = d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
-  return `${String(y % 100).padStart(2, '0')}-${String((y + 1) % 100).padStart(2, '0')}`;
+  return `${y}-${String((y + 1) % 100).padStart(2, '0')}`;
 };
 
 export const statOptions = () => [
