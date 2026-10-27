@@ -22,6 +22,7 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 
 - Previews are real `/api/analyze?add=&drop=&day=` calls; the page never does model maths (only the week-win chance, Poisson-binomial).
 - Mid-week the roster is today's (no transaction history); past daily lineups assume the best-fitting players started.
+- Yahoo waiver players: `pull_yahoo.py sync` stores the day they clear in `league_player_flags.waiver_until`; `Week.add_days` never offers a claim before it (a claim lands that day). Stale until the next sync.
 - A claim is assumed to take effect at once; a player in a started game can't be dropped that day.
 - Fantrax leagues report no claims used, so "no claims left -> next week" only fires for Yahoo (Courtside).
 - A stored next-week choice is overridden on a week's last day while a claim remains; the owner's own week choice is lost on tab unmount.

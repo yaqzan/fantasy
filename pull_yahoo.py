@@ -41,6 +41,7 @@ import json
 import os
 import pickle
 import time
+from datetime import date
 import xml.etree.ElementTree as ET
 from urllib.parse import urlencode
 
@@ -248,6 +249,21 @@ def available_players(key):
         start += PAGE
 
 
+def waiver_players(key):
+    """{name: the day he clears waivers} for every player Yahoo has on waivers, page by page."""
+    out, start = {}, 0
+    while True:
+        root = fetch(f'league/{key}/players;status=W;start={start};count={PAGE};out=ownership')
+        nodes = list(root.iter(f"{{{NS['y']}}}player"))
+        for p in nodes:
+            day = _text(p, 'y:ownership/y:waiver_date')
+            if day:
+                out[_text(p, 'y:name/y:full')] = date.fromisoformat(day)
+        if len(nodes) < PAGE:
+            return out
+        start += PAGE
+
+
 def sync(yahoo_league, apply):
     from fantasy_database import DB, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag, Player
     from fantasy_team_helper import set_league_flags, league_team_ids
@@ -339,6 +355,16 @@ def sync(yahoo_league, apply):
                 undroppable_adds += 1
                 if apply:
                     set_league_flags(league, player.id, undroppable=True)
+        on_waivers = {ours(n).id: day for n, day in waiver_players(key).items() if ours(n)}
+        waiver_changes = 0
+        for pid in set(on_waivers) | {pid for pid, f in flags.items() if f.waiver_until}:
+            want_day = on_waivers.get(pid)
+            if (flags[pid].waiver_until if pid in flags else None) != want_day:
+                waiver_changes += 1
+                if apply:
+                    set_league_flags(league, pid, waiver_until=want_day)
+        print(f'  waivers: {len(on_waivers)} players, {waiver_changes} dates to update')
+        changes += waiver_changes
         yahoo_undroppable = {ours(p['name']) for t in rosters for p in t['players'] if p['undroppable']}
         kept = [players_by_id[pid].name for pid, f in flags.items()
                 if f.undroppable and players_by_id.get(pid) not in yahoo_undroppable]

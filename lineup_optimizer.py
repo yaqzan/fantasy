@@ -18,7 +18,7 @@ from player_stats import (league_player_stats, week_schedule, player_week_games,
                           calculate_team_totals, AVAILABILITY,
                           average_week_totals, category_win_chances, category_margins, small_sample_floor, STAT_SUFFIXES, default_stat_type)
 from week_actuals import week_actuals, lineup_of
-from fantasy_team_helper import (get_all_my_team_players, my_il_players, claims_left, get_available_players, get_current_fantasy_week_dates,
+from fantasy_team_helper import (get_all_my_team_players, my_il_players, claims_left, get_available_players, get_waiver_dates, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_team_by_abv)
 
 Side = namedtuple('Side', 'totals games wins carried')  # a roster's week: team_week_totals, games, wins per player, the played part (week_actuals)
@@ -60,6 +60,7 @@ class Week:
         # A week under way: games already played are facts (self.actual), the model projects only the rest.
         self.actual = week_actuals(week_start, week_end)
         self.remaining, self.day_weights = self.actual.remaining(self.schedule) if self.actual else (self.schedule, None)
+        self.waivers = get_waiver_dates(league)   # {free agent: the day he clears waivers}
         self.opponent_now = None   # {category: total so far} of the opponent Week.opponent last returned
 
     @property
@@ -68,16 +69,20 @@ class Week:
         return max(self.week_start, self.actual.today) if self.actual else self.week_start
 
     def add_games(self, name):
-        """The days of his team's games a claim could still catch (unplayed, not under way), earliest first."""
+        """The days of his team's games a claim could still catch (unplayed, not under way, and not before he
+        clears waivers: a claim on him lands on that day), earliest first."""
         team = self.stats[name]['TEAM']
         tipped = self.actual.tipped if self.actual else ()
-        return sorted(d for d in self.remaining.get(team, {}) if d >= self.start_day and (team, d) not in tipped)
+        first = max(self.start_day, self.waivers.get(name, self.start_day))
+        return sorted(d for d in self.remaining.get(team, {}) if d >= first and (team, d) not in tipped)
 
     def add_days(self, name):
         """The days a pickup can start from, earliest first: now (a drop that is not worth keeping goes at once), then
         each of his team's games that has not tipped (adding him later keeps the drop's earlier games)."""
         games = self.add_games(name)
-        return sorted({self.start_day, *games}) if games else []
+        if not games:
+            return []
+        return sorted({max(self.start_day, self.waivers.get(name, self.start_day)), *games})
 
     def can_drop_on(self, name, day):
         """A player whose team's game is under way is locked in his slot: no claim can drop him that day."""

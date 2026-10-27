@@ -9,7 +9,7 @@ or overwritten. An install from before leagues existed (teams with no league, a 
 import json
 import os
 
-from peewee import MySQLDatabase, IntegerField, CharField, TextField, BooleanField
+from peewee import MySQLDatabase, IntegerField, CharField, TextField, BooleanField, DateField
 
 from fantasy_config import DB_NAME, DB_CONFIGS
 
@@ -65,6 +65,8 @@ def upgrade_schema(DB):
         ops.append(migrator.add_column('players', 'injured_return', CharField(max_length=16, null=True)))
     if 'positions' not in {c.name for c in DB.get_columns('league_player_flags')}:
         ops.append(migrator.add_column('league_player_flags', 'positions', CharField(max_length=32, null=True)))
+    if 'waiver_until' not in {c.name for c in DB.get_columns('league_player_flags')}:
+        ops.append(migrator.add_column('league_player_flags', 'waiver_until', DateField(null=True)))
     if 'price' not in {c.name for c in DB.get_columns('fantasy_team_players')}:
         ops.append(migrator.add_column('fantasy_team_players', 'price', IntegerField(null=True)))
     if ops:

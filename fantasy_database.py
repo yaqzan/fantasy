@@ -165,6 +165,8 @@ class LeaguePlayerFlag(BaseModel):
     undroppable = BooleanField(default=False)
     # The league platform's position eligibility, e.g. "PG,SG" (pull_yahoo.py); None = NBA's positions.
     positions = CharField(max_length=32, null=True)
+    # A free agent still on waivers: the day he clears (pull_yahoo.py). A claim can't land before it; None = free now.
+    waiver_until = DateField(null=True)
 
     class Meta:
         table_name = 'league_player_flags'

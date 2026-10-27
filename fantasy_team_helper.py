@@ -141,6 +141,14 @@ def set_league_flags(league, player_id, **fields):
         LeaguePlayerFlag.create(league=league.id, player=player_id, **fields)
 
 
+def get_waiver_dates(league):
+    """{player name: the day he clears waivers} for this league's players still on waivers."""
+    rows = (LeaguePlayerFlag.select(Player.name, LeaguePlayerFlag.waiver_until).join(Player)
+            .where((LeaguePlayerFlag.league == league.id) & LeaguePlayerFlag.waiver_until.is_null(False)
+                   & (LeaguePlayerFlag.waiver_until >= date.today())))
+    return {r.player.name: r.waiver_until for r in rows}
+
+
 def get_injured_players():
     """Injured players (NBA-wide, not per league)."""
     return [player.name for player in Player.select(Player.name).where(Player.injured == 1)]
