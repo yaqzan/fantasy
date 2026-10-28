@@ -9,7 +9,7 @@ Then one row per past season (last HISTORY_SEASONS, from player_seasons totals /
 Deltas are against the season once he has DELTA_SEASON_GAMES games, else against the projection.
 Each game is scored exactly as Daily Leaders scores it (daily_leaders.score_line): summed category z
 in category leagues, fantasy points in points leagues."""
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 from daily_leaders import _ratio, game_value, league_scale, league_stats, nba_today, owners, score_line, slate
@@ -218,28 +218,42 @@ def card(league, player_id=None, name=None):
 
     # Tonight's game, live or final but not yet in game_lines (that lands after the night): the line
     # Daily Leaders holds, so the log shows it as it happens.
-    today = nba_today().isoformat()
-    tonight = next((u for u in upcoming if u['date'] == today), None)
-    if tonight:
+    # Past Eastern midnight "tonight" is already yesterday's slate and its game may not be in
+    # game_lines yet (the NBA pull lands later in the morning), so yesterday is checked too.
+    today_d = nba_today()
+    played = {r.game_date for r in rs_rows}
+    for day in (today_d - timedelta(days=1), today_d):  # oldest first: each insert(0) leaves the newest on top
+        if day in played or not player.team:
+            continue
+        mine = next((u for u in upcoming if u['date'] == day.isoformat()), None)
         try:
             from projections import norm_name
-            cur = slate(nba_today())
+            cur = slate(day)
             me = norm_name(player.name)
             state = {t['abbr']: g['state'] for g in cur['scoreboard'] for t in g['teams']}
             line = next((l for lines in cur['games'].values() for l in lines.values() if norm_name(l['name']) == me), None)
-        except Exception:  # ESPN hiccup: the log just lacks tonight's row
+        except Exception:  # ESPN hiccup: the log just lacks that row
             line = None
-        if line:
-            line = {**line, '_unknown': set()}
-            live = SimpleNamespace(game_date=nba_today(), team=player.team, w=line['W'], min=line['MIN'],
-                                   plus_minus=line['PLUS_MINUS'], matchup=None)
-            opp[live.game_date] = tonight['opp']
-            row = game(live, 'regular', line)
-            row['live'] = state.get(line['team']) == 'in'
-            if line['W'] is None and 'WIN%' in row['cells']:
-                row['cells']['WIN%'] = '…'  # the result isn't known until the game ends
-            games.insert(0, row)
-            upcoming.remove(tonight)
+        if not line:
+            continue
+        if mine:
+            opp[day] = mine['opp']
+        else:  # a past day is not in `upcoming`: its opponent from the stored schedule
+            g = Game.get_or_none((Game.date == day) & ((Game.team_home == player.team) | (Game.team_away == player.team)))
+            if g:
+                home = g.team_home == player.team
+                other = g.team_away if home else g.team_home
+                opp[day] = f"{'vs' if home else '@'} {abv_of.get(other, other[:3].upper())}"
+        line = {**line, '_unknown': set()}
+        live = SimpleNamespace(game_date=day, team=player.team, w=line['W'], min=line['MIN'],
+                               plus_minus=line['PLUS_MINUS'], matchup=None)
+        row = game(live, 'regular', line)
+        row['live'] = state.get(line['team']) == 'in'
+        if line['W'] is None and 'WIN%' in row['cells']:
+            row['cells']['WIN%'] = '…'  # the result isn't known until the game ends
+        games.insert(0, row)
+        if mine:
+            upcoming.remove(mine)
     upcoming.reverse()  # newest first like the log: the next game sits right above the last one played
     return {
         'upcoming': upcoming,
