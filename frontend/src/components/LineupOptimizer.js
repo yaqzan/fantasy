@@ -461,12 +461,15 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                         <span className="text-sm font-medium text-white truncate"><span className="text-gray-500 mr-1.5">{index + 1}</span><PlayerName name={c.name} /></span>
                         <span className={`text-sm font-bold shrink-0 ${deltaClass(c.gain)}`}>{points ? `${pointsDelta(c.gain)}%` : signed(c.gain)}</span>
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-gray-400">
-                        <span>{c.team_abv} · {c.positions.join('/')}</span>
-                        <span>{plays(c.plays)}/{c.games} games</span>
-                        {c.day > (progress.today || data.week_start) && <span className="text-nba-orange" title="The best day to claim him: he replaces the drop from then">from {dayName(c.day)}</span>}
+                      {/* Fixed columns so the day dots line up from card to card, like a table. */}
+                      <div className="grid grid-cols-[7rem_3.5rem_max-content_1fr] items-center gap-x-2 mt-1 text-xs text-gray-400">
+                        <span className="truncate">{c.team_abv} · {c.positions.join('/')}</span>
+                        <span className="whitespace-nowrap">{plays(c.plays)}/{c.games} games</span>
                         <DayDots days={days} played={c.days} />
-                        {c.small_sample && <span className="text-amber-400" title="Small sample: his numbers come from only a few games">{c.gp} GP</span>}
+                        <span className="truncate">
+                          {c.day > (progress.today || data.week_start) && <span className="text-nba-orange" title="The best day to claim him: he replaces the drop from then">from {dayName(c.day)}</span>}
+                          {c.small_sample && <span className="ml-2 text-amber-400" title="Small sample: his numbers come from only a few games">{c.gp} GP</span>}
+                        </span>
                       </div>
                     </CardButton>
                   );
