@@ -29,6 +29,7 @@ Move = namedtuple('Move', 'key gain add drop side chances day')
 MARGIN_WEIGHT = 0.01  # a whole SD of lead in a category counts as 1% of a category won
 MOVE_POOL = 250      # free agents with games this week tried per claim, best Z-VALUE first (the best move
                      # sat at rank 130 of 421 on 2026-10-13, so 150 was cutting it close)
+EARLY_CLAIM_EDGE = 0.01  # a claim goes on an earlier day only when it beats the later one by this much (1% of a category)
 NEXT_CLAIM_POOL = 30  # later claims only retry the best candidates of the claim before
 
 
@@ -224,6 +225,16 @@ def rank_moves(week, roster, theirs, suffix, candidates, keep=(), owned=None, wi
                     m = play(add, drop, day)
                     if m and (best is None or m.key > best.key):
                         best = m
+        if best and daily:
+            # A claim only goes early when it pays: a day that adds under EARLY_CLAIM_EDGE over a later one (he'd
+            # sit on a full bench, covering only for an absent starter) is really a claim for the later day,
+            # the first where he starts, and holding off keeps the option open.
+            top = best
+            for day in options:
+                if day > top.day:
+                    later = play(add, top.drop, day)
+                    if later and later.key >= top.key - EARLY_CLAIM_EDGE:
+                        best = later
         if best:
             moves.append(best)
     moves.sort(key=lambda m: m.key, reverse=True)
