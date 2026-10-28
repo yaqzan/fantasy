@@ -195,15 +195,6 @@ function GameLog({ card, columns, points }) {
         </tr>
       </thead>
       <tbody>
-        {(card.upcoming || []).map(u => (
-          <tr key={`up${u.date}`} className="border-t border-gray-700 text-gray-500">
-            <td className={`${STICKY} pl-2 pr-1 sm:pl-3 sm:pr-2 py-1 text-left whitespace-nowrap text-[10px] sm:text-xs ${u.date === TODAY() ? TODAY_MARK : ''}`}>
-              <span>{shortDate(u.date)}</span><span className="text-[10px] ml-1">{u.opp}</span>
-            </td>
-            {columns.map(c => <td key={c.key} className={c.key === 'FPTS' ? 'bg-white/10' : ''} />)}
-            {!points && <td className="border-l border-gray-700" />}
-          </tr>
-        ))}
         {card.games.map((g, i) => row(g, g.kind === 'regular' ? i : -1))}
       </tbody>
     </table>
@@ -293,7 +284,10 @@ function PlayerCard({ target, open, onClose }) {
                           title="Yahoo's injury status">{['O', 'INJ'].includes(card.injury_status) ? 'OUT' : card.injury_status}</Chip>
                   )}
                   {card.injured && <Chip className="border-red-500 text-red-400">INJ{card.injured_return ? ` · ${card.injured_return}` : ''}</Chip>}
-                  {card.next_game && <Chip>Next: {weekday(card.next_game.date)} {card.next_game.opp}</Chip>}
+                  {(card.upcoming?.length ? [...card.upcoming].reverse() : card.next_game ? [card.next_game] : []).map((u, i) => (
+                    <Chip key={u.date} title={shortDate(u.date)}
+                          className={u.date === TODAY() ? 'border-nba-orange text-nba-orange' : ''}>{i === 0 ? 'Next: ' : ''}{weekday(u.date)} {u.opp}</Chip>
+                  ))}
                 </div>
               ) : <div className="mt-1 h-5" />}
             </div>
@@ -314,7 +308,7 @@ function PlayerCard({ target, open, onClose }) {
               {card.averages.length ? <Averages card={card} columns={columns} />
                 : <p className="px-3 pb-2 text-xs text-gray-500">No projection or games yet.</p>}
               <div className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-gray-500">Game log</div>
-              {card.games.length || card.upcoming?.length ? <GameLog card={card} columns={columns} points={points} />
+              {card.games.length ? <GameLog card={card} columns={columns} points={points} />
                 : <p className="px-3 pb-3 text-xs text-gray-500">No games this season yet.</p>}
               <div className="h-3" />
             </div>
