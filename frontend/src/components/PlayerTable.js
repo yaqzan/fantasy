@@ -237,6 +237,12 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
                             · {weeks.map(w => w.n).join(' + ')} GP
                           </span>
                         )}
+                        {!player.is_injured && player.injury_status && player.injury_status !== 'NA' && (
+                          <span className={`inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold text-white whitespace-nowrap ${['O', 'INJ'].includes(player.injury_status) ? 'bg-red-600' : 'bg-amber-600'}`}
+                                title="Yahoo's injury status">
+                            {['O', 'INJ'].includes(player.injury_status) ? 'OUT' : player.injury_status}
+                          </span>
+                        )}
                         {player.is_injured && (
                           <span className="inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold bg-red-600 text-white whitespace-nowrap"
                                 title={`INJ${player.injured_return ? ` - ${player.injured_return}` : ''}${player.injured_games ? ` (${player.injured_games} missed)` : ''}`}>

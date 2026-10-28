@@ -305,6 +305,7 @@ def get_fantasy_players():
             'auction_value_proj': stats.get('AUCTION_VALUE_proj', 0),
             'hot_overall': round(stats.get('Z-SCORE_5', 0) - stats.get('Z-SCORE', 0), 1),
             'is_injured': bool(player and player.injured == 1),
+            'injury_status': player.injury_status if player else None,  # Yahoo's: O/INJ out, Q/D/P/DTD day-to-day
             'injured_return': (player.injured_return if player and player.injured == 1 else None),
             'injured_games': ((player.injured_games_to_miss or None) if player and player.injured == 1 else None),
             'nba_year': stats.get('NBA_YEAR'),

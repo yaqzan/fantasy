@@ -259,7 +259,7 @@ def card(league, player_id=None, name=None):
         'upcoming': upcoming,
         'id': player.id, 'name': player.name, 'team': abv_of.get(player.team, player.team),
         'positions': list(stats.get('Positions') or ()) or [p for p in (player.positions or player.pos or '').split('-') if p],
-        'injured': bool(player.injured), 'injured_return': player.injured_return if player.injured else None,
+        'injured': bool(player.injured), 'injury_status': player.injury_status, 'injured_return': player.injured_return if player.injured else None,
         'rank': stats.get('Z-RANK_projected') or None, 'rank_season': stats.get('Z-RANK') if n else None,
         'owner': ('mine' if team[0] == league.my_team else 'taken') if team else 'free',
         'owner_name': team[1] if team else None, 'next_game': nxt,

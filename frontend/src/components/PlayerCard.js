@@ -288,6 +288,10 @@ function PlayerCard({ target, open, onClose }) {
                   {card.rank && <span title="Rank on the projection in this league">#{card.rank} proj</span>}
                   {card.rank_season && <span title="Rank on this season's games in this league">#{card.rank_season} season</span>}
                   {ownerChip}
+                  {!card.injured && card.injury_status && card.injury_status !== 'NA' && (
+                    <Chip className={['O', 'INJ'].includes(card.injury_status) ? 'border-red-500 text-red-400' : 'border-amber-500 text-amber-400'}
+                          title="Yahoo's injury status">{['O', 'INJ'].includes(card.injury_status) ? 'OUT' : card.injury_status}</Chip>
+                  )}
                   {card.injured && <Chip className="border-red-500 text-red-400">INJ{card.injured_return ? ` · ${card.injured_return}` : ''}</Chip>}
                   {card.next_game && <Chip>Next: {weekday(card.next_game.date)} {card.next_game.opp}</Chip>}
                 </div>
