@@ -32,7 +32,7 @@ stats) is shared by all leagues.
   available player's eligibility into `league_player_flags.positions`, Yahoo's can't-cut list into
   `undroppable` (a hand-set flag is never cleared, only reported). Its starting slots are compared
   with `roster.slots` and reported, never written. Names match through `projections.norm_name`.
-  IL slots and pickups used come from the same roster call: the optimizer leaves IL players out of the active roster (no spot, no games, never a drop) and `fantasy_team_helper.claims_left` takes the week's used adds off `claims_per_week` (`claims_left` in `/api/analyze` and `/api/pickups`); Fantrax leagues don't have either yet. Parsers are tested on Yahoo-shaped XML (`test_pull_yahoo.py`); transactions aren't read. `draft` writes Yahoo's
+  IL slots and pickups used come from the same roster call: the optimizer leaves IL players out of the active roster (no spot, no games, never a drop) and `fantasy_team_helper.claims_left` takes the week's used adds off `claims_per_week` (`claims_left` in `/api/analyze` and `/api/pickups`); Fantrax leagues don't read IL slots; their claims left come live from Fantrax (`fantrax_canon.claims_remaining`). Parsers are tested on Yahoo-shaped XML (`test_pull_yahoo.py`); transactions aren't read. `draft` writes Yahoo's
   round-1 order (teams' `draft_position`, empty until Yahoo sets it shortly before the draft) to settings
   `draft.order` (team abbreviations) and puts each drafted player on his team (Yahoo wins; no pick number is
   stored); `--watch N` polls. `adp` writes Yahoo's pre-draft rank (`OR`) and ADP for the top 300 to

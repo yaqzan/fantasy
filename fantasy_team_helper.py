@@ -98,9 +98,16 @@ def my_il_players(league):
 
 def claims_left(league, week_start, team_abv=None):
     """Pickups a team (default mine) has left in the week starting `week_start`: the league's claims_per_week, less what
-    the platform says it has used when its count is for that week (pull_yahoo.py sync); else the full allowance."""
+    the platform says it has used when its count is for that week (pull_yahoo.py sync); Fantrax leagues ask Fantrax
+    for the current week's remaining claims (fantrax_canon.claims_remaining); else the full allowance."""
     per_week = league.claims_per_week
     team = get_team_by_abv(league, team_abv or league.my_team)
+    if team and league.platform == 'fantrax' and str(week_start) == str(get_current_fantasy_week_dates(league)[0]):
+        # Fantrax says what is left itself (current period only); any other week, or no answer: the full allowance
+        import fantrax_canon
+        left = fantrax_canon.claims_remaining(league, team.platform_team_id)
+        if left is not None:
+            return min(left, per_week)
     if not team or team.adds_used is None or not team.adds_week:
         return per_week
     starts = sorted(s for s, _ in league.schedule)

@@ -102,3 +102,29 @@ def load(league, week_start, week_end, today, norm_name):
         _down[lid] = time.time() + DOWN_FOR
         return None
     return canon
+
+
+_claims = {}   # (fantrax league id, team id) -> (fetched at, claims left)
+
+
+def claims_remaining(league, team_id):
+    """Claims `team_id` has left in Fantrax's CURRENT period ("Claims Remaining (Week)" on the roster page), or None
+    (not Fantrax, no id, unreachable). Fantrax only answers for the current period; cached LIVE_TTL, backs off like load()."""
+    if league.platform != 'fantrax' or not league.platform_league_id or not team_id:
+        return None
+    lid, key = league.platform_league_id, (league.platform_league_id, team_id)
+    hit = _claims.get(key)
+    if hit and time.time() - hit[0] < LIVE_TTL:
+        return hit[1]
+    if time.time() < _down.get(lid, 0):
+        return None
+    try:
+        import pull_fantrax as pf
+        info = pf.call(pf.session(), lid, 'getTeamRosterInfo', teamId=team_id)['miscData']['transactionInfo']['info']
+        left = next(int(i['value']) for i in info if i['name'] == 'Claims Remaining (Week)')
+    except (Exception, SystemExit) as e:
+        print(f'fantrax claims: {e}')
+        _down[lid] = time.time() + DOWN_FOR
+        return None
+    _claims[key] = (time.time(), left)
+    return left
