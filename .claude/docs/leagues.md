@@ -137,8 +137,19 @@ stats) is shared by all leagues.
   (ratios are formed from played + projected components; a ratio's variance only from the unplayed attempts), so
   a category's chance converges to 0/100% as the week ends. `/api/analyze` adds `progress` (started, live, final,
   partial), `current.leading` (categories I lead now) and per-category `now_mine`/`now_theirs`; `mine`/`theirs` stay
-  whole-week totals. What-ifs pass `owned=` (today's roster): a pickup adds only unplayed games, a dropped player keeps
-  the games he already played for you. **Limits:** rosters are today's (no transaction history), so a player added
+  whole-week totals. **Canon (owner 2026-10-29): in a Fantrax league the played part is Fantrax's own** (`fantrax_canon.py`):
+  `getLiveScoringStats` with `viewType='1'` + `date` gives, per day, every team's ACTIVE-slot players and their lines, so
+  adds, drops, bench moves and the OPPONENT's real lineup are all in (a dropped player keeps what he played for the team
+  that counted him; one added Wednesday has no Monday line). `Week.team(canon=)`: default = my Fantrax team id, the
+  opponent passes its own, the league-average path passes False. Fantrax decides which player-days count and the nine
+  categories' values; ESPN's line for the same player-day adds attempts (FGM = FG% x FGA, same for FT) and any category
+  Fantrax doesn't show per player (`week_actuals.canon_carried_impl`). `/api/analyze` adds `canon` (Fantrax's own period
+  totals vs ours, `diff_*` 0 = agrees; the page shows "so far = Fantrax's lineups" or "differs from Fantrax") and
+  `progress.canon` (true; false = Fantrax unreachable, fell back to the guess; null = not a Fantrax league). Checked
+  2026-10-29 (Guillotine week 2): all 9 categories x both teams equal Fantrax's page. Cache: past days 6 h, today and
+  yesterday 90 s. Future days are still our projection (Fantrax's future lineups are whatever is set so far).
+  What-ifs pass `owned=` (today's roster): a pickup adds only unplayed games.
+  **Limits (no canon: Yahoo leagues, Fantrax down):** rosters are today's (no transaction history), so a player added
   Wednesday also gets his Monday line and one dropped Tuesday is missing; a past day's daily lineup assumes the best
   fitting players with a line started (the lineup you set is not read); wins count once a game is final. Before the
   first game the week is the pure projection as always.

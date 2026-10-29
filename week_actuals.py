@@ -57,6 +57,8 @@ class WeekActuals:
         self.live = self.final = 0
         self.partial = False
         self._cache = {}
+        self._canon_cache = {}  # id(canon lines of one team) -> carried
+        self.canon_gaps = 0    # Fantrax player-days whose attempts ESPN's lines lacked
         self.lineups = {}      # (roster, suffix) -> {day: players whose played games count}
         day = week_start
         while day <= min(today, week_end):
@@ -108,6 +110,14 @@ class WeekActuals:
                         weights[(team, day)] = left
         return remaining, weights
 
+    def canon_carried(self, lines, league):
+        """The played part from Fantrax's own lineups (see canon_carried_impl); adds, drops and bench moves are in it."""
+        key = id(lines)
+        if key not in self._canon_cache:
+            self._canon_cache[key], gaps = canon_carried_impl(self, lines, league)
+            self.canon_gaps += gaps
+        return self._canon_cache[key]
+
     def carried(self, owned, stats, league, suffix, starters=None):
         """{stat: total} the `owned` players' played games added (cached per roster).
 
@@ -141,6 +151,34 @@ class WeekActuals:
                     carried['FPTS'] += fantasy_points(line, league.point_weights)
         self._cache[key] = dict(carried)
         return self._cache[key]
+
+
+def canon_carried_impl(actual, lines, league):
+    """{stat: total} of the player-days Fantrax counted (fantrax_canon: `lines` is {day: {norm name: {'name', 'stats'}}}).
+
+    Fantrax decides WHICH player-days count and the nine categories' values; ESPN's line (same player, same day)
+    adds what Fantrax doesn't show per player (attempts, so FG% and FT% add up as makes/attempts) and the rest."""
+    carried, gaps = defaultdict(float), 0
+    for day, got in lines.items():
+        for nn, fx in got.items():
+            espn = actual.lines.get(nn, {}).get(day)
+            line = dict(espn or {})
+            if espn is None:
+                gaps += 1   # Fantrax counted him, ESPN has no line: attempts and the stats Fantrax doesn't show are 0
+            for stat, value in fx['stats'].items():
+                if stat not in ('FG%', 'FT%'):
+                    line[stat] = value
+            for pct, made, tried in (('FG%', 'FGM', 'FGA'), ('FT%', 'FTM', 'FTA')):
+                if pct in fx['stats'] and (line.get(tried) or 0):
+                    line[made] = round(fx['stats'][pct] * line[tried])
+            for stat in COUNT_STATS:
+                carried[stat] += line.get(stat) or 0
+            carried['AST-TOV'] += (line.get('AST') or 0) - (line.get('TOV') or 0)
+            carried['WIN%'] += line.get('W') or 0
+            carried['GP'] += 1
+            if league.is_points:
+                carried['FPTS'] += fantasy_points(line, league.point_weights)
+    return dict(carried), gaps
 
 
 def lineup_of(actual, owned, suffix):

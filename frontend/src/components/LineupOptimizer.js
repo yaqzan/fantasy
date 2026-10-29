@@ -228,6 +228,8 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const pickSide = sideOf(pick);
   const baseChance = weekChance(data?.current, points);
   const progress = data?.progress || { started: false };
+  const hasLead = !!data && (progress.live > 0 || data.opponent === 'league average' || !data.scheduled_opponent || progress.partial);
+  const canonOff = Object.entries({ ...(data?.canon?.diff_mine || {}), ...Object.fromEntries(Object.entries(data?.canon?.diff_theirs || {}).map(([k, v]) => [`opp ${k}`, v])) }).filter(([, v]) => Math.abs(v) > 0.0015).map(([k, v]) => `${k} ${v > 0 ? '+' : ''}${v}`).join(', ');
   // The sides' scores: what each has so far once a game is played, else the projection.
   const nowTotal = (side) => points ? data.current.categories.FPTS?.[side === 'mine' ? 'now_mine' : 'now_theirs'] : null;
   const scoreMine = !data ? null : progress.started
@@ -350,12 +352,16 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 {data.opponent_players && <TeamFacts right claims={data.opponent_claims_left} perWeek={claims} games={gamesFraction(data.opponent_players, data.opponent_games_played)} />}
               </div>
             </div>
-            {(progress.live > 0 || data.opponent === 'league average' || !data.scheduled_opponent || progress.partial) && (
+            {(progress.live > 0 || data.opponent === 'league average' || !data.scheduled_opponent || progress.partial || (progress.started && progress.canon !== null && progress.canon !== undefined)) && (
               <p className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-600 text-center">
                 {progress.live > 0 && <span className="text-green-400">{progress.live} live</span>}
                 {data.opponent === 'league average' && `${progress.live > 0 ? ' · ' : ''}vs the league average${data.scheduled_opponent ? ` (${data.scheduled_opponent} has no roster yet)` : ''}`}
                 {!data.scheduled_opponent && `${progress.live > 0 ? ' · ' : ''}no opponent scheduled`}
                 {progress.partial && <span className="text-amber-400" title="Some box scores could not be loaded; those games are still projected"> · partial</span>}
+                {progress.started && progress.canon === true && (canonOff && !(progress.live > 0)
+                  ? <span className="text-amber-400" title={`Our played totals differ from Fantrax's: ${canonOff}`}>{hasLead ? ' · ' : ''}differs from Fantrax</span>
+                  : <span title="Games played so far are Fantrax's own lineups and stats for both teams (adds, drops and bench moves included); only the rest is projected">{hasLead ? ' · ' : ''}so far = Fantrax's lineups</span>)}
+                {progress.started && progress.canon === false && <span className="text-amber-400" title="Fantrax's lineups weren't available (unreachable, or a team has no Fantrax id): those played days assume the best players started">{hasLead ? ' · ' : ''}lineups guessed</span>}
               </p>
             )}
           </div>

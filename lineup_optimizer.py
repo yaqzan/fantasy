@@ -18,6 +18,7 @@ from player_stats import (league_player_stats, week_schedule, player_week_games,
                           calculate_team_totals, AVAILABILITY,
                           average_week_totals, category_win_chances, category_margins, small_sample_floor, STAT_SUFFIXES, default_stat_type)
 from week_actuals import week_actuals, lineup_of
+import fantrax_canon
 from fantasy_team_helper import (get_all_my_team_players, my_il_players, claims_left, get_available_players, get_waiver_dates, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_day_to_day_players, get_team_by_abv)
 
@@ -62,6 +63,14 @@ class Week:
         # A week under way: games already played are facts (self.actual), the model projects only the rest.
         self.actual = week_actuals(week_start, week_end)
         self.remaining, self.day_weights = self.actual.remaining(self.schedule) if self.actual else (self.schedule, None)
+        # Fantrax leagues: the platform's own lineups for the played days (adds, drops, bench moves, the opponent's real
+        # lineup). None = not Fantrax / unreachable: the played part falls back to the best-fit guess (week_actuals.carried).
+        self.canon = None
+        if self.actual:
+            from projections import norm_name
+            self.canon = fantrax_canon.load(league, week_start, week_end, self.actual.today, norm_name)
+        me = get_team_by_abv(league, league.my_team) if league.my_team else None
+        self.my_canon = me.platform_team_id if me else None
         self.waivers = get_waiver_dates(league)   # {free agent: the day he clears waivers}
         self.opponent_now = None   # {category: total so far} of the opponent Week.opponent last returned
 
@@ -90,18 +99,28 @@ class Week:
         """A player whose team's game is under way is locked in his slot: no claim can drop him that day."""
         return not (self.actual and (self.stats.get(name, {}).get('TEAM'), day) in self.actual.tipped)
 
-    def team(self, players, suffix, owned=None, windows=None):
+    def team(self, players, suffix, owned=None, windows=None, canon=None):
         """Side for a roster. Weekly-lineup leagues count their best healthy starters' games.
         `owned`: who the played games belong to (default `players`). A what-if roster passes today's: a
         pickup adds only the games still to play, a drop keeps the games he already played for you.
-        `windows`: {player: (first day, last day)} for mid-week adds and drops (player_week_games)."""
+        `windows`: {player: (first day, last day)} for mid-week adds and drops (player_week_games).
+        `canon`: the Fantrax team id whose real lineups are the played part (default: mine; False: none, a guess)."""
         league = self.league
         players = [p for p in players if p in self.stats]
         owned = [p for p in (owned if owned is not None else players) if p in self.stats]
         if not league.daily_lineups:
             players = list(best_starters(league, [p for p in players if p not in self.injured], self.stats, suffix))
         carried, locked, taken = None, (), None
-        if self.actual:
+        key = self.my_canon if canon is None else canon
+        lines = self.canon.lines.get(key) if (self.canon and key) else None
+        if self.actual and lines is not None:
+            from projections import norm_name
+            carried = self.actual.canon_carried(lines, league)
+            if league.daily_lineups:
+                mine = {norm_name(p): p for p in owned}
+                locked = {(mine[nn], day) for day, got in lines.items() for nn in got if nn in mine}
+                taken = {day: len(got) for day, got in lines.items()}
+        elif self.actual:
             starters = None if league.daily_lineups else set(best_starters(league, owned, self.stats, suffix))
             carried = self.actual.carried(owned, self.stats, league, suffix, starters)
             lineups = lineup_of(self.actual, owned, suffix)
@@ -127,11 +146,11 @@ class Week:
         league = self.league
         team = get_team_by_abv(league, opponent_abv) if opponent_abv else None
         if team is not None and any(p in self.stats for p in _roster(team)):
-            side = self.team(_roster(team), suffix)
+            side = self.team(_roster(team), suffix, canon=team.platform_team_id or False)
             self.opponent_now = self.so_far(side.carried)
             return team.name, side.totals
-        sides = [self.team(roster, suffix)
-                 for roster in (_roster(t) for t in FantasyTeam.select().where(
+        sides = [self.team(roster, suffix, canon=t.platform_team_id or False)
+                 for t, roster in ((t, _roster(t)) for t in FantasyTeam.select().where(
                      (FantasyTeam.league == league.id) & (FantasyTeam.abv != league.my_team)
                      & FantasyTeam.eliminated_stage.is_null()))
                  if any(p in self.stats for p in roster)]
@@ -304,11 +323,39 @@ def _leading(mine, theirs, league):
     return lead
 
 
-def _progress(week):
+def _progress(week, opponent_team=None):
     actual = week.actual
     return {'started': bool(actual), 'today': actual.today.isoformat() if actual else None,
             'live': actual.live if actual else 0, 'final': actual.final if actual else 0,
-            'partial': actual.partial if actual else False}
+            'partial': actual.partial if actual else False,
+            # true: the played part is Fantrax's own lineups (fantrax_canon); false: a Fantrax league falling back to the best-fit guess; null: not Fantrax
+            'canon': _canon_state(week, opponent_team)}
+
+
+def _canon_state(week, opponent_team):
+    """progress.canon: None = not a Fantrax league or no game yet; True = both teams' played part is Fantrax's own;
+    False = Fantrax unreachable or a team without a Fantrax id (that side is the best-fit guess)."""
+    if week.league.platform != 'fantrax' or not week.actual:
+        return None
+    if week.canon is None or week.my_canon not in week.canon.lines:
+        return False
+    return not (opponent_team is not None and opponent_team.platform_team_id not in week.canon.lines)
+
+
+def _canon_report(week, mine_now, theirs_now, opponent_team):
+    """Fantrax's own period totals next to ours, per category: the check that the played part is canon. diff = ours
+    minus Fantrax's (0 = agrees; ratios to 3 places). None without canon, or before the opponent is known."""
+    if not (week.canon and mine_now and theirs_now and opponent_team is not None and opponent_team.platform_team_id):
+        return None
+    mine, theirs = week.canon.totals.get(week.my_canon), week.canon.totals.get(opponent_team.platform_team_id)
+    if not (mine and theirs):
+        return None
+    cats = [c for c in week.league.categories if c in mine and c in theirs]
+    return {'source': 'fantrax',
+            'mine': {c: mine[c] for c in cats}, 'theirs': {c: theirs[c] for c in cats},
+            'diff_mine': {c: round(mine_now[c] - mine[c], 3) for c in cats},
+            'diff_theirs': {c: round(theirs_now[c] - theirs[c], 3) for c in cats},
+            'gaps': week.actual.canon_gaps}
 
 
 def _resolve_week(league, week_start, week_end, opponent):
@@ -337,7 +384,7 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
     mine = week.team(roster, suffix, owned)
     theirs_now = week.opponent_now
     result = {
-        'progress': _progress(week),
+        'progress': _progress(week, get_team_by_abv(league, opponent_abv) if opponent_abv else None),
         'week_start': week_start.isoformat(), 'week_end': week_end.isoformat(),
         'days': (week_end - week_start).days + 1, 'timeframe': timeframe,
         'opponent': label, 'scheduled_opponent': opponent_abv,
@@ -348,9 +395,10 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
                               key=lambda p: week.stats[p].get(f'Z-VALUE{suffix}', 0), reverse=True)[:400],
     }
     opponent_team = get_team_by_abv(league, opponent_abv) if opponent_abv else None
+    result['canon'] = _canon_report(week, week.so_far(mine.carried), theirs_now, opponent_team)
     if label and label != 'league average' and opponent_team is not None:
         # players only: theirs=None skips the category chances this would throw away
-        their_side = _side_json(week, week.team(_roster(opponent_team), suffix), None, suffix)
+        their_side = _side_json(week, week.team(_roster(opponent_team), suffix, canon=opponent_team.platform_team_id or False), None, suffix)
         result['opponent_players'] = their_side['players']
         result['opponent_games_played'] = their_side['games_played']
         result['opponent_claims_left'] = claims_left(league, week_start, opponent_abv)
