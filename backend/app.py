@@ -269,6 +269,7 @@ def get_fantasy_players():
 
         full_team_name = TEAM_DICT.get(team_name, team_name)
         team_id = drafted.get(player_name)
+        out = bool(player and player.injury_status in OUT_STATUSES)
         players_data.append({
             'id': player.id if player else None,
             'name': player_name,
@@ -304,10 +305,10 @@ def get_fantasy_players():
             'auction_value_projected': stats.get('AUCTION_VALUE_projected', 0),
             'auction_value_proj': stats.get('AUCTION_VALUE_proj', 0),
             'hot_overall': round(stats.get('Z-SCORE_5', 0) - stats.get('Z-SCORE', 0), 1),
-            'is_injured': bool(player and player.injury_status in OUT_STATUSES),
+            'is_injured': out,
             'injury_status': player.injury_status if player else None,  # Yahoo's: O/INJ out, Q/D/P/DTD day-to-day
-            'injured_return': (player.injured_return if player and player.injury_status in OUT_STATUSES else None),
-            'injured_games': ((player.injured_games_to_miss or None) if player and player.injury_status in OUT_STATUSES else None),
+            'injured_return': (player.injured_return if out else None),
+            'injured_games': ((player.injured_games_to_miss or None) if out else None),
             'nba_year': stats.get('NBA_YEAR'),
             'what_if': _what_if_json(stats_all, league, player_name),
             'is_undroppable': player_name in undroppable,

@@ -58,7 +58,7 @@ COOKIE_FILE = os.path.join(ROOT, 'yahoo_web.cookie')
 ADP_DIR = os.path.join(ROOT, '.cache')
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0'
 NS = {'y': 'http://fantasysports.yahooapis.com/fantasy/v2/base.rng'}
-OUT_STATUSES = ('O', 'INJ')  # Yahoo statuses that mean he is not playing
+OUT_STATUSES = ('O', 'INJ')  # Yahoo statuses that mean he is not playing (same as fantasy_team_helper.OUT_STATUSES; that module needs the DB, this one imports without it)
 PAGE = 25  # Yahoo's maximum players per request
 
 load_dotenv(os.path.join(ROOT, '.env'))
