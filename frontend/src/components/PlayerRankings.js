@@ -42,7 +42,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
     return (player.name.toLowerCase().includes(search) || player.team.toLowerCase().includes(search))
       && (mine || !view.available || !player.drafted)
       && (!showPositionFilter || view.positions.some(chip => playsPosition(player, chip)))
-      && (!view.healthy || !player.is_injured)
+      && (!view.healthy || !(player.is_injured || ['O', 'INJ'].includes(player.injury_status)))
       && (!view.tonight || player.plays_today)
       && (!view.tomorrow || player.plays_tomorrow);
   });
