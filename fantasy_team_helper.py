@@ -77,7 +77,7 @@ def _team_players(team, healthy_only):
              .join(FantasyTeamPlayer, on=(Player.id == FantasyTeamPlayer.player_id))
              .where(FantasyTeamPlayer.fantasy_team_id == team.id))
     if healthy_only:
-        query = query.where((Player.injured == 0) | (Player.injured.is_null()))
+        query = query.where(Player.injury_status.is_null() | Player.injury_status.not_in(OUT_STATUSES))
     return [player.name for player in query]
 
 
@@ -160,9 +160,12 @@ def get_waiver_dates(league):
 DAY_TO_DAY_CHANCE = {'P': 0.9, 'Q': 0.5, 'DTD': 0.5, 'GTD': 0.5, 'D': 0.2}
 
 
+OUT_STATUSES = ('O', 'INJ')
+
+
 def get_injured_players():
-    """Players Yahoo lists Out (NBA-wide, not per league; pull_yahoo sync, hourly). Hand flags (Player.injured) are ignored."""
-    return [player.name for player in Player.select(Player.name).where(Player.injury_status.in_(('O', 'INJ')))]
+    """Players Yahoo lists Out (NBA-wide, not per league; pull_yahoo sync, hourly)."""
+    return [player.name for player in Player.select(Player.name).where(Player.injury_status.in_(OUT_STATUSES))]
 
 
 def get_day_to_day_players():

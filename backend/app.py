@@ -17,7 +17,7 @@ from player_stats import (league_player_stats, calculate_auction_values, calcula
                           TEAM_DICT, STAT_SUFFIXES, what_if_line, default_stat_type)
 from fantasy_config import TEAMNAMES, FPOINTS_SCORING
 from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_from_schedule, get_next_week_dates,
-                                 league_team_ids, get_undroppable_players, set_league_flags)
+                                 league_team_ids, get_undroppable_players, set_league_flags, get_injured_players, OUT_STATUSES)
 from leagues import (POINT_STATS, get_league, list_leagues, create_league, update_league, activate_league, delete_league,
                      generate_weeks, category_meta, CATEGORY_CATALOG, DEFAULT_SETTINGS, NotFound)
 from datetime import date, datetime, timedelta
@@ -304,10 +304,10 @@ def get_fantasy_players():
             'auction_value_projected': stats.get('AUCTION_VALUE_projected', 0),
             'auction_value_proj': stats.get('AUCTION_VALUE_proj', 0),
             'hot_overall': round(stats.get('Z-SCORE_5', 0) - stats.get('Z-SCORE', 0), 1),
-            'is_injured': bool(player and player.injured == 1),
+            'is_injured': bool(player and player.injury_status in OUT_STATUSES),
             'injury_status': player.injury_status if player else None,  # Yahoo's: O/INJ out, Q/D/P/DTD day-to-day
-            'injured_return': (player.injured_return if player and player.injured == 1 else None),
-            'injured_games': ((player.injured_games_to_miss or None) if player and player.injured == 1 else None),
+            'injured_return': (player.injured_return if player and player.injury_status in OUT_STATUSES else None),
+            'injured_games': ((player.injured_games_to_miss or None) if player and player.injury_status in OUT_STATUSES else None),
             'nba_year': stats.get('NBA_YEAR'),
             'what_if': _what_if_json(stats_all, league, player_name),
             'is_undroppable': player_name in undroppable,
@@ -495,20 +495,6 @@ def undraft_player():
     return jsonify({'success': True, 'deleted_count': deleted_count}), 200
 
 
-@fantasy_api.route('/update-player', methods=['POST'])
-def update_player():
-    """Injured is NBA-wide; undroppable belongs to the current league"""
-    data = request.get_json() or {}
-    player = Player.get(Player.name == data['player_name'])
-    player.injured = 1 if data.get('is_injured', False) else 0
-    if not player.injured:      # the return month and games belong to one injury
-        player.injured_return, player.injured_games_to_miss = None, 0
-    player.save()
-    if 'is_undroppable' in data:
-        set_league_flags(current_league(), player.id, undroppable=bool(data['is_undroppable']))
-    return jsonify({'success': True}), 200
-
-
 def _open_slots(slots, filled):
     open_slots = list(slots)
     for slot in filled:
@@ -523,7 +509,7 @@ def get_team_rosters():
     starting slots no healthy player on the roster can fill (`open_slots`)."""
     league = current_league()
     player_stats = league_player_stats(league)
-    injured = {p.name for p in Player.select(Player.name).where(Player.injured == 1)}
+    injured = set(get_injured_players())
     rosters = {}
     team_ids = league_team_ids(league)
     for ftp in (FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id.in_(team_ids)) if team_ids else []):
@@ -555,7 +541,7 @@ def get_team_standings():
     healthy_only = request.args.get('healthy_only', 'true').lower() == 'true'
     view = 'week' if request.args.get('view') == 'week' else 'per_game'
     player_stats = league_player_stats(league)
-    injured = {p.name for p in Player.select(Player.name).where(Player.injured == 1)} if healthy_only else set()
+    injured = set(get_injured_players()) if healthy_only else set()
 
     # Guillotine: eliminated teams are out of the ranking (their players are free agents).
     teams = list(FantasyTeam.select().where((FantasyTeam.league == league.id) & FantasyTeam.eliminated_stage.is_null()))

@@ -20,7 +20,7 @@ const percentileZ = (score) => {
 };
 const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
 
-const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
+const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
   // The league's categories, in display order, with labels and percent/inverse flags.
   const categoryMeta = config?.categories || [];
   const CATEGORIES = orderColumns(categoryMeta).map(c => c.key); // Daily Leaders' column order
@@ -326,7 +326,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, on
           onClose={() => setDraftModalPlayer(null)}
           onDraft={onDraftPlayer}
           onUndraft={onUndraftPlayer}
-          onUpdatePlayer={onUpdatePlayer}
           isDrafted={draftModalPlayer.drafted}
         />
       )}

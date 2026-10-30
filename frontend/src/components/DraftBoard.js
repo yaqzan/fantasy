@@ -110,7 +110,7 @@ const TAG = 'inline-block rounded px-1 py-[2px] text-[10.5px] leading-none font-
 const TH = 'sticky z-20 bg-gray-900 px-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-700 whitespace-nowrap select-none';
 const NUM = 'px-2 py-1 text-right tabular-nums whitespace-nowrap';
 
-const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer, onUndraftPlayer, onUpdatePlayer, priceExponent = null, config, statType = 'projected', punts = [], onPuntsChange, draftPlan = null }) => {
+const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer, onUndraftPlayer, priceExponent = null, config, statType = 'projected', punts = [], onPuntsChange, draftPlan = null }) => {
   const categories = config?.categories || [];
   const caps = config?.capabilities || {};
   const numTeams = config?.league?.settings?.num_teams || 1;
@@ -903,7 +903,6 @@ const DraftBoard = ({ players, allPlayers = players, fantasyTeams, onDraftPlayer
           onClose={() => setModalPlayer(null)}
           onDraft={onDraftPlayer}
           onUndraft={onUndraftPlayer}
-          onUpdatePlayer={onUpdatePlayer}
           isDrafted={modalPlayer.drafted}
         />
       )}

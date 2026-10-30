@@ -1,26 +1,19 @@
 import React, { useState, useEffect } from 'react';
 
-const DraftModal = ({ player, teams, onClose, onDraft, onUndraft, onUpdatePlayer, isDrafted }) => {
+const DraftModal = ({ player, teams, onClose, onDraft, onUndraft, isDrafted }) => {
   const [selectedTeamId, setSelectedTeamId] = useState('');
-  const [isInjured, setIsInjured] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Initialize form with current player data
   useEffect(() => {
     if (player) {
       setSelectedTeamId(player.fantasy_team?.id ? String(player.fantasy_team.id) : '');
-      setIsInjured(player.is_injured || false);
     }
   }, [player]);
 
   const handleSave = async () => {
     try {
       setLoading(true);
-      
-      // Update injured status if it changed
-      if (isInjured !== player.is_injured) {
-        await onUpdatePlayer(player.name, isInjured);
-      }
       
       if (isDrafted) {
         // If currently drafted, we can either undraft or change team
@@ -97,18 +90,6 @@ const DraftModal = ({ player, teams, onClose, onDraft, onUndraft, onUpdatePlayer
           </select>
         </div>
 
-        <div className="mb-6">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={isInjured}
-              onChange={(e) => setIsInjured(e.target.checked)}
-              className="h-4 w-4 text-nba-orange focus:ring-nba-orange border-gray-600 rounded bg-gray-700"
-            />
-            <span className="ml-2 text-sm text-gray-300">Injured</span>
-          </label>
-        </div>
-        
         <div className="flex justify-end space-x-3">
           <button
             onClick={onClose}

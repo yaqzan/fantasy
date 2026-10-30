@@ -165,7 +165,6 @@ it), else the active league.
 - `GET /api/fantasy`: all players with fantasy statistics
 - `POST /api/calculate-zscores`: recalculate z-scores for custom categories
 - `POST /api/calculate-auction-values`: recalculate auction values
-- `POST /api/update-player`: update a player's manual fields (tier, notes, etc.)
 
 ### Fantasy Teams
 - `GET /api/fantasy-teams`: list fantasy teams

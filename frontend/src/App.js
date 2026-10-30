@@ -10,7 +10,7 @@ import Projections from './components/Projections';
 import LeagueSettings from './components/LeagueSettings';
 import DraftDay from './components/DraftDay';
 import {
-  getPlayers, getFantasyTeams, draftPlayer, undraftPlayer, updatePlayer,
+  getPlayers, getFantasyTeams, draftPlayer, undraftPlayer,
   getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage, getDraftDay, getDefaultTab
 } from './services/api';
 
@@ -321,7 +321,6 @@ function App() {
             draftPlan={draftPlan}
             onDraftPlayer={refreshAfter(draftPlayer)}
             onUndraftPlayer={refreshAfter(undraftPlayer)}
-            onUpdatePlayer={refreshAfter(updatePlayer)}
           />
         )}
         {activeTab === 'lineup' && <LineupOptimizer config={config} onEditLeague={() => setLeagueModal('edit')} />}

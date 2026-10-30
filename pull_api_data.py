@@ -198,8 +198,7 @@ def apply_game_stats(player, player_games, techs, blka):
     player.plus_minus = overall['PLUS_MINUS'] / overall['GP'] if overall['GP'] > 0 else 0
     player.plus_minus_5 = last_5['PLUS_MINUS'] / last_5['GP'] if last_5['GP'] > 0 else 0
     player.plus_minus_10 = last_10['PLUS_MINUS'] / last_10['GP'] if last_10['GP'] > 0 else 0
-    if player.injured and player.gp is not None and overall['GP'] > player.gp:
-        player.injured = False
+    if player.injured_games_to_miss and player.gp is not None and overall['GP'] > player.gp:
         player.injured_games_to_miss = 0
     player.gp = overall['GP']
 

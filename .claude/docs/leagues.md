@@ -11,7 +11,7 @@ stats) is shared by all leagues.
   receives. `fantasy_teams.league_id` scopes teams; team names are unique per league, not globally.
   `league_player_flags` holds per-league `undroppable` and `positions` (write through
   `set_league_flags`, which touches only the fields given: a peewee `replace` would wipe the other
-  one). `Player.injured` stays NBA-wide.
+  one). Injury status (`Player.injury_status`) is NBA-wide.
 - **Team names change; ids don't.** `fantasy_teams.platform_team_id` is the platform's permanent
   team id (Fantrax `teamId=`, Yahoo team number); `abv` is our own stable key. `python
   pull_fantrax.py teams --league <fantrax id> [--apply]` renames teams to match Fantrax by id (dry

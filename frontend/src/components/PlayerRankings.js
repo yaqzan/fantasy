@@ -14,7 +14,7 @@ const playsPosition = (player, chip) => (player.positions?.length ? player.posit
 
 // The Player Rankings tab: toolbar (stats, search, positions, star premium, filters) and the table.
 // Everything picked here is remembered per league (useLeagueViewState).
-const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, onDraftPlayer, onUndraftPlayer, onUpdatePlayer }) => {
+const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, onDraftPlayer, onUndraftPlayer }) => {
   const caps = config.capabilities || {};
   const categoryKeys = (config.categories || []).map(c => c.key);
   // Leagues with positions filter by their slot positions; all-flex leagues by NBA's G/F/C.
@@ -42,7 +42,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
     return (player.name.toLowerCase().includes(search) || player.team.toLowerCase().includes(search))
       && (mine || !view.available || !player.drafted)
       && (!showPositionFilter || view.positions.some(chip => playsPosition(player, chip)))
-      && (!view.healthy || !(player.is_injured || ['O', 'INJ'].includes(player.injury_status)))
+      && (!view.healthy || !player.is_injured)
       && (!view.tonight || player.plays_today)
       && (!view.tomorrow || player.plays_tomorrow);
   });
@@ -145,7 +145,6 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
         fantasyTeams,
         onDraftPlayer,
         onUndraftPlayer,
-        onUpdatePlayer,
         priceExponent: view.priceExponent,
         config,
         statType: view.statType,

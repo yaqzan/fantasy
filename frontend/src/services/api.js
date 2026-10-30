@@ -126,15 +126,6 @@ export const undraftPlayer = async (playerName) => {
   return response.data;
 };
 
-export const updatePlayer = async (playerName, isInjured, isUndroppable) => {
-  const response = await api.post('/update-player', {
-    player_name: playerName,
-    is_injured: isInjured,
-    is_undroppable: isUndroppable
-  });
-  return response.data;
-};
-
 // Every team's roster in the current league, with each starter's slot and the starters' average OVR.
 export const getTeamRosters = async () => (await api.get('/team-rosters')).data;
 
