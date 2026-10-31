@@ -19,6 +19,7 @@ from player_stats import (league_player_stats, week_schedule, player_week_games,
                           average_week_totals, category_win_chances, category_margins, small_sample_floor, STAT_SUFFIXES, default_stat_type)
 from week_actuals import week_actuals, lineup_of
 import fantrax_canon
+import yahoo_canon
 from fantasy_team_helper import (get_all_my_team_players, my_il_players, claims_left, get_available_players, get_waiver_dates, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_day_to_day_players, get_team_by_abv)
 
@@ -68,7 +69,8 @@ class Week:
         self.canon = None
         if self.actual:
             from projections import norm_name
-            self.canon = fantrax_canon.load(league, week_start, week_end, self.actual.today, norm_name)
+            self.canon = (fantrax_canon.load if league.platform == 'fantrax' else yahoo_canon.load)(
+                league, week_start, week_end, self.actual.today, norm_name)
         me = get_team_by_abv(league, league.my_team) if league.my_team else None
         self.my_canon = me.platform_team_id if me else None
         self.waivers = get_waiver_dates(league)   # {free agent: the day he clears waivers}
@@ -335,7 +337,7 @@ def _progress(week, opponent_team=None):
 def _canon_state(week, opponent_team):
     """progress.canon: None = not a Fantrax league or no game yet; True = both teams' played part is Fantrax's own;
     False = Fantrax unreachable or a team without a Fantrax id (that side is the best-fit guess)."""
-    if week.league.platform != 'fantrax' or not week.actual:
+    if week.league.platform not in ('fantrax', 'yahoo') or not week.actual:
         return None
     if week.canon is None or week.my_canon not in week.canon.lines:
         return False

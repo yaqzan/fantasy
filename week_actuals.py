@@ -177,7 +177,8 @@ def canon_carried_impl(actual, lines, league):
             carried['WIN%'] += line.get('W') or 0
             carried['GP'] += 1
             if league.is_points:
-                carried['FPTS'] += fantasy_points(line, league.point_weights)
+                # Yahoo's own points for the player-day (yahoo_canon) beat our re-scoring of ESPN's line
+                carried['FPTS'] += fx['stats']['FPTS'] if 'FPTS' in fx['stats'] else fantasy_points(line, league.point_weights)
     return dict(carried), gaps
 
 

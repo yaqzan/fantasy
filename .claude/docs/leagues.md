@@ -149,7 +149,12 @@ stats) is shared by all leagues.
   2026-10-29 (Guillotine week 2): all 9 categories x both teams equal Fantrax's page. Cache: past days 6 h, today and
   yesterday 90 s. Future days are still our projection (Fantrax's future lineups are whatever is set so far).
   What-ifs pass `owned=` (today's roster): a pickup adds only unplayed games.
-  **Limits (no canon: Yahoo leagues, Fantrax down):** rosters are today's (no transaction history), so a player added
+  **Yahoo canon (owner 2026-10-30, `yahoo_canon.py`):** same idea for Yahoo leagues. Per day, `league/<key>/teams/roster;date=D/players/stats;type=date;date=D`
+  gives every team's roster with `selected_position` and `player_points`; players in BN/IL/NA are dropped, the rest carry
+  Yahoo's own points as `FPTS` (`canon_carried_impl` prefers it over re-scoring ESPN's line). Bug it fixed: a player
+  picked up mid-game got his full-game points counted although Yahoo put him on the bench. No per-team totals check
+  (Yahoo's scoreboard `team_points` was equal by hand on 2026-10-30).
+  **Limits (no canon: Fantrax down, Yahoo unreachable):** rosters are today's (no transaction history), so a player added
   Wednesday also gets his Monday line and one dropped Tuesday is missing; a past day's daily lineup assumes the best
   fitting players with a line started (the lineup you set is not read); wins count once a game is final. Before the
   first game the week is the pure projection as always.
