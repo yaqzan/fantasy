@@ -10,6 +10,7 @@ category (FPTS), so that is its chance of winning the week.
     python lineup_optimizer.py [league] [timeframe] [moves] [plan]   # plan: a guillotine stage's claims, week by week
 """
 from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from statistics import mean
 
@@ -18,8 +19,8 @@ from player_stats import (league_player_stats, week_schedule, player_week_games,
                           calculate_team_totals, AVAILABILITY,
                           average_week_totals, category_win_chances, category_margins, small_sample_floor, STAT_SUFFIXES, default_stat_type)
 from week_actuals import week_actuals, lineup_of
-import fantrax_canon
-import yahoo_canon
+import canon as canon_mod
+import daily_leaders
 from fantasy_team_helper import (get_all_my_team_players, my_il_players, claims_left, get_available_players, get_waiver_dates, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_day_to_day_players, get_team_by_abv)
 
@@ -62,15 +63,18 @@ class Week:
         self.injured = set(get_injured_players())
         self.doubtful = get_day_to_day_players()   # {name: chance he plays his next game}
         # A week under way: games already played are facts (self.actual), the model projects only the rest.
-        self.actual = week_actuals(week_start, week_end)
+        # Canon: the platform's own lineups for the played days (adds, drops, bench moves, the opponent's real lineup);
+        # None = no provider / unreachable: the played part falls back to the best-fit guess (week_actuals.carried).
+        # Both are network calls, so they run side by side.
+        from projections import norm_name
+        today = daily_leaders.nba_today()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            fetching = pool.submit(canon_mod.load, league, week_start, week_end, today, norm_name) if today >= week_start else None
+            self.actual = week_actuals(week_start, week_end, today)
+            self.canon = fetching.result() if fetching else None
+        if not self.actual:
+            self.canon = None
         self.remaining, self.day_weights = self.actual.remaining(self.schedule) if self.actual else (self.schedule, None)
-        # Fantrax leagues: the platform's own lineups for the played days (adds, drops, bench moves, the opponent's real
-        # lineup). None = not Fantrax / unreachable: the played part falls back to the best-fit guess (week_actuals.carried).
-        self.canon = None
-        if self.actual:
-            from projections import norm_name
-            self.canon = (fantrax_canon.load if league.platform == 'fantrax' else yahoo_canon.load)(
-                league, week_start, week_end, self.actual.today, norm_name)
         me = get_team_by_abv(league, league.my_team) if league.my_team else None
         self.my_canon = me.platform_team_id if me else None
         self.waivers = get_waiver_dates(league)   # {free agent: the day he clears waivers}
@@ -106,7 +110,7 @@ class Week:
         `owned`: who the played games belong to (default `players`). A what-if roster passes today's: a
         pickup adds only the games still to play, a drop keeps the games he already played for you.
         `windows`: {player: (first day, last day)} for mid-week adds and drops (player_week_games).
-        `canon`: the Fantrax team id whose real lineups are the played part (default: mine; False: none, a guess)."""
+        `canon`: the platform team id whose real lineups are the played part (default: mine; False: none, a guess)."""
         league = self.league
         players = [p for p in players if p in self.stats]
         owned = [p for p in (owned if owned is not None else players) if p in self.stats]
@@ -335,13 +339,11 @@ def _progress(week, opponent_team=None):
 
 
 def _canon_state(week, opponent_team):
-    """progress.canon: None = not a Fantrax league or no game yet; True = both teams' played part is Fantrax's own;
-    False = Fantrax unreachable or a team without a Fantrax id (that side is the best-fit guess)."""
-    if week.league.platform not in ('fantrax', 'yahoo') or not week.actual:
+    """progress.canon: None = no canon provider for the platform or no game yet; True = both teams' played part is the
+    platform's own; False = unreachable or a team without a platform id (that side is the best-fit guess)."""
+    if not week.actual:
         return None
-    if week.canon is None or week.my_canon not in week.canon.lines:
-        return False
-    return not (opponent_team is not None and opponent_team.platform_team_id not in week.canon.lines)
+    return canon_mod.state(week.league, week.canon, week.my_canon, opponent_team)
 
 
 def _canon_report(week, mine_now, theirs_now, opponent_team):
@@ -353,7 +355,7 @@ def _canon_report(week, mine_now, theirs_now, opponent_team):
     if not (mine and theirs):
         return None
     cats = [c for c in week.league.categories if c in mine and c in theirs]
-    return {'source': 'fantrax',
+    return {'source': week.canon.source,
             'mine': {c: mine[c] for c in cats}, 'theirs': {c: theirs[c] for c in cats},
             'diff_mine': {c: round(mine_now[c] - mine[c], 3) for c in cats},
             'diff_theirs': {c: round(theirs_now[c] - theirs[c], 3) for c in cats},

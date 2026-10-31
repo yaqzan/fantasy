@@ -5,30 +5,19 @@ knows the truth: for each day, the players each team had in ACTIVE slots and the
 to the bench and the opponent's real lineup are all in. `getLiveScoringStats` with `viewType='1'` + `date` is that
 day; `viewType='2'` is the period totals (the number the matchup page shows, used to check ours against).
 
-    load(league, week_start, week_end, today, norm_name) -> Canon | None     (None: not Fantrax / unreachable)
-    Canon.lines[team id][day][normalised name] = {'name', 'stats': {category: value}}
-    Canon.totals[team id] = {category: Fantrax's own period total}
+    fetch_day / period_totals: the Fantrax provider for canon.py (the shape, caching and back-off live there).
 
 Only the nine categories Fantrax shows per player map here (SHORT); a league with others keeps ESPN's value for
 those (week_actuals.canon_carried). Past days cache for hours, today and yesterday for a minute or two.
 """
-import threading
+import sys
 import time
-from datetime import timedelta
 
+import canon
+
+PLATFORM = 'fantrax'
 SHORT = {'FG%': 'FG%', '3PTM': 'FG3M', 'FT%': 'FT%', 'PTS': 'PTS', 'REB': 'REB', 'AST': 'AST', 'ST': 'STL', 'BLK': 'BLK',
          'TO': 'TOV'}
-LIVE_TTL, PAST_TTL = 90, 6 * 3600
-_cache = {}      # (fantrax league id, day or 'period', date) -> (fetched at, parsed)
-_lock = threading.Lock()
-DOWN_FOR = 300   # after a failed call, don't ask Fantrax again for this long (each Week() would otherwise wait on it)
-_down = {}       # fantrax league id -> time before which load() returns None
-
-
-class Canon:
-    def __init__(self):
-        self.lines = {}     # {team id: {day: {norm name: {'name', 'stats'}}}}
-        self.totals = {}    # {team id: {category: Fantrax's period total}}
 
 
 def _call(league_id, **data):
@@ -68,40 +57,23 @@ def _parse(reply, norm_name):
     return out
 
 
-def _fetch(league_id, key, ttl, norm_name, **data):
-    with _lock:
-        hit = _cache.get((league_id, *key))
-    if hit and time.time() - hit[0] < ttl:
-        return hit[1]
-    parsed = _parse(_call(league_id, **data), norm_name)
-    with _lock:
-        _cache[(league_id, *key)] = (time.time(), parsed)
-    return parsed
+def _fetch(league_id, key, max_age, norm_name, **data):
+    return canon.cached((PLATFORM, league_id, *key), max_age, lambda: _parse(_call(league_id, **data), norm_name))
 
 
-def load(league, week_start, week_end, today, norm_name):
-    """The week's canon so far, or None (not a Fantrax league, no league id, or Fantrax unreachable: the caller falls
-    back to the best-fit guess and says so)."""
-    if league.platform != 'fantrax' or not league.platform_league_id:
-        return None
-    lid = league.platform_league_id
-    if time.time() < _down.get(lid, 0):
-        return None
-    canon = Canon()
-    try:
-        day = week_start
-        while day <= min(today, week_end):
-            for team_id, got in _fetch(lid, ('day', day), LIVE_TTL if day >= today - timedelta(days=1) else PAST_TTL, norm_name, date=day.isoformat(), viewType='1').items():
-                canon.lines.setdefault(team_id, {})[day] = got['players']
-            day += timedelta(days=1)
-        last = min(today, week_end)
-        for team_id, got in _fetch(lid, ('period', last), LIVE_TTL, norm_name, date=last.isoformat(), viewType='2').items():
-            canon.totals[team_id] = got['total']
-    except (Exception, SystemExit) as e:   # pull_fantrax.call raises SystemExit on a login/page error
-        print(f'fantrax canon: {e}')
-        _down[lid] = time.time() + DOWN_FOR
-        return None
-    return canon
+def fetch_day(league, day, today, norm_name):
+    """{team id: {norm name: {'name', 'stats'}}} of the active-slot players Fantrax counted on `day`."""
+    got = _fetch(league.platform_league_id, ('day', day), canon.ttl(day, today), norm_name, date=day.isoformat(), viewType='1')
+    return {team_id: g['players'] for team_id, g in got.items()}
+
+
+def period_totals(league, last, norm_name):
+    """{team id: {category: Fantrax's period total}} up to `last`: the number the matchup page shows."""
+    got = _fetch(league.platform_league_id, ('period', last), canon.LIVE_TTL, norm_name, date=last.isoformat(), viewType='2')
+    return {team_id: g['total'] for team_id, g in got.items()}
+
+
+canon.register(sys.modules[__name__])
 
 
 _claims = {}   # (fantrax league id, team id) -> (fetched at, claims left)
@@ -114,9 +86,9 @@ def claims_remaining(league, team_id):
         return None
     lid, key = league.platform_league_id, (league.platform_league_id, team_id)
     hit = _claims.get(key)
-    if hit and time.time() - hit[0] < LIVE_TTL:
+    if hit and time.time() - hit[0] < canon.LIVE_TTL:
         return hit[1]
-    if time.time() < _down.get(lid, 0):
+    if canon.backed_off(PLATFORM, lid):
         return None
     try:
         import pull_fantrax as pf
@@ -124,7 +96,7 @@ def claims_remaining(league, team_id):
         left = next(int(i['value']) for i in info if i['name'] == 'Claims Remaining (Week)')
     except (Exception, SystemExit) as e:
         print(f'fantrax claims: {e}')
-        _down[lid] = time.time() + DOWN_FOR
+        canon.back_off(PLATFORM, lid)
         return None
     _claims[key] = (time.time(), left)
     return left

@@ -22,6 +22,7 @@
 Read-only on Fantrax. If Fantrax rejects the saved login, it is re-read from Firefox once
 (browser_cookie3; log in to fantrax.com in Firefox if that fails too).
 """
+import threading
 import argparse
 import json
 import os
@@ -54,7 +55,15 @@ def session():
     return s
 
 
+_cookie_lock = threading.Lock()   # canon fetches days on several threads; a stale login must refresh once, not 4 times at once
+
+
 def refresh_cookie():
+    with _cookie_lock:
+        return _refresh_cookie()
+
+
+def _refresh_cookie():
     """Re-save the Fantrax login from Firefox's cookie store (the browser that is logged in)."""
     import browser_cookie3
     jar = browser_cookie3.firefox(domain_name='fantrax.com')

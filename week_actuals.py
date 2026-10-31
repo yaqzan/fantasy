@@ -58,16 +58,23 @@ class WeekActuals:
         self.partial = False
         self._cache = {}
         self._canon_cache = {}  # id(canon lines of one team) -> carried
-        self.canon_gaps = 0    # Fantrax player-days whose attempts ESPN's lines lacked
+        self.canon_gaps = 0    # canon player-days whose attempts ESPN's lines lacked
         self.lineups = {}      # (roster, suffix) -> {day: players whose played games count}
-        day = week_start
+        days, day = [], week_start
         while day <= min(today, week_end):
+            days.append(day)
+            day = day.fromordinal(day.toordinal() + 1)
+
+        def load(d):
             try:
-                cur = slate(day)
+                return slate(d)
             except Exception as e:  # ESPN down: this day stays projected, and the page says so
-                print(f'week actuals {day}: {e}')
+                print(f'week actuals {d}: {e}')
+                return None
+        slates = [load(d) for d in days]    # daily_leaders.slate holds one lock across its fetch: no gain from threads
+        for day, cur in zip(days, slates):
+            if cur is None:
                 self.partial = True
-                day = day.fromordinal(day.toordinal() + 1)
                 continue
             self.loaded.add(day)
             for game in cur['scoreboard']:
@@ -90,7 +97,6 @@ class WeekActuals:
                         continue
                     for line in lines.values():
                         self.lines[norm_name(line['name'])][day] = line
-            day = day.fromordinal(day.toordinal() + 1)
         self.norm_name = norm_name
 
     @property
@@ -111,7 +117,7 @@ class WeekActuals:
         return remaining, weights
 
     def canon_carried(self, lines, league):
-        """The played part from Fantrax's own lineups (see canon_carried_impl); adds, drops and bench moves are in it."""
+        """The played part from the platform's own lineups (canon.py; see canon_carried_impl); adds, drops and bench moves are in it."""
         key = id(lines)
         if key not in self._canon_cache:
             self._canon_cache[key], gaps = canon_carried_impl(self, lines, league)
@@ -154,17 +160,17 @@ class WeekActuals:
 
 
 def canon_carried_impl(actual, lines, league):
-    """{stat: total} of the player-days Fantrax counted (fantrax_canon: `lines` is {day: {norm name: {'name', 'stats'}}}).
+    """{stat: total} of the player-days the platform counted (canon.py: `lines` is {day: {norm name: {'name', 'stats'}}}).
 
-    Fantrax decides WHICH player-days count and the nine categories' values; ESPN's line (same player, same day)
-    adds what Fantrax doesn't show per player (attempts, so FG% and FT% add up as makes/attempts) and the rest."""
+    The platform decides WHICH player-days count and the values it shows (Fantrax: nine categories; Yahoo: FPTS); ESPN's line
+    (same player, same day) adds what the platform doesn't show per player (attempts, so FG% and FT% add up as makes/attempts) and the rest."""
     carried, gaps = defaultdict(float), 0
     for day, got in lines.items():
         for nn, fx in got.items():
             espn = actual.lines.get(nn, {}).get(day)
             line = dict(espn or {})
             if espn is None:
-                gaps += 1   # Fantrax counted him, ESPN has no line: attempts and the stats Fantrax doesn't show are 0
+                gaps += 1   # the platform counted him, ESPN has no line: attempts and the stats Fantrax doesn't show are 0
             for stat, value in fx['stats'].items():
                 if stat not in ('FG%', 'FT%'):
                     line[stat] = value

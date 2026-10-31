@@ -40,6 +40,7 @@ import base64
 import json
 import os
 import pickle
+import threading
 import time
 from datetime import date
 import xml.etree.ElementTree as ET
@@ -101,17 +102,22 @@ def auth(code=None):
     print(f'saved {TOKEN_FILE}')
 
 
+_token_lock = threading.Lock()   # one refresh at a time: yahoo_canon fetches days on several threads
+
+
 def access_token():
     if not os.path.exists(TOKEN_FILE):
         raise SystemExit('no Yahoo login yet: run `python pull_yahoo.py auth`')
-    with open(TOKEN_FILE, encoding='utf-8') as f:
-        token = json.load(f)
-    if time.time() >= token.get('expires_at', 0):
-        token = _token_request({'grant_type': 'refresh_token', 'refresh_token': token['refresh_token']})
-    return token['access_token']
+    with _token_lock:
+        with open(TOKEN_FILE, encoding='utf-8') as f:
+            token = json.load(f)
+        if time.time() >= token.get('expires_at', 0):
+            token = _token_request({'grant_type': 'refresh_token', 'refresh_token': token['refresh_token']})
+        return token['access_token']
 
 
 _web = None
+_web_lock = threading.Lock()   # yahoo_canon fetches days on several threads
 
 
 def _firefox_cookies():
@@ -125,6 +131,11 @@ def _firefox_cookies():
 
 
 def _web_session(fresh=False):
+    with _web_lock:
+        return _web_session_locked(fresh)
+
+
+def _web_session_locked(fresh):
     global _web
     if _web is None or fresh:
         if fresh or not os.path.exists(COOKIE_FILE):
