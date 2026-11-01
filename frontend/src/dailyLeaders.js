@@ -74,9 +74,9 @@ export const isPickup = (p) => p.owner === 'free' && !(p.value < 0 && p.z && Obj
   ? p.pace_signal === 'up' && (p.min_usual ?? 0) >= PRESEASON_ROTATION_MIN
   : p.pace_signal === 'up' || (p.minutes_up && (p.pace ?? 0) >= 0.5) || p.streak === 'hot');
 
-// Mine in ANY league (the server's mine_any), whichever league is selected; the owner filter and
-// its counts use the same test so My team lists exactly the highlighted rows.
-export const isMine = (p) => p.mine_any ?? p.owner === 'mine';
+// Mine in the SELECTED league only (a player on my team in another league is free or taken here);
+// the owner filter and its counts use the same test so My team lists exactly the highlighted rows.
+export const isMine = (p) => p.owner === 'mine';
 export const ownerKey = (p) => (isMine(p) ? 'mine' : p.owner);
 
 // The saved owner pick is one key or several joined by commas ("free,mine"); 'all' or empty = no filter.

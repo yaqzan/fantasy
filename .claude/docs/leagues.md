@@ -242,9 +242,7 @@ stats) is shared by all leagues.
   schedule pull.
 - **Daily Leaders** (`daily_leaders.py`, `/api/daily-leaders`, the "Daily Leaders" tab): every
   stat line of a day, ranked by the selected league, rows marked mine (highlighted) / taken
-  (dimmed) / free. **Mine means mine in ANY league** (`my_players_everywhere`, row field `mine_any`; frontend
-  `isMine`/`ownerKey` in `dailyLeaders.js`): the highlight, the My team filter and its count ignore which league is selected;
-  a player taken here but mine elsewhere is highlighted (amber) AND dimmed like any taken player, and keeps the other owner's initials chip. Scoring and `owner` stay the selected league's. **Source is ESPN's public site API** (scoreboard + one `summary` per game):
+  (dimmed) / free. **Mine means mine in the SELECTED league only** (owner 2026-10-31; the cross-league `mine_any` highlight made Bones Hyland, mine only in Courtside, show as mine in Guillotine, and is gone): `owner` ('mine'/'taken'/'free') comes from the selected league's rosters, and the highlight, My team filter and its count all read it (`isMine`/`ownerKey` in `dailyLeaders.js`). DNP rows list only that league's rostered players. **Source is ESPN's public site API** (scoreboard + one `summary` per game):
   cdn.nba.com answers this host 403 and stats.nba.com box scores are empty while a game is on
   (checked 2026-10-09), so neither can be live. ESPN's box lacks times blocked and techs; both
   come from its play-by-play (a block play's first participant is the shooter; "technical foul"
