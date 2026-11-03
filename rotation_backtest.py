@@ -65,6 +65,7 @@ def build(first, last, mins, prior, grp):
     """One record per team-game: active players with baseline + actual, and the new-absence list."""
     hist = defaultdict(list)           # pid -> minutes in games played, in order
     recent_active = defaultdict(list)  # team -> list of sets of active pids
+    played = defaultdict(list)         # pid -> 1/0 per game he was Active: did he play
     recs = []
     for d, gid, team, pl in sorted(team_games(first, last), key=lambda x: (x[0], x[1])):
         def base(pid):
@@ -81,9 +82,11 @@ def build(first, last, mins, prior, grp):
         new_out = [p for p in out if any(p in s for s in prev)]
         recs.append(dict(date=d, team=team, b=b, active=active, starter={p for p, (a, s) in pl.items() if s},
                          actual={p: mins.get((gid, p), 0.0) for p in active}, out=out, new_out=new_out,
-                         grp={p: grp.get(p) for p in pl}))
+                         grp={p: grp.get(p) for p in pl},
+                         dnp6={p: (1 - sum(played[p][-6:]) / len(played[p][-6:])) if played[p] else 0.0 for p in active}))
         for p in active:
             m = mins.get((gid, p), 0.0)
+            played[p].append(int(m > 0))
             if m > 0:
                 hist[p].append(m)
         recent_active[team].append(active)
@@ -138,5 +141,67 @@ def main():
     print('best on train (new-absence games):', best)
 
 
+
+
+# ---- play probability + expected minutes ----
+def rows_pplay(recs):
+    X, y = [], []
+    for r in recs:
+        freed = sum(r['b'][p] for p in r['out'])
+        for p in r['active']:
+            if r['b'].get(p) is None:
+                continue
+            X.append([r['b'][p], p in r['starter'], r['dnp6'][p], freed / 48, len(r['active'])])
+            y.append(r['actual'][p] > 0)
+    return X, y
+
+
+def expected(r, model, alpha=0.75, gamma=0.5):
+    """E[min] = P(plays) * minutes-if-plays, then the 240 team constraint with a starter tilt."""
+    freed = sum(r['b'][p] for p in r['out'])
+    base = {p: r['b'][p] for p in r['active'] if r['b'].get(p) is not None}
+    if not base:
+        return {}
+    pp = model.predict_proba([[base[p], p in r['starter'], r['dnp6'][p], freed / 48, len(r['active'])] for p in base])[:, 1]
+    e = {p: base[p] * q for p, q in zip(base, pp)}
+    w = {p: e[p] * (1 + gamma * (p in r['starter'])) for p in e}
+    tot = sum(w.values()) or 1
+    return {p: min((1 - alpha) * e[p] + alpha * 240 * w[p] / tot, 40.0) for p in e}, pp
+
+
+def main2():
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import roc_auc_score
+    m25, _, df = minutes_2526()
+    grp = position_groups()
+    train = build(date(2025, 10, 21), date(2026, 4, 13), m25, {}, grp)
+    prior = {int(p): v.mean() for p, v in df.groupby('PLAYER_ID')['MIN'] if len(v) >= 10}
+    test = build(date(2026, 10, 20), date(2026, 11, 2), minutes_2627(), prior, grp)
+    X, y = rows_pplay(train)
+    model = LogisticRegression(max_iter=1000).fit(X, y)
+    Xt, yt = rows_pplay(test)
+    print('P(play) AUC train %.3f test %.3f; play rate train %.3f test %.3f' % (
+        roc_auc_score(y, model.predict_proba(X)[:, 1]), roc_auc_score(yt, model.predict_proba(Xt)[:, 1]), sum(y) / len(y), sum(yt) / len(yt)))
+    print('coefs [b, starter, dnp6, freed/48, n_active]:', [round(c, 3) for c in model.coef_[0]])
+    for name, recs in (('train', train), ('test', test)):
+        for label, fn in (('baseline', lambda r: {p: r['b'][p] for p in r['active'] if r['b'].get(p) is not None}),
+                          ('240+starter', lambda r: predict(r, alpha=0.75, beta=0, gamma=0.5)),
+                          ('P(play)*b +240+starter', lambda r: (expected(r, model) or ({},))[0])):
+            allE, playedE, newE = [], [], []
+            for r in recs:
+                pr = fn(r)
+                for p, v in pr.items():
+                    if r['b'][p] < 5:
+                        continue
+                    e = abs(v - r['actual'][p])
+                    allE.append(e)
+                    if r['actual'][p] > 0:
+                        playedE.append(e)
+                    if r['new_out']:
+                        newE.append(e)
+            f = lambda L: sum(L) / len(L)
+            print(f"{name} {label:24s} all-active MAE {f(allE):.2f}  played-only {f(playedE):.2f}  new-absence games {f(newE):.2f}")
+
+
 if __name__ == '__main__':
-    main()
+    main2() if 'p' in sys.argv[1:] else main()

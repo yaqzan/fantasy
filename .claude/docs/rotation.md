@@ -16,8 +16,14 @@ Code: `rotation_data.py` (pull + cache under gitignored `.horizon/rotation/`), `
 - Position-group tilt toward the absent player's group (beta): no gain at any strength. Position-blind is as good with this data.
 - 2026-27 has only 94 new-absence team-games; cannot prove an effect there. 2025-26 (2,476 team-games) is the training set.
 
+## Round 2 (2026-11-02)
+- **Play probability** (logistic on baseline, starter, DNP rate over last 6 Active games, minutes freed, Active count): AUC 0.87 train / 0.77 test. Starter (+3.3) and recent-DNP rate (-3.4) carry it. Expected minutes = P(play) x baseline, then 240 + starter tilt: test all-active MAE 8.10 -> 7.09 (train flat at 6.2). 2026-27 play rate is 69% vs 84% in 2025-26 (early-season bloated actives), so retrain as the season fills in.
+- **The injury effect is real but small.** Played players, residual vs baseline, cluster bootstrap by team-game, per 10 baseline minutes of NEW rotation absence (Inactive now, Active in one of last 3 games): starters +0.58 [+0.52,+0.63] train, +0.42 [+0.28,+0.57] test; bench +0.29 train, ~0 test; same position group +0.24 train, +0.30 test (CI excludes 0 in both). A 30 mpg starter out is worth about +1.7 min to a starter, +0.9 to a bench man, +0.7 more to his position group.
+- **Out of sample (fit 2025-26, score 2026-27, played players, baseline >= 8) the injury terms do not beat a plain intercept+starter fix on MAE** (5.03 vs 5.02; RMSE 6.47 vs 6.49). Most of the gain over baseline (5.22) is the intercept (baseline overshoots by ~2 min) and the starter bump. 94 new-absence team-games is too few to separate the injury part.
+- **Next-man-up by minutes rank is NOT supported.** Bench rank 1-2 gains +0.30/10 freed min, rank 3-4 +0.67, rank 5+ +0.78 (train; test same direction, smaller). The effect is diffuse, not a single backup.
+- Takeaway for the UI: a per-player "Opportunity" number would be small (usually under 2 min) except when a star sits. Worth showing as a sortable delta, but the value is in star-out nights and in the P(play) / starter-status flag (inactive/DNP risk), which move projections more than redistribution does.
+
 ## Next
-1. P(plays) for Active players (DNP-CD, rest) so zeros stop dominating MAE; score minutes only for players who play separately.
-2. Next-man-up by minutes rank within the rotation, not position group.
-3. Per-minute rate bump (usage) as one global elasticity, validated on FPTS/min.
-4. Then the UI: "Opportunity" delta (projected min/FPTS with tonight's Inactive list minus baseline) as a sortable, filterable player-table column; feed Yahoo daily-points Optimizer and claim planner.
+1. Daily snapshot of the lineups JSON (Expected status before tip) so the live feature uses pregame data; the backtest used final status.
+2. Usage/rate bump on FPTS per minute (global elasticity), validated separately.
+3. Ship: player-table column "Opp" = projected min with tonight's Inactive list minus baseline, plus a DNP-risk marker; sort/filter on it. Feed the Yahoo daily-points optimizer and claim planner.
