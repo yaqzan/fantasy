@@ -48,17 +48,18 @@ const weekChance = (side, points) => {
   });
   return dist.slice(Math.floor(chances.length / 2) + 1).reduce((a, b) => a + b, 0);
 };
-// Games still to play over the week's total (played + still to come), as whole numbers: 25/36.
+// Games played so far over the week's total (played + still to come), as whole numbers: 0/36 at the start, 36/36 at the end.
 const gamesFraction = (players, played) => {
   const left = (players || []).reduce((sum, p) => sum + p.plays, 0);
-  return { left: Math.round(left), total: Math.round(left + (played || 0)) };
+  const total = Math.round(left + (played || 0));
+  return { played: total - Math.round(left), total };
 };
 
 // Under a side's score: its claims left and games still to play over the week's total.
 const TeamFacts = ({ claims, perWeek, games, right }) => (
   <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400 tabular-nums ${right ? 'justify-end' : ''}`}>
     {claims != null && <span title="Pickup claims left this week"><span className="font-semibold text-gray-100">{claims}</span>/{perWeek} claim{perWeek === 1 ? '' : 's'}</span>}
-    <span title="Games still to play (expected) over the week's total"><span className="font-semibold text-gray-100">{games.left}</span>/{games.total} games</span>
+    <span title="Games played so far over the week's total (the total counts games still to come at their expected number)"><span className="font-semibold text-gray-100">{games.played}</span>/{games.total} games</span>
   </div>
 );
 
