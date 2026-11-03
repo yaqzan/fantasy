@@ -75,7 +75,7 @@ def build(first, last, mins, prior, grp):
         b = {p: base(p) for p in pl}
         out = [p for p, (a, s) in pl.items() if not a and b[p] and b[p] >= OUT_MIN]
         new_out = [p for p in out if any(p in s for s in prev)]
-        recs.append(dict(date=d, team=team, b=b, active=active, starter={p for p, (a, s) in pl.items() if s},
+        recs.append(dict(gid=gid, date=d, team=team, b=b, active=active, starter={p for p, (a, s) in pl.items() if s},
                          actual={p: mins.get((gid, p), 0.0) for p in active}, out=out, new_out=new_out,
                          grp={p: grp.get(p) for p in pl},
                          dnp6={p: (1 - sum(played[p][-6:]) / len(played[p][-6:])) if played[p] else 0.0 for p in active}))

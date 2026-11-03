@@ -9,7 +9,7 @@ or overwritten. An install from before leagues existed (teams with no league, a 
 import json
 import os
 
-from peewee import MySQLDatabase, IntegerField, CharField, TextField, BooleanField, DateField
+from peewee import MySQLDatabase, IntegerField, CharField, TextField, BooleanField, DateField, FloatField
 
 from fantasy_config import DB_NAME, DB_CONFIGS
 
@@ -51,6 +51,8 @@ def upgrade_schema(DB):
     if 'adds_used' not in team_cols:
         ops.append(migrator.add_column('fantasy_teams', 'adds_used', IntegerField(null=True)))
         ops.append(migrator.add_column('fantasy_teams', 'adds_week', IntegerField(null=True)))
+    if 'rotation_picks' in DB.get_tables() and 'rate_pct' not in {c.name for c in DB.get_columns('rotation_picks')}:
+        ops.append(migrator.add_column('rotation_picks', 'rate_pct', FloatField(null=True)))
     if 'il' not in {c.name for c in DB.get_columns('fantasy_team_players')}:
         ops.append(migrator.add_column('fantasy_team_players', 'il', BooleanField(default=False)))
     if 'released_roster' not in team_cols:

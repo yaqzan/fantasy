@@ -35,9 +35,11 @@ const rotTip = (player, points) => {
   if (!r) return undefined;
   if (r.inactive) return 'Inactive tonight on the NBA lineup sheet';
   const l10 = player.stats?.FPTS?.value_10;
-  const fpts = points && l10 && r.base ? ` (about ${r.opp >= 0 ? '+' : ''}${(l10 / r.base * r.opp).toFixed(1)} FPTS at his last-10 rate)` : '';
+  // FPTS: the extra minutes at his last-10 rate, plus a small per-minute lift (r.rate_pct %, measured on 2025-26) on all of tonight's minutes.
+  const gain = points && l10 && r.base ? l10 / r.base * (r.opp + r.mif * (r.rate_pct || 0) / 100) : null;
+  const fpts = gain != null && Math.abs(gain) >= 0.5 ? ` (about ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} FPTS at his last-10 rate)` : '';
   return [`${r.mif} min if he plays (usual ${r.base}); ${Math.round(r.p * 100)}% to play${r.confirmed ? '' : ', lineup not confirmed'}`,
-    r.opp ? `${r.opp > 0 ? '+' : ''}${r.opp} min from ${r.out?.length ? r.out.join(', ') : 'teammates'} out${fpts}` : null,
+    r.opp || fpts ? `${r.opp > 0 ? '+' : ''}${r.opp} min from ${r.out?.length ? r.out.join(', ') : 'teammates'} out${fpts}` : null,
     r.promoted ? 'Starting tonight, not his usual role' : null].filter(Boolean).join('. ');
 };
 const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';

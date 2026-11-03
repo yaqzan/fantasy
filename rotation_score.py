@@ -37,6 +37,25 @@ def main():
     allp = [p for p in picks if p.exp is not None and p.base and p.base >= 5]
     if allp:
         print(f'  all-active exp MAE {mae(lambda p: p.exp, allp):.2f}  vs P(play) x baseline {mae(lambda p: p.p_play * p.base, allp):.2f}  (n={len(allp)})')
+    # rate check: FPTS/min (generic weights) on the night vs his previous 10 games, for players with a rate lift >= 1.5%
+    gen = lambda r: (r.pts + 1.2 * r.reb + 1.5 * r.ast + 3 * r.stl + 3 * r.blk - r.tov)
+    rows = {}
+    for r in GameLine.select().where(GameLine.game_date >= since - timedelta(days=60)).order_by(GameLine.game_date):
+        if (r.min or 0) > 0:
+            rows.setdefault(r.player_id, []).append((r.game_date, gen(r), r.min))
+    lift, rest = [], []
+    for p in played:
+        if p.rate_pct is None:   # logged before rate_pct existed: unlabelled, not 'others'
+            continue
+        h = [x for x in rows.get(p.player_id, ()) if x[0] < p.game_date][-10:]
+        night = next((x for x in rows.get(p.player_id, ()) if x[0] == p.game_date), None)
+        if len(h) < 5 or not night or night[2] < 8:
+            continue
+        base_rate = sum(x[1] for x in h) / sum(x[2] for x in h)
+        if base_rate > 0:
+            (lift if p.rate_pct >= 1.5 else rest).append((night[1] / night[2] - base_rate) / base_rate * 100)
+    if lift and rest:
+        print(f'  FPTS/min vs his last 10, % change: rate_pct>=1.5 {sum(lift) / len(lift):+.2f}% (n={len(lift)})   others {sum(rest) / len(rest):+.2f}% (n={len(rest)})')
     hi = [p for p in played if (p.opp or 0) >= 2]
     lo = [p for p in played if (p.opp or 0) < 2]
     resid = lambda rows: sum(lines[(p.player_id, p.game_date)] - p.base for p in rows) / max(len(rows), 1)

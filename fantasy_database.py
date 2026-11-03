@@ -221,6 +221,7 @@ class RotationPick(BaseModel):
     base = FloatField(null=True)
     mif = FloatField(null=True)      # minutes if he plays
     opp = FloatField(null=True)      # the injury terms of mif
+    rate_pct = FloatField(null=True) # % lift in his FPTS/min from teammates out (nba_rotation.RATE_PER_10)
     exp = FloatField(null=True)      # team-normalised expected minutes
     starter = BooleanField()
     lineup_status = CharField(max_length=12, null=True)

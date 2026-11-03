@@ -34,6 +34,7 @@ DAY_TO_DAY_CHANCE = {'P': 0.9, 'Q': 0.5, 'DTD': 0.5, 'GTD': 0.5, 'D': 0.2}
 OUT_STATUSES = ('O', 'INJ')
 FAST_REFRESH, EMPTY_REFRESH, SLOW_REFRESH = 10 * 60, 20 * 60, 60 * 60
 STATE_MAX_AGE = 3 * 3600   # a state older than this is not served (the poller is stuck)
+RATE_PER_10 = 0.75     # % lift in FPTS per minute per 10 freed minutes of new absences (2025-26 fit, rate_fit in rotation.md); no position term
 OPP_CAP = 6.0          # minutes: the fit rarely saw more than ~60 freed minutes at once, so a gutted roster is not extrapolated
 
 _lock = threading.Lock()
@@ -212,6 +213,7 @@ def compute_team(team, pl, ctx, model):
         mif = b + mm['intercept'] + mm['starter'] * s + opp
         st5, n5 = ctx.started_recently(p)
         res[p] = {'p': round(pp, 2), 'mif': round(max(mif, 0), 1), 'base': round(b, 1), 'opp': round(opp, 1),
+                  'rate_pct': round(RATE_PER_10 * min(newfree, OPP_CAP), 2),
                   'starter': bool(s), 'promoted': bool(s and n5 >= 3 and st5 <= 1), 'confirmed': ls == 'Confirmed',
                   'out': out_names}
         exp_raw[p] = b * pp
@@ -247,11 +249,36 @@ def get_state():
     return _state
 
 
+def current(today, st=None):
+    """The state's players when it is fresh (built within STATE_MAX_AGE) and for `today` or later, else {}."""
+    st = st or _state
+    if not st['as_of'] or not st['day'] or st['day'] < today.isoformat():
+        return {}
+    if (datetime.now() - datetime.fromisoformat(st['as_of'])).total_seconds() > STATE_MAX_AGE:
+        return {}
+    return st['players']
+
+
+def tonight_doubtful(doubtful, today):
+    """The optimizer's {name: chance he plays his next game} with the Yahoo guess dropped for a player the NBA
+    sheet CONFIRMS as tonight's starter (game not started). Removal only: a 0.0 for an Inactive player would land on
+    the wrong day for free agents / IL activations (the factor sits on the first game after the add day), see
+    lineup-optimizer.md. No state (CLI runs, stale, other day) = Yahoo's dict unchanged."""
+    st = _state   # one snapshot: the poller swaps the whole dict
+    players = current(today, st)
+    if not players or st['day'] != today.isoformat():
+        return doubtful
+    names = st.get('names', {})
+    drop = {names[pid] for pid, v in players.items()
+            if v.get('game_status') == 1 and v.get('starter') and v.get('confirmed') and names.get(pid) in doubtful}
+    return {n: c for n, c in doubtful.items() if n not in drop} if drop else doubtful
+
+
 def log_picks(day, players, ctx):
     """Keep what we said before tip-off (rows for games that have not started), to score later."""
     from fantasy_database import DB, RotationPick
     rows = [{'game_date': day, 'player_id': pid, 'team': v['team'], 'p_play': v['p'], 'base': v.get('base'), 'mif': v.get('mif'),
-             'opp': v.get('opp'), 'exp': v.get('exp'), 'starter': v.get('starter', False),
+             'opp': v.get('opp'), 'rate_pct': v.get('rate_pct'), 'exp': v.get('exp'), 'starter': v.get('starter', False),
              'lineup_status': 'Confirmed' if v.get('confirmed') else 'Expected', 'injury_status': ctx.injury.get(pid),
              'logged_at': datetime.now()} for pid, v in players.items() if v['game_status'] == 1]
     if rows:
@@ -283,7 +310,8 @@ def refresh(today=None):
     players = compute_day(d, games, ctx)
     log_picks(d, players, ctx)
     with _lock:
-        _state = {'as_of': datetime.now().isoformat(timespec='seconds'), 'day': d.isoformat(), 'players': players}
+        _state = {'as_of': datetime.now().isoformat(timespec='seconds'), 'day': d.isoformat(), 'players': players,
+                  'names': {pid: ctx.names[pid] for pid in players if pid in ctx.names}}
     return FAST_REFRESH if any(g.get('gameStatus') != 3 for g in games) else SLOW_REFRESH
 
 

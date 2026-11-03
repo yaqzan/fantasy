@@ -266,8 +266,7 @@ def get_fantasy_players():
     stats_all = player_stats
     fpts_range = _fpts_range(league)
     rot = rotation.get_state()   # built by a background thread, never here
-    fresh = rot['as_of'] and (datetime.now() - datetime.fromisoformat(rot['as_of'])).total_seconds() < rotation.STATE_MAX_AGE
-    rot_players = rot['players'] if fresh and rot['day'] and rot['day'] >= today.isoformat() else {}
+    rot_players = rotation.current(today)
     for player_name, stats in top:
         player = players_by_name.get(player_name)
         team_name = player.team if player and player.team else "Unknown"

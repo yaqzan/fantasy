@@ -31,8 +31,13 @@ Files: `nba_rotation.py` (fetch, `Context`, `compute_team`, poller; NOT `rotatio
 - Replay on 2026-10-27..11-01 through the live path (no Yahoo history, final sheet): minutes-if-plays MAE 4.69 vs baseline 5.00 (n=840); mean P(play) 0.82 vs 0.87 actual. Holdout fit MAE 4.88 vs 5.22.
 - Check it live with `python rotation_score.py` after a few game nights: calibration by P(play) bin, baseline vs mif MAE, and mean (actual - baseline) for Opp >= 2 vs the rest. If Opp >= 2 players do not beat the rest by >0, the redistribution terms are noise: drop to P(play) + starter only.
 
+## Round 3 (2026-11-03): rate bump + optimizer feed
+- **Per-minute rate** (2025-26, 20,785 played-player rows, generic FPTS/min vs his last-10 rate, cluster bootstrap): +0.77% [+0.50,+1.08] (starter), +0.73% [+0.30,+1.15] (bench) per 10 freed minutes of NEW absences; position-group term +0.08% [-0.42,+0.64] (nothing). One global elasticity, `RATE_PER_10 = 0.75`, payload `rate_pct = 0.75 * min(new-absence min/10, 6)` (max 4.5%). Tooltip only (points leagues): FPTS gain = L10 FPTS/min x (opp + mif x rate_pct/100); a 30 mpg starter out is about +1 FPTS. Not in the Opp sort. Measured on 2025-26 only: `rotation_score.py` prints FPTS/min change vs his last 10 for rate_pct >= 1.5 against the rest; drop the bump if it is <= 0 on 2026-27.
+- **Optimizer feed (narrow).** `Week.__init__` calls `nba_rotation.tonight_doubtful`: a player the NBA sheet CONFIRMS as tonight's starter (game not started, state day = today ET, state < 3 h old) is removed from `week.doubtful`, i.e. his guessed Yahoo Q/D chance is dropped. Removal only. CLI runs (`lineup_optimizer.py`, `claim_planner.py`) have no poller state and see Yahoo's dict unchanged.
+- **Deliberately NOT done: Inactive-tonight -> chance 0.0.** `doubtful` means "his next game after the first eligible day", not "tonight": a 0.0 would zero tomorrow's game for a free agent on waivers until tomorrow (`claim_planner.py` ~318), every `_split_doubtful` add-window copy (~429), an IL player activated tomorrow (`_solve_one` ~450), and the judge / `player_week_games` windows (`player_stats.py` ~420, `claim_planner.py` ~740). Design if wanted: `week.doubt_day = {name: today}` for the entries written, and apply the factor at those five sites only when `nxt == doubt_day.get(p, nxt)`. Also keep Yahoo's number for bench/unconfirmed doubtful players (the model p already prices ordinary DNP risk, which the 0.86 availability layer counts again).
+- Reviewed by an Opus agent each round (design, implementation, this diff); its fixes are in the code.
+
 ## Next
-1. Usage/rate bump on FPTS per minute (one global elasticity), validated on FPTS/min.
-2. Feed `exp`/`mif` into the Yahoo daily-points optimizer and claim planner (the optimizer already applies `DAY_TO_DAY_CHANCE`: don't discount twice).
-3. Refit monthly (`python rotation_fit.py --write`); add 2026-27 to the training set once it has ~500 team-games.
-4. Known gaps: a started game's state is rebuilt with final Active/Inactive; ESPN depth charts unused; traded players' baselines span both teams.
+1. Inactive-tonight in the optimizer (design above), only if the owner wants rest/DNP nights in the week plan.
+2. Refit monthly (`python rotation_fit.py --write`); add 2026-27 to the training set once it has ~500 team-games.
+3. Known gaps: a started game's state is rebuilt with final Active/Inactive; ESPN depth charts unused; traded players' baselines span both teams.

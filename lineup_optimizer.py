@@ -21,6 +21,7 @@ from player_stats import (league_player_stats, week_schedule, player_week_games,
 from week_actuals import week_actuals, lineup_of
 import canon as canon_mod
 import daily_leaders
+import nba_rotation
 from fantasy_team_helper import (get_all_my_team_players, my_il_players, claims_left, get_available_players, get_waiver_dates, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_day_to_day_players, get_team_by_abv)
 
@@ -71,6 +72,7 @@ class Week:
         self.schedule = week_schedule(week_start, week_end)
         self.injured = set(get_injured_players())
         self.doubtful = get_day_to_day_players()   # {name: chance he plays his next game}
+        self.doubtful = nba_rotation.tonight_doubtful(self.doubtful, daily_leaders.nba_today())   # a Confirmed starter is not doubtful
         # A week under way: games already played are facts (self.actual), the model projects only the rest.
         # Canon: the platform's own lineups for the played days (adds, drops, bench moves, the opponent's real lineup);
         # None = no provider / unreachable: the played part falls back to the best-fit guess (week_actuals.carried).
