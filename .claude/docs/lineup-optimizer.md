@@ -40,7 +40,8 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 
 Built from the `.horizon/claims-ilp/` prototype (formulation `04-opus-final.md`, owner answers `05-decisions.md`, the
 corrections in `driver/NOTES_plan.md`); equal to it on the live Courtside week (same moves, objective diff 0, judge
-P(win) equal; 2026-11-02). Supported: Yahoo, daily lineups, points. Elsewhere `/api/plan` is `{supported: false, reason}`.
+P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounded d* search and doubt split below
+(the prototype's `driver/plan.py`/`extract.py` take force options and a league id, so they stay separate). Supported: Yahoo, daily lineups, points. Elsewhere `/api/plan` is `{supported: false, reason}`.
 
 - **Rules encoded (owner-confirmed):** adds cost the week's claims, drops and IL moves are free. A dropped player is
   unaddable league-wide for 3 days (`waiver_until`); re-adding my own drop is banned. IL takes only OUT players, but a
@@ -53,9 +54,24 @@ P(win) equal; 2026-11-02). Supported: Yahoo, daily lineups, points. Elsewhere `/
   v carries no 0.86 (it lives in the weights) or it is counted twice.
 - **Positions off by default** (`solve(positions=False)`): the repo judge (`player_week_games`) ignores positions when
   availability < 1, so a position-constrained ILP lost to greedy on the judge. Make the judge position-aware first.
-- **Freeze by enumeration:** each healthy IL player's activation day d* in {today..last day, never} (today skipped
-  while his game is on) is one MILP; the best objective wins. Activating on d* leaves him droppable, which covers
-  "drop him". Frozen days: stored starters at 0.86 each, no cover, no adds, no IL entries.
+- **Freeze by search over d*:** each healthy IL player's activation day d* in {today..last day, never} (today skipped
+  while his game is on); one MILP per combination, the best objective wins. Activating on d* leaves him droppable,
+  which covers "drop him". Frozen days: stored starters at 0.86 each, no cover, no adds, no IL entries.
+  Up to 60 combinations (`FULL_ENUM`) every one is tried (exact). More (2-3 healthy players or a 12-14 day week, up
+  to 3375 combos, 127 s): every player on one common day D first (the freeze ends at max d*; activating earlier
+  scores nothing on a frozen day), then coordinate descent one player at a time. **Hard budget 8 s** (`SOLVE_BUDGET`):
+  past it the best plan so far is returned and the payload warns. Checked 2026-11-02 (`.horizon/claims-ilp/out/b3_check.json`):
+  40 small instances identical to full enumeration; 20 largest (64-3375 combos) objective gap 0, max 8.1 s (one hit the budget, still exact) vs 100 s.
+- **Pool:** per day t and base position, the top C+9 free agents by v[t] PLUS the top C+9 by the rest of the week
+  if added on t (sum of v[t..]). The day-only rule cut multi-game streamers who top no single day (13/2000 property
+  instances lost up to 8.4 FPTS); with both, all 13 match the objective with every free agent. Pool ~60-90.
+- **Doubtful players:** the Q/D factor is about his NEXT game, so it sits on his first game after the day he is
+  actually added (the judge's rule). A doubtful free agent is split into one candidate per add window (days whose
+  next game is g, factor on g), at most one copy added; a doubtful healthy IL player gets his factor on his first game
+  from his d*. Cost +4% solve time. On the 50 property instances where the old window put the ILP below greedy on
+  the judge, 30 remain: 12 are doubtful IL players in the no-freeze test world (no d* there; production has it), 15
+  are a judge convention the ILP can't copy: `player_week_games` keeps a doubtful player at his full-score rank and
+  scales his chance, the ILP sorts by the doubt-scaled v (gap closes with owned doubt := 1); 2 are tie-break size, 1 other.
 - **Tie-breaks (FPTS):** 0.1 per day earlier on adds and drops (prefer later), 0.5 per drop, 0.25 per IL move (without
   it the solver moved an OUT player out of IL for a day to drop him later).
 - **Assumes an atomic IL swap** (one player out of IL, another in, one submit on Yahoo; by Yahoo rule, unverified):
@@ -66,4 +82,4 @@ P(win) equal; 2026-11-02). Supported: Yahoo, daily lineups, points. Elsewhere `/
   then `category_win_chances` vs the opponent; "now" is the same judge on no moves (frozen days included, so it can
   read lower than `/api/analyze`'s chance, which ignores the freeze).
 - **Cost:** one Week build + 7 Yahoo `team/.../roster;date=D` GETs (4 threads, cached 30 min in memory, one burst at a
-  time) + ~8 MILPs (~0.05 s each). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.
+  time) + ~8 MILPs (~0.05 s each; live Courtside 2026-11-02: 1 MILP, 0.07 s, endpoint ~4.5 s cold). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.

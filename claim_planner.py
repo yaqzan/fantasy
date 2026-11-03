@@ -9,6 +9,7 @@ page. Read-only: nothing is written to the DB. The math (corrected layer weights
 """
 from __future__ import annotations
 
+import copy
 import itertools
 import threading
 import time
@@ -28,6 +29,8 @@ EPS_IL = 0.25  # FPTS per IL move (> EPS, so an OUT player is not shuffled out o
 BASE_POSITIONS = ('PG', 'SG', 'SF', 'PF', 'C')
 LINEUP_TTL = 1800   # Yahoo's stored per-date lineups: one burst per 30 minutes
 PLAN_TTL = 60       # a whole plan, per (league, week, timeframe)
+SOLVE_BUDGET = 8.0  # wall-clock seconds for the activation-day search (solve)
+FULL_ENUM = 60      # activation-day combinations up to which solve tries every one
 
 
 # ---------------------------------------------------------------- instance
@@ -179,16 +182,18 @@ def load_week(lg, week_start, week_end, timeframe=None):
 
 
 def select_pool(inst, mult=1.0):
-    """The candidate pool, in place: keep the free agents that are, on some day t and for some base position, among
-    the top round((C + 9) x mult) addable free agents by v[t]. Returns the kept names."""
+    """The candidate pool, in place: keep the free agents that are, for some base position and some day t, among the
+    top round((C + 9) x mult) addable free agents by v[t] (that day) OR by sum_{t' >= t} v[t'] (the rest of the week
+    if added on t: a multi-game streamer who tops no single day). Returns the kept names."""
     k = int(round((inst.claims_left + 9) * mult))
     fa = {p: d for p, d in inst.players.items() if not d.owned}
     chosen = set()
     for t in range(inst.T):
+        rest = {p: sum(d.v[t:]) for p, d in fa.items()}
         for pos in BASE_POSITIONS:
-            ranked = sorted((p for p, d in fa.items() if d.first_add is not None and d.first_add <= t
-                             and pos in d.elig and d.v[t] > 0), key=lambda p: (-fa[p].v[t], p))
-            chosen.update(ranked[:k])
+            ok = [p for p, d in fa.items() if d.first_add is not None and d.first_add <= t and pos in d.elig]
+            chosen.update(sorted((p for p in ok if fa[p].v[t] > 0), key=lambda p: (-fa[p].v[t], p))[:k])
+            chosen.update(sorted((p for p in ok if rest[p] > 0), key=lambda p: (-rest[p], p))[:k])
     for p in fa:
         if p not in chosen:
             del inst.players[p]
@@ -397,17 +402,65 @@ class _Model:
                     options={'time_limit': time_limit, 'mip_rel_gap': 1e-9, 'disp': False})
 
 
-def _solve_one(inst: Instance, C, dstar, positions=False):
-    """One MILP with the healthy IL players' activation days fixed (dstar {q: day index, T = never}). Plan or None."""
+DOUBT_SEP = '\x00'   # '<name>\x00<day>': one copy of a doubtful free agent per next game (_split_doubtful)
+
+
+def _split_doubtful(inst):
+    """(players, alias): each doubtful free agent becomes one candidate per game g he can still be added before,
+    addable only on the days whose next game is g (first_add..last_add), with the doubt factor on g. A Q/D status is
+    about his NEXT game, so it lands on his first game after the day he is actually added (the judge's rule), not
+    on the first game after his earliest add day. A day-0 game under way counts as his next game, as in the judge.
+    alias maps a copy's key to his name; at most one copy is added (one add per player, _solve_one)."""
+    T = inst.T
+    players, alias = {}, {}
+    for p, d in inst.players.items():
+        if d.owned or d.doubt >= 1 or d.first_add is None:
+            players[p] = d
+            continue
+        games = [t for t in range(T) if d.game[t] or (t == 0 and d.lk)]
+        prev, copies = -1, []
+        for g in games:
+            lo, hi = max(prev + 1, d.first_add), g
+            prev = g
+            if lo > hi:
+                continue
+            c = copy.copy(d)
+            c.first_add, c.last_add = lo, hi
+            c.v = [max(d.fpts * (d.doubt if t == g else 1.0), 0.0) if d.game[t] and not d.out else 0.0 for t in range(T)]
+            copies.append((g, c))
+        if len(copies) <= 1:      # one window: his v already carries the factor on that game
+            players[p] = d
+            continue
+        for g, c in copies:
+            players[f'{p}{DOUBT_SEP}{g}'] = c
+            alias[f'{p}{DOUBT_SEP}{g}'] = p
+    return players, alias
+
+
+def _solve_one(inst: Instance, C, dstar, positions=False, time_limit=60, alias=None):
+    """One MILP with the healthy IL players' activation days fixed (dstar {q: day index, T = never}). Plan or None.
+    alias {key: name}: the copies of one doubtful free agent (_split_doubtful); at most one of them is added."""
+    alias = alias or {}
     P, T, N, K, a_ = inst.players, inst.T, inst.N, inst.K, inst.avail
     names = list(P)
     healthy = list(inst.healthy_in_il)
+    for q in healthy:   # a doubtful IL player's factor sits on his first game from his activation day (the judge's)
+        d = P[q]
+        if d.doubt < 1 and dstar.get(q, T) < T:
+            g = next((t for t in range(dstar[q], T) if d.game[t] or (t == 0 and d.lk)), None)
+            if P is inst.players:
+                P = dict(P)
+            P[q] = copy.copy(d)
+            P[q].v = [max(d.fpts * (d.doubt if t == g else 1.0), 0.0) if d.game[t] and not d.out else 0.0
+                      for t in range(T)]
     frozen = [any(t < dstar.get(q, T) for q in healthy) for t in range(T)]
     m = _Model()
 
     def addable(p, t):
         d = P[p]
-        return (not d.owned) and d.first_add is not None and t >= d.first_add and not frozen[t]
+        last = getattr(d, 'last_add', None)
+        return ((not d.owned) and d.first_add is not None and t >= d.first_add and not frozen[t]
+                and (last is None or t <= last))
 
     # --- variables: o owned, a added, d dropped, i in IL, g an IL move (penalised)
     for p in names:
@@ -497,6 +550,13 @@ def _solve_one(inst: Instance, C, dstar, positions=False):
     allk = [(k, 1.0) for k in m.idx if k[0] == 'a']
     if allk:
         m.row(allk, ub=C)
+    groups = {}
+    for k in allk:
+        if k[0][1] in alias:
+            groups.setdefault(alias[k[0][1]], []).append(k)
+    for ks in groups.values():   # one add per player across his copies (no re-adding my own drop)
+        if len(ks) > 1:
+            m.row(ks, ub=1.0)
     for t in range(T):
         m.row([kc for p in pl for kc in act(p, t)], ub=N)
         ik = [(('i', p, t), 1.0) for p in pl if has(('i', p, t))]
@@ -540,7 +600,7 @@ def _solve_one(inst: Instance, C, dstar, positions=False):
                 if us and len(us) > k:
                     m.row([(j, 1.0) for j in us], ub=k)
     t0 = time.time()
-    res = m.solve()
+    res = m.solve(time_limit)
     dt = time.time() - t0
     if res.x is None:
         return None
@@ -564,14 +624,14 @@ def _solve_one(inst: Instance, C, dstar, positions=False):
                     day.append((1, 'il_out', p))
                 elif pi < .5 and i > .5:
                     day.append((2, 'il_in', p))
-        moves += [{'t': t, 'type': k, 'player': p} for _, k, p in sorted(day)]
+        moves += [{'t': t, 'type': k, 'player': alias.get(p, p)} for _, k, p in sorted(day)]
         if frozen[t]:
             lineups.append(dict(inst.stored_lineup[t]))
         elif positions:
-            lineups.append({k[1]: k[2] for k, j in m.idx.items() if k[0] == 'y' and k[3] == t and x[j] > .5})
+            lineups.append({alias.get(k[1], k[1]): k[2] for k, j in m.idx.items() if k[0] == 'y' and k[3] == t and x[j] > .5})
         else:
             act_p = [p for p in pl if val(('o', p, t)) - val(('i', p, t)) > .5 and P[p].v[t] > 0]
-            lineups.append({p: 'any' for p in sorted(act_p, key=lambda p: -P[p].v[t])[:inst.n_slots[t]]})
+            lineups.append({alias.get(p, p): 'any' for p in sorted(act_p, key=lambda p: -P[p].v[t])[:inst.n_slots[t]]})
     obj = -res.fun
     pen = sum(-m.obj[j] * x[j] for k, j in m.idx.items() if k[0] in ('a', 'd', 'g'))
     return Plan(moves=moves, lineups=lineups, frozen=frozen, objective=obj + inst.my_carried + inst.live_const,
@@ -580,23 +640,65 @@ def _solve_one(inst: Instance, C, dstar, positions=False):
                       'vars': len(m.lb), 'rows': len(m.rows), 'penalty': pen})
 
 
-def solve(inst: Instance, positions=False) -> Plan:
-    """Best plan over every activation-day combination of the healthy IL players (day 0 skipped while his game is on;
-    'never' = T). Activating on d* leaves him free to be dropped that day, which covers 'drop him'."""
+def solve(inst: Instance, positions=False, budget=SOLVE_BUDGET, full_limit=FULL_ENUM, split_doubt=True) -> Plan:
+    """Best plan over the healthy IL players' activation days d* (day 0 skipped while his game is on; 'never' = T).
+    Activating on d* leaves him free to be dropped that day, which covers 'drop him'.
+
+    Up to `full_limit` combinations: every one, in product order (the exact optimum). More (2-3 healthy players, long
+    weeks): first every player on one common day D (the freeze ends at max d*, and activating before it scores nothing
+    on a frozen day, so a common D is the natural candidate), then coordinate descent one player's day at a time from
+    the best. `budget` seconds of wall clock (None = no limit): when it runs out the best plan so far is returned with
+    meta['budget_hit'] = True. The first MILP always runs. split_doubt: doubtful free agents get one candidate per
+    add window (_split_doubtful), so his factor sits on the game after the day he is actually added."""
+    alias = {}
+    if split_doubt:
+        players, alias = _split_doubtful(inst)
+        if alias:
+            inst = copy.copy(inst)
+            inst.players = players
     T = inst.T
     healthy = list(inst.healthy_in_il)
     choices = [[T] + [t for t in range(T) if not (t == 0 and inst.players[q].lk)] for q in healthy]
-    best, tried = None, 0
+    n_combos = 1
+    for c in choices:
+        n_combos *= len(c)
     t0 = time.time()
-    for combo in itertools.product(*choices) if choices else [()]:
-        plan = _solve_one(inst, inst.claims_left, dict(zip(healthy, combo)), positions)
-        tried += 1
-        if plan is not None and (best is None or plan.objective > best.objective + 1e-7):
-            best = plan
+    seen, state = {}, {'best': None, 'combo': None, 'hit': False}
+
+    def run(combo):
+        if combo in seen or state['hit']:
+            return
+        if budget is not None and state['best'] is not None and time.time() - t0 > budget:
+            state['hit'] = True
+            return
+        left = 60 if (budget is None or state['best'] is None) else max(budget - (time.time() - t0), 1.0)
+        plan = _solve_one(inst, inst.claims_left, dict(zip(healthy, combo)), positions, time_limit=left, alias=alias)
+        seen[combo] = plan
+        if plan is not None and (state['best'] is None or plan.objective > state['best'].objective + 1e-7):
+            state['best'], state['combo'] = plan, combo
+
+    if n_combos <= full_limit:
+        search = 'full'
+        for combo in itertools.product(*choices) if choices else [()]:
+            run(combo)
+    else:
+        search = 'descent'
+        common = sorted(set.intersection(*(set(c) for c in choices)), key=lambda d: (d != T, d))
+        for d in common:
+            run((d,) * len(healthy))
+        improved = True
+        while improved and not state['hit'] and state['combo'] is not None:
+            improved, start = False, state['combo']
+            for j, opts in enumerate(choices):
+                for d in opts:
+                    run(start[:j] + (d,) + start[j + 1:])
+            improved = state['combo'] != start
+    best = state['best']
     if best is None:
         raise RuntimeError('no feasible plan for any activation day: a data gap today (a stored starter missing '
                            'from the roster, or an eligibility gap), not a rule conflict')
-    best.meta.update(solves=tried, total_s=round(time.time() - t0, 2))
+    best.meta.update(solves=len(seen), combos=n_combos, search=search, budget_hit=state['hit'], doubt_copies=len(alias),
+                     total_s=round(time.time() - t0, 2))
     return best
 
 
@@ -725,6 +827,9 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None)
         warnings.append('Yahoo\'s stored lineups could not be read: frozen days assume today\'s best lineup.')
     if inst.claims_left == 0:
         warnings.append('No claims left this week: only drops and IL moves are possible.')
+    if plan.meta.get('budget_hit'):
+        warnings.append(f'Activation-day search stopped at its {SOLVE_BUDGET:.0f} s budget: the best plan found so far, '
+                        'maybe not the best.')
     warnings += [n[0].upper() + n[1:] + '.' for n in inst.notes if 'stale sync' in n or 'IL differs' in n]
     return {
         'supported': True, 'week_start': inst.week_start, 'week_end': inst.week_end, 'today': inst.days[0],
@@ -737,6 +842,7 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None)
         'days': days, 'do_today': days[0]['transactions'],
         'warnings': warnings, 'assumptions': ASSUMPTIONS,
         'solver': {'solves': plan.meta['solves'], 'solve_s': plan.meta['total_s'], 'dstar': plan.meta['dstar'],
+                   'search': plan.meta['search'], 'budget_hit': plan.meta['budget_hit'],
                    'pool': len(inst.free_agents()), 'seconds': round(time.time() - started, 2)},
     }
 
