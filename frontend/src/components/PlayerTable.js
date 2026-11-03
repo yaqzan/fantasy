@@ -283,7 +283,9 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                         <span className="text-xs sm:text-sm text-gray-200" style={aura ? { color: aura.color, textShadow: aura.glow, fontWeight: aura.weight } : undefined}>
                           {category === 'PLUS_MINUS' && displayValue > 0 ? '+' : ''}{displayValue}{PERCENTAGE_CATEGORIES.includes(category) ? '%' : ''}
                         </span>
-                        <span className="text-[10px] sm:text-[11px] text-gray-500">{displayScore}</span>
+                        {category === 'FPTS' && player.fpts_range
+                          ? <span className="text-[10px] sm:text-[11px] text-gray-500" title="Lowest to highest FPTS in a single game this season">{Math.round(player.fpts_range[0])}–{Math.round(player.fpts_range[1])}</span>
+                          : <span className="text-[10px] sm:text-[11px] text-gray-500">{displayScore}</span>}
                       </div>
                     </td>
                   );

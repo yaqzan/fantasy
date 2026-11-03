@@ -210,6 +210,21 @@ def _team_abbreviations():
     return names
 
 
+def _fpts_range(league):
+    """{player id: (lowest, highest FPTS in one game this season)} from the game lines; points leagues only."""
+    if not league.is_points:
+        return {}
+    from fantasy_database import GameLine
+    from player_card import _line
+    from leagues import fantasy_points
+    out = {}
+    for r in GameLine.select().where((GameLine.season == season_label()) & (GameLine.min > 0)):
+        v = fantasy_points(_line(r), league.point_weights)
+        lo, hi = out.get(r.player_id, (v, v))
+        out[r.player_id] = (min(lo, v), max(hi, v))
+    return out
+
+
 @fantasy_api.route('/fantasy', methods=['GET'])
 def get_fantasy_players():
     """Get all players with fantasy stats, scored for the current league"""
@@ -248,6 +263,7 @@ def get_fantasy_players():
 
     players_data = []
     stats_all = player_stats
+    fpts_range = _fpts_range(league)
     for player_name, stats in top:
         player = players_by_name.get(player_name)
         team_name = player.team if player and player.team else "Unknown"
@@ -286,6 +302,7 @@ def get_fantasy_players():
             'plays_today': today in day_games.get(full_team_name, {}),
             'plays_tomorrow': today + timedelta(days=1) in day_games.get(full_team_name, {}),
             'stats': category_stats,
+            'fpts_range': list(fpts_range[player.id]) if player and player.id in fpts_range else None,
             'overall_rank': stats.get('Z-RANK_projected', 0),  # Default to projected
             'overall_rank_season': stats.get('Z-RANK', 0),
             'overall_rank_5': stats.get('Z-RANK_5', 0),
