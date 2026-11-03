@@ -721,17 +721,6 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None)
             tx.append({'type': m['type'], 'player': m['player'], 'note': _note(inst, m, n_add)})
         days.append({'date': day, 'frozen': bool(plan.frozen[t]), 'today': t == 0, 'transactions': tx})
     warnings = []
-    for q in inst.healthy_in_il:
-        when = plan.meta['dstar'].get(q)
-        tail = 'the plan keeps him there all week' if when == 'never' else \
-            f"the plan frees him on {date.fromisoformat(when).strftime('%a')}"
-        warnings.append(f'{q} is healthy in IL: your lineup is frozen and adds are blocked until he is '
-                        f'activated ({tail}).')
-    by_day = {}
-    for m in plan.moves:
-        by_day.setdefault(m['t'], set()).add(m['type'])
-    if any({'il_in', 'il_out'} <= kinds for kinds in by_day.values()):
-        warnings.append('Assumes an IL swap (one player out of IL, another in) is one submit on Yahoo.')
     if inst.stored_source != 'yahoo':
         warnings.append('Yahoo\'s stored lineups could not be read: frozen days assume today\'s best lineup.')
     if inst.claims_left == 0:

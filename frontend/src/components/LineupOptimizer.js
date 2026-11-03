@@ -56,6 +56,32 @@ const gamesFraction = (players, played) => {
   return { played: total - Math.round(left), total };
 };
 
+// The injured list at a glance, no sentences: each slot is a chip, a healthy player still in IL is amber (he locks the lineup
+// and blocks adds), my Out / INJ players on the active roster are red with where they can go.
+const OUT_STATUS = ['O', 'INJ'];
+const IlStrip = ({ data }) => {
+  const il = data.il || [], injury = data.injury || {}, slots = data.il_slots || 0;
+  const outActive = data.roster.filter(p => OUT_STATUS.includes(injury[p]));
+  if (!slots && !il.length && !outActive.length) return null;
+  const open = Math.max(0, slots - il.length);
+  const chip = 'rounded px-1.5 py-0.5 text-xs whitespace-nowrap';
+  return (
+    <div className="bg-gray-700 rounded-lg border border-gray-600 p-2 sm:p-3 mb-4 flex flex-wrap items-center gap-1.5 text-xs">
+      <span className="font-semibold text-gray-200 mr-1">{slots || il.length ? 'IL' : 'Out'}</span>
+      {il.map(p => OUT_STATUS.includes(injury[p])
+        ? <span key={p} className={`${chip} bg-gray-800 border border-gray-600 text-gray-200`}><PlayerName name={p} /> <span className="text-red-400">{injury[p]}</span></span>
+        : <span key={p} className={`${chip} bg-amber-900/50 border border-amber-400 text-amber-200 font-semibold`}
+            style={{ boxShadow: '0 0 8px rgba(251,191,36,0.55)' }} title="Healthy but still in IL: the lineup is frozen and adds are blocked until he is activated">
+            🔒 <PlayerName name={p} /> {injury[p] || 'ACTIVE'}</span>)}
+      {Array.from({ length: open }, (_, i) => <span key={`open${i}`} className={`${chip} border border-dashed border-gray-500 text-gray-400`}>open</span>)}
+      {outActive.map(p => (
+        <span key={p} className={`${chip} bg-red-900/50 border border-red-400 text-red-200 font-semibold`} title={!slots ? 'Out' : open ? 'Out: move him to IL' : 'Out, and IL is full'}>
+          <PlayerName name={p} /> {injury[p]}{slots ? (open ? ' → IL' : ' · IL full') : ''}</span>
+      ))}
+    </div>
+  );
+};
+
 // Under a side's score: its claims left and games still to play over the week's total.
 const TeamFacts = ({ claims, perWeek, games, right }) => (
   <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400 tabular-nums ${right ? 'justify-end' : ''}`}>
@@ -426,17 +452,18 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
           </div>
 
           {/* Week plan (claim_planner.py): its own fetch once the matchup is in; hidden where the planner does not apply */}
+          <IlStrip data={data} />
           <WeekPlan week={activeWeek} statType={view.statType} ready={!!data} />
 
           {/* Do not drop: click a player to lock him; no pickup ranking will suggest dropping him */}
           <details className="bg-gray-700 rounded-lg border border-gray-600 p-2 sm:p-3 mb-4">
-            <summary className="cursor-pointer text-xs text-gray-200">Do not drop ({data.roster.filter(p => data.undroppable.includes(p)).length} locked)</summary>
+            <summary className="cursor-pointer text-xs text-gray-200">Do not drop ({[...data.roster, ...data.il].filter(p => data.undroppable.includes(p)).length} locked)</summary>
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {data.roster.map(p => {
+              {[...data.roster, ...data.il].map(p => {
                 const locked = data.undroppable.includes(p);
                 return (
                   <button key={p} onClick={() => toggleKeep(p)} aria-pressed={locked} title={locked ? 'Locked: click to allow dropping' : 'Click to never suggest dropping him'}
-                    className={`px-2.5 py-1 rounded-full text-xs border ${locked ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-500 text-gray-200'}`}>{locked ? '🔒 ' : ''}{p}</button>
+                    className={`px-2.5 py-1 rounded-full text-xs border ${locked ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-500 text-gray-200'}`}>{locked ? '🔒 ' : ''}{p}{data.il.includes(p) ? <span className="ml-1 text-[10px] opacity-70">IL</span> : null}</button>
                 );
               })}
             </div>

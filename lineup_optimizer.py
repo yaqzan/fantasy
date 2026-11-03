@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from statistics import mean
 
-from fantasy_database import FantasyTeam, FantasyTeamPlayer
+from fantasy_database import FantasyTeam, FantasyTeamPlayer, Player
 from player_stats import (league_player_stats, week_schedule, player_week_games, best_starters, team_week_totals,
                           calculate_team_totals, AVAILABILITY,
                           average_week_totals, category_win_chances, category_margins, small_sample_floor, STAT_SUFFIXES, default_stat_type)
@@ -45,6 +45,15 @@ def _active_roster(league):
     """(my roster without the injured-list slot, the injured-list players): IL players hold no spot and score nothing."""
     il = my_il_players(league)
     return [p for p in get_all_my_team_players(league) if p not in il], sorted(il)
+
+
+IL_SLOTS = 3   # Yahoo injured-list slots in the daily-lineup leagues (claim_planner.K); only Yahoo has IL slots here
+
+
+def _injury_statuses(names):
+    """{name: Yahoo's status (O, INJ, Q, ...)} for the players who have one: the page flags my Out players and healthy IL ones."""
+    return {p.name: p.injury_status for p in Player.select(Player.name, Player.injury_status)
+            .where(Player.name.in_(list(names)) & Player.injury_status.is_null(False)) if p.injury_status}
 
 
 def _roster(team):
@@ -394,6 +403,7 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
         'opponent': label, 'scheduled_opponent': opponent_abv,
         'current': _side_json(week, mine, theirs, suffix, theirs_now),
         'roster': roster, 'il': il, 'undroppable': undroppable, 'claims_per_week': league.claims_per_week,
+        'il_slots': IL_SLOTS if league.platform == 'yahoo' else 0, 'injury': _injury_statuses(roster + il),
         'claims_left': claims,
         'free_agents': sorted(get_available_players(league, week.stats),
                               key=lambda p: week.stats[p].get(f'Z-VALUE{suffix}', 0), reverse=True)[:400],

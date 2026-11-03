@@ -57,7 +57,7 @@ const WeekPlan = ({ week, statType, ready }) => {
                 <span className="w-7 shrink-0 font-semibold text-gray-200 pt-0.5" title={shortDate(day.date)}>{weekdayLetter(day.date)}</span>
                 <div className="flex flex-wrap gap-1 min-w-0 flex-1">
                   {day.today && <span className="rounded px-1.5 py-0.5 bg-nba-orange text-onaccent font-semibold">Do today</span>}
-                  {day.frozen && <span className="rounded px-1.5 py-0.5 border border-amber-500 text-amber-300" title="A healthy player is in IL: the lineup is frozen and adds are blocked">frozen</span>}
+                  {day.frozen && <span className="text-amber-300 py-0.5" title="Frozen: a healthy player is in IL, so no lineup changes or adds">🔒</span>}
                   {day.transactions.map((tx, i) => (
                     <span key={i} className={`rounded px-1.5 py-0.5 break-words min-w-0 ${TX[tx.type].cls}`} title={tx.note}>
                       {TX[tx.type].label} <PlayerName name={tx.player} />
@@ -70,7 +70,6 @@ const WeekPlan = ({ week, statType, ready }) => {
             ))}
           </div>
           {plan.warnings.map((w, i) => <p key={i} className="text-xs text-amber-300 mt-1.5">{w}</p>)}
-          <p className="text-[11px] text-gray-400 mt-1.5">Only today's moves are firm: the plan is re-made each morning.</p>
         </>
       )}
     </div>
