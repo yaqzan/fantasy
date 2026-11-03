@@ -205,12 +205,12 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                 );
               })}
               {points && <>
-                <th className={`table-header ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title="This season's FPTS a game against the preseason projection: green is beating it">Δ</th>
+                <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title="This season's FPTS a game against the preseason projection: green is beating it">Δ</th>
                 {RECENT.map(([, label, title]) => (
-                  <th key={label} className={`table-header ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title={`${title}: FPTS a game`}>{label}</th>
+                  <th key={label} className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title={`${title}: FPTS a game`}>{label}</th>
                 ))}
               </>}
-              <th className="table-header w-12" title="Games he has played this season">GP</th>
+              <th className="table-header text-center w-12" title="Games he has played this season">GP</th>
             </tr>
           </thead>
           <tbody>
