@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { analyze, getPickups, errorMessage } from '../services/api';
+import { analyze, getPickups, setUndroppable, errorMessage } from '../services/api';
 import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
 import { WeekSelect, defaultWeekStart, validWeek, selectClass, shortDate, weekdayLetter, weekDays } from '../weeks';
@@ -251,6 +251,10 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
     && (!filter.pos || c.positions.includes(filter.pos)));
   const matches = search ? (data?.free_agents || []).filter(p => p.toLowerCase().includes(search.toLowerCase())).slice(0, 6) : [];
   const droppable = data ? data.roster.filter(p => !data.undroppable.includes(p)) : [];
+  // Do-not-drop: toggle a rostered player, then reload so every ranking drops someone else.
+  const toggleKeep = (name) => {
+    setUndroppable(name, !data.undroppable.includes(name)).then(() => setReload(r => r + 1)).catch(err => setError(errorMessage(err)));
+  };
 
   // A searched free agent starts on the open spot when the roster has one, else the best pick's drop,
   // else your lowest-rated droppable player (the drop picker changes it). One already in the candidates
@@ -418,6 +422,20 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
             </div>
             {columns.map(col => col.error && <p key={col.key} className="text-xs text-red-300 mt-2">{col.item.name}: {col.error}</p>)}
           </div>
+
+          {/* Do not drop: click a player to lock him; no pickup ranking will suggest dropping him */}
+          <details className="bg-gray-700 rounded-lg border border-gray-600 p-2 sm:p-3 mb-4">
+            <summary className="cursor-pointer text-xs text-gray-200">Do not drop ({data.roster.filter(p => data.undroppable.includes(p)).length} locked)</summary>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {data.roster.map(p => {
+                const locked = data.undroppable.includes(p);
+                return (
+                  <button key={p} onClick={() => toggleKeep(p)} aria-pressed={locked} title={locked ? 'Locked: click to allow dropping' : 'Click to never suggest dropping him'}
+                    className={`px-2.5 py-1 rounded-full text-xs border ${locked ? 'bg-nba-orange text-onaccent border-nba-orange' : 'border-gray-500 text-gray-200'}`}>{locked ? '🔒 ' : ''}{p}</button>
+                );
+              })}
+            </div>
+          </details>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] items-start">
             {/* The candidates */}

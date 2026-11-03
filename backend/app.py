@@ -496,6 +496,19 @@ def undraft_player():
     return jsonify({'success': True, 'deleted_count': deleted_count}), 200
 
 
+@fantasy_api.route('/undroppable', methods=['PUT'])
+def set_undroppable():
+    """Do-not-drop protocol: mark (or unmark) a player the Pickup Desk may never suggest dropping, in the
+    current league. Yahoo's can't-cut flags are the same column; a flag set here is never cleared by the sync."""
+    data = request.get_json() or {}
+    player = Player.get_or_none(Player.name == data.get('player_name'))
+    if not player:
+        return jsonify({'error': f"No player named {data.get('player_name')}"}), 404
+    league = current_league()
+    set_league_flags(league, player.id, undroppable=bool(data.get('undroppable', True)))
+    return jsonify({'undroppable': get_undroppable_players(league)})
+
+
 def _open_slots(slots, filled):
     open_slots = list(slots)
     for slot in filled:

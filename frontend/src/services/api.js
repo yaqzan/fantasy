@@ -160,6 +160,10 @@ export const analyze = async (weekStart = null, timeframe = 'projected', { moves
   return response.data;
 };
 
+// Do-not-drop: the Pickup Desk never suggests dropping a flagged player (per league).
+export const setUndroppable = async (playerName, undroppable) =>
+  (await api.put('/undroppable', { player_name: playerName, undroppable })).data;
+
 // Projections (NBA-wide): team wins by source + the owner's adjustments, player lines by source.
 export const getTeamProjections = async () => (await api.get('/projections/teams')).data;
 export const setTeamAdjustment = async (team, adjustment) =>
