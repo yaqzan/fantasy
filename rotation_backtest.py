@@ -1,0 +1,142 @@
+"""Rotation / injury-minutes backtest, walk-forward, on pregame inputs only (rotation_data.py caches them).
+
+  python rotation_backtest.py            # grid on 2025-26 (train), report the pick on 2026-27 (test)
+
+Inputs per team-game: who is Active/Inactive and who starts (NBA daily lineups JSON), minutes after the game.
+Prediction for a player = his baseline minutes, plus a share of the minutes the team's usual rotation
+players who are Inactive tonight would have played. Scored on every Active player with a baseline,
+including DNP-CDs (0 min), so the model pays for handing minutes to a man who never plays.
+"""
+import json
+import sys
+from collections import defaultdict
+from datetime import date
+from pathlib import Path
+
+import pandas as pd
+
+CACHE = Path(__file__).parent / '.horizon' / 'rotation'
+NORM = {'NO': 'NOP', 'NY': 'NYK', 'WSH': 'WAS', 'GS': 'GSW', 'SA': 'SAS', 'PHO': 'PHX', 'BRK': 'BKN', 'CHO': 'CHA'}
+WINDOW = 10            # baseline = mean of his last WINDOW played games
+PRIOR_N = 4            # last season's mpg counts as this many games
+OUT_MIN = 10.0         # an Inactive player with this baseline frees minutes
+NEW_WITHIN = 3         # "new" absence: Active in one of the team's previous NEW_WITHIN games
+GROUP = {'PG': 'G', 'SG': 'G', 'G': 'G', 'SF': 'W', 'F': 'W', 'PF': 'B', 'C': 'B', 'FC': 'B', 'GF': 'W'}
+
+
+def minutes_2526():
+    df = pd.read_csv(CACHE / 'gamelog_2025-26.csv', dtype={'GAME_ID': str})
+    return {(r.GAME_ID, int(r.PLAYER_ID)): float(r.MIN or 0) for r in df.itertuples()}, \
+        {int(r.PLAYER_ID): float(r.MIN or 0) for r in df.itertuples()}, df
+
+
+def minutes_2627():
+    from fantasy_database import GameLine
+    return {(r.game_id, r.player_id): float(r.min or 0) for r in GameLine.select().where(GameLine.season == '2026-27')}
+
+
+def position_groups():
+    from fantasy_database import Player
+    out = {}
+    for p in Player.select(Player.id, Player.pos, Player.positions):
+        first = (p.positions or p.pos or '').replace('/', ',').split(',')[0].strip()
+        out[p.id] = GROUP.get(first)
+    return out
+
+
+def team_games(first, last):
+    """[(date, game_id, team, {pid: (active, starter)})] for a date range, from the cached lineups JSON."""
+    rows = []
+    for f in sorted(CACHE.glob('lineups_*.json')):
+        d = date(int(f.stem[8:12]), int(f.stem[12:14]), int(f.stem[14:16]))
+        if not (first <= d <= last):
+            continue
+        for g in json.load(open(f))['games']:
+            if g.get('gameStatus') != 3:
+                continue
+            for side in ('homeTeam', 'awayTeam'):
+                t = g[side]
+                rows.append((d, g['gameId'], NORM.get(t['teamAbbreviation'], t['teamAbbreviation']),
+                             {p['personId']: (p['rosterStatus'] == 'Active', bool(p['position'])) for p in t['players']}))
+    return rows
+
+
+def build(first, last, mins, prior, grp):
+    """One record per team-game: active players with baseline + actual, and the new-absence list."""
+    hist = defaultdict(list)           # pid -> minutes in games played, in order
+    recent_active = defaultdict(list)  # team -> list of sets of active pids
+    recs = []
+    for d, gid, team, pl in sorted(team_games(first, last), key=lambda x: (x[0], x[1])):
+        def base(pid):
+            h = hist[pid][-WINDOW:]
+            pr = prior.get(pid)
+            n = len(h)
+            if pr is None:
+                return sum(h) / n if n >= 3 else None
+            return (pr * PRIOR_N + sum(h)) / (PRIOR_N + n)
+        active = {p for p, (a, s) in pl.items() if a}
+        prev = recent_active[team][-NEW_WITHIN:]
+        b = {p: base(p) for p in pl}
+        out = [p for p, (a, s) in pl.items() if not a and b[p] and b[p] >= OUT_MIN]
+        new_out = [p for p in out if any(p in s for s in prev)]
+        recs.append(dict(date=d, team=team, b=b, active=active, starter={p for p, (a, s) in pl.items() if s},
+                         actual={p: mins.get((gid, p), 0.0) for p in active}, out=out, new_out=new_out,
+                         grp={p: grp.get(p) for p in pl}))
+        for p in active:
+            m = mins.get((gid, p), 0.0)
+            if m > 0:
+                hist[p].append(m)
+        recent_active[team].append(active)
+    return recs
+
+
+def predict(r, alpha, beta, gamma=0.0, cap=40.0):
+    """Team minutes are fixed at 240: share them out by baseline, tilted toward the positions of the
+    Inactive rotation players (beta) and toward starters (gamma); alpha mixes with the raw baseline."""
+    base = {p: r['b'][p] for p in r['active'] if r['b'].get(p)}
+    freed = defaultdict(float)
+    for p in r['out']:
+        freed[r['grp'].get(p)] += r['b'][p]
+    w = {q: base[q] * (1 + beta * freed.get(r['grp'].get(q), 0) / 20) * (1 + gamma * (q in r['starter'])) for q in base}
+    tot = sum(w.values()) or 1
+    return {q: min((1 - alpha) * base[q] + alpha * 240 * w[q] / tot, cap) for q in base}
+
+
+def score(recs, **kw):
+    """(MAE on new-absence team-games, MAE on other team-games, n_new, n_other, mean freed minutes)."""
+    new, oth = [], []
+    for r in recs:
+        pr = predict(r, **kw)
+        errs = [abs(pr[p] - r['actual'][p]) for p in pr if r['b'][p] >= 5]
+        (new if r['new_out'] else oth).append(errs)
+    f = lambda L: sum(sum(e) for e in L) / max(sum(len(e) for e in L), 1)
+    return f(new), f(oth), len(new), len(oth)
+
+
+def main():
+    m25, prior25, df = minutes_2526()
+    grp = position_groups()
+    train = build(date(2025, 10, 21), date(2026, 4, 13), m25, {}, grp)
+    cnt = defaultdict(list)
+    for p, v in df.groupby('PLAYER_ID')['MIN']:
+        cnt[int(p)] = v
+    prior = {p: v.mean() for p, v in cnt.items() if len(v) >= 10}
+    test = build(date(2026, 10, 20), date(2026, 11, 2), minutes_2627(), prior, grp)
+    for name, recs in (('2025-26 train', train), ('2026-27 test', test)):
+        print(f"{name}: {len(recs)} team-games, {sum(1 for r in recs if r['new_out'])} with a new rotation absence")
+        base = score(recs, alpha=0, beta=0)
+        print(f"  baseline          new-absence MAE {base[0]:.2f}  other {base[1]:.2f}  (n {base[2]}/{base[3]})")
+    best = None
+    for alpha in (0.5, 0.75, 1.0):
+        for beta in (0, 1, 3):
+            for gamma in (0, 0.5):
+                s = score(train, alpha=alpha, beta=beta, gamma=gamma)
+                t = score(test, alpha=alpha, beta=beta, gamma=gamma)
+                print(f"  a={alpha} b={beta} g={gamma}: train new {s[0]:.2f} oth {s[1]:.2f} | test new {t[0]:.2f} oth {t[1]:.2f}")
+                if best is None or s[0] < best[0]:
+                    best = (s[0], alpha, beta, gamma)
+    print('best on train (new-absence games):', best)
+
+
+if __name__ == '__main__':
+    main()

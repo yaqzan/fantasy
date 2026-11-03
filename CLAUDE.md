@@ -50,5 +50,6 @@ Lineup Optimizer / Pickup Desk (file map, traps; read before touching `lineup_op
 Projections (players, rookies, team wins, sources, backtests) -> `.claude/docs/projections.md`.
 Draft strategy: what the room pays for, price-tier returns, category pairs, anchor builds -> `.claude/docs/draft-strategy.md`.
 Frontend colour schemes (CSS variables behind the Tailwind classes), logo -> `.claude/docs/frontend.md`.
+Rotation / injury-minutes research (lineups JSON source, backtest findings, next steps) -> `.claude/docs/rotation.md`.
 Hosting, tunnel, watchdog, cutover history -> `.claude/docs/ops.md`.
 Kanban -> vault `Engineering Wiki/Projects/Fantasy/`.
