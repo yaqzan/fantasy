@@ -19,6 +19,7 @@ const percentileZ = (score) => {
 };
 // Points leagues: columns after FPTS. 'Vs proj' = this season's average against the preseason projection; L5/L10 the recent averages.
 const RECENT = [['5', 'L5', 'Last 5 games'], ['10', 'L10', 'Last 10 games']];
+const RECENT_DELTA_PER_SD = 4;   // FPTS a game that a recent average may sit from the season average per aura SD
 const deltaClass = (d) => d >= 3 ? 'text-green-400' : d >= 1 ? 'text-green-300' : d <= -3 ? 'text-red-400' : d <= -1 ? 'text-orange-300' : 'text-gray-400';
 const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
 
@@ -305,15 +306,17 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                     <td className={cell} title={delta == null ? 'No projection or no games yet' : `${f.value_season} a game this season against a preseason projection of ${f.value_proj}${player.small_sample ? ' (small sample)' : ''}`}>
                       {delta == null ? <span className="text-gray-600">-</span> : (
                         <span className={`text-xs sm:text-sm font-semibold ${player.small_sample ? 'opacity-50' : ''} ${deltaClass(delta)}`}>
-                          {delta >= 0.5 ? '▲' : delta <= -0.5 ? '▼' : '='}{Math.abs(delta).toFixed(1)}
+                          {delta >= 0.5 ? '▲' : delta <= -0.5 ? '▼' : '='}
                         </span>
                       )}
                     </td>
                     {RECENT.map(([n, label]) => {
-                      const v = f[`value_${n}`], sc = f[`score_${n}`];
-                      const a = v ? zAura(percentileZ(sc)) : null;
+                      const v = f[`value_${n}`];
+                      // Tinted and glowing by how far the recent average sits from his season average (about 4 FPTS = 1 SD).
+                      const d = v && f.value_season ? v - f.value_season : null;
+                      const a = d == null ? null : zAura(d / RECENT_DELTA_PER_SD);
                       return (
-                        <td key={label} className={cell} title={v ? `${label}: ${v} FPTS a game, percentile ${sc}` : undefined}>
+                        <td key={label} className={cell} title={v ? `${label}: ${v} FPTS a game${d == null ? '' : `, ${d >= 0 ? '+' : ''}${d.toFixed(1)} against his ${f.value_season} season average`}` : undefined}>
                           {v ? <span className="text-xs sm:text-sm text-gray-200" style={a ? { color: a.color, textShadow: a.glow, fontWeight: a.weight } : undefined}>{v}</span> : <span className="text-gray-600">-</span>}
                         </td>
                       );
