@@ -205,7 +205,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                 );
               })}
               {points && <>
-                <th className={`table-header ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title="This season's FPTS a game against the preseason projection: green is beating it">vs Proj</th>
+                <th className={`table-header ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title="This season's FPTS a game against the preseason projection: green is beating it">Δ</th>
                 {RECENT.map(([, label, title]) => (
                   <th key={label} className={`table-header ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title={`${title}: FPTS a game`}>{label}</th>
                 ))}
@@ -306,7 +306,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                     <td className={cell} title={delta == null ? 'No projection or no games yet' : `${f.value_season} a game this season against a preseason projection of ${f.value_proj}${player.small_sample ? ' (small sample)' : ''}`}>
                       {delta == null ? <span className="text-gray-600">-</span> : (
                         <span className={`text-xs sm:text-sm font-semibold ${player.small_sample ? 'opacity-50' : ''} ${deltaClass(delta)}`}>
-                          {delta >= 0.5 ? '▲' : delta <= -0.5 ? '▼' : '='}
+                          {delta >= 0.5 ? '▲' : delta <= -0.5 ? '▼' : '='}{Math.abs(delta).toFixed(1)}
                         </span>
                       )}
                     </td>
