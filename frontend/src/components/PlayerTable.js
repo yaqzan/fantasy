@@ -18,6 +18,9 @@ const percentileZ = (score) => {
   const z = t - (2.515517 + 0.802853 * t + 0.010328 * t * t) / (1 + 1.432788 * t + 0.189269 * t * t + 0.001308 * t ** 3);
   return q < 0.5 ? -z : z;
 };
+// Points leagues: columns after FPTS. 'Vs proj' = this season's average against the preseason projection; L5/L10 the recent averages.
+const RECENT = [['5', 'L5', 'Last 5 games'], ['10', 'L10', 'Last 10 games']];
+const deltaClass = (d) => d >= 3 ? 'text-green-400' : d >= 1 ? 'text-green-300' : d <= -3 ? 'text-red-400' : d <= -1 ? 'text-orange-300' : 'text-gray-400';
 const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
 
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
@@ -28,6 +31,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
   const CATEGORY_FULL = Object.fromEntries(categoryMeta.map(c => [c.key, c.name || c.label]));
   const PERCENTAGE_CATEGORIES = categoryMeta.filter(c => c.percent).map(c => c.key);
   const caps = config?.capabilities || {};
+  const points = caps.scoring === 'points' && CATEGORIES.includes('FPTS');
   const [sortConfig, setSortConfig] = useState({ key: 'overall_rank', direction: 'asc' });
   const [draftModalPlayer, setDraftModalPlayer] = useState(null);
   const includedCategories = CATEGORIES.filter(c => !puntCategories.includes(c));
@@ -201,6 +205,12 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                   </th>
                 );
               })}
+              {points && <>
+                <th className={`table-header ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title="This season's FPTS a game against the preseason projection: green is beating it">vs Proj</th>
+                {RECENT.map(([, label, title]) => (
+                  <th key={label} className={`table-header ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title={`${title}: FPTS a game`}>{label}</th>
+                ))}
+              </>}
               <th className="table-header w-12" title="Games he has played this season">GP</th>
               <th className="table-header w-16"></th>
             </tr>
@@ -290,6 +300,29 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                     </td>
                   );
                 })}
+                {points && (() => {
+                  const f = player.stats.FPTS || {};
+                  const delta = f.value_proj && f.value_season ? f.value_season - f.value_proj : null;
+                  const cell = `px-px sm:px-1 py-1 text-center tabular-nums whitespace-nowrap ${STAT_W} ${fade}`;
+                  return <>
+                    <td className={cell} title={delta == null ? 'No projection or no games yet' : `${f.value_season} a game this season against a preseason projection of ${f.value_proj}${player.small_sample ? ' (small sample)' : ''}`}>
+                      {delta == null ? <span className="text-gray-600">-</span> : (
+                        <span className={`text-xs sm:text-sm font-semibold ${player.small_sample ? 'opacity-50' : ''} ${deltaClass(delta)}`}>
+                          {delta >= 0.5 ? '▲' : delta <= -0.5 ? '▼' : '='}{Math.abs(delta).toFixed(1)}
+                        </span>
+                      )}
+                    </td>
+                    {RECENT.map(([n, label]) => {
+                      const v = f[`value_${n}`], sc = f[`score_${n}`];
+                      const a = v ? zAura(percentileZ(sc)) : null;
+                      return (
+                        <td key={label} className={cell} title={v ? `${label}: ${v} FPTS a game, percentile ${sc}` : undefined}>
+                          {v ? <span className="text-xs sm:text-sm text-gray-200" style={a ? { color: a.color, textShadow: a.glow, fontWeight: a.weight } : undefined}>{v}</span> : <span className="text-gray-600">-</span>}
+                        </td>
+                      );
+                    })}
+                  </>;
+                })()}
                 <td className={`text-center text-gray-300 ${fade}`}>
                   {player.projected_only ? (
                     <span className="text-sky-400" title="No NBA games last season (rookie, or out all year): valued on his projection only">
