@@ -229,24 +229,24 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                       <div className="flex items-center gap-1 min-w-0">
                         <PlayerName id={player.id} name={player.name} className={`font-medium truncate min-w-0 ${mine ? 'text-mine' : 'text-white'}`} />
                         <span className="shrink-0 text-[11px]">{getHotColdIndicator(player)}</span>
+                        {!player.is_injured && player.injury_status && player.injury_status !== 'NA' && (
+                          <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold text-white whitespace-nowrap bg-amber-600"
+                                title="Yahoo's injury status">
+                            {player.injury_status}
+                          </span>
+                        )}
+                        {player.is_injured && (
+                          <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold bg-red-600 text-white whitespace-nowrap"
+                                title={`INJ${player.injured_return ? ` - ${player.injured_return}` : ''}${player.injured_games ? ` (${player.injured_games} missed)` : ''}`}>
+                            INJ{player.injured_games ? ` ${player.injured_games}` : ''}
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                         <span>{player.positions?.length ? player.positions.join('/') : player.position} · {player.team_abv || 'N/A'}</span>
                         {weeks.length > 0 && (
                           <span className="text-gray-300" title={weeks.map(w => `${w.n} games ${w.range}`).join(' · ')}>
                             · {weeks.map(w => w.n).join(' + ')} GP
-                          </span>
-                        )}
-                        {!player.is_injured && player.injury_status && player.injury_status !== 'NA' && (
-                          <span className="inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold text-white whitespace-nowrap bg-amber-600"
-                                title="Yahoo's injury status">
-                            {player.injury_status}
-                          </span>
-                        )}
-                        {player.is_injured && (
-                          <span className="inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold bg-red-600 text-white whitespace-nowrap"
-                                title={`INJ${player.injured_return ? ` - ${player.injured_return}` : ''}${player.injured_games ? ` (${player.injured_games} missed)` : ''}`}>
-                            INJ{player.injured_games ? ` ${player.injured_games}` : ''}
                           </span>
                         )}
                       </div>
