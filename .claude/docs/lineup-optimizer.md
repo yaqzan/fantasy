@@ -16,8 +16,9 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 | Played games, live pro-rating, tipped games | `week_actuals.py` (`WeekActuals`, `game_left`); slates from `daily_leaders.slate` |
 | Per-player games, lineups, category totals and chances | `player_stats.py` (`player_week_games`, `fill_slots`, `team_week_totals`, `category_win_chances`) |
 | Claims already used this week | `fantasy_team_helper.claims_left` (Yahoo only) |
-| Page | `frontend/src/components/LineupOptimizer.js`; API client `services/api.js` (`analyze`, `pickups`); sibling `WeeklyPickups.js` |
-| Terminal | `python lineup_optimizer.py <league> proj [moves] [plan]` |
+| Week plan (ILP: adds, drops, IL moves, claim days; Yahoo daily points leagues) | `claim_planner.py` (`week_plan`, `solve`, `score_judge`), `/api/plan`; card `components/WeekPlan.js` |
+| Page | `frontend/src/components/LineupOptimizer.js`; API client `services/api.js` (`analyze`, `pickups`, `getPlan`); sibling `WeeklyPickups.js` |
+| Terminal | `python lineup_optimizer.py <league> proj [moves] [plan]` ; `python claim_planner.py <league>` |
 
 ## Traps
 
@@ -33,3 +34,35 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 - To test a mid-week state without waiting for one: build `Week(league, ws, we)`, set `week.actual = WeekActuals(ws, we, today, fake_slate, norm_name)` and `week.remaining, week.day_weights = week.actual.remaining(week.schedule)`, then call `rank_moves`. Compare against a brute-force drops x days search.
 - DB rosters and injury flags go stale between syncs (`pull_yahoo.py sync`, `pull_fantrax.py rosters`); sync before judging a ranking.
 - Not yet looked at in a browser by the owner as of 2026-10-26; verify with endpoint probes and the build, not a screenshot.
+
+## Week plan (claim_planner.py)
+
+Built from the `.horizon/claims-ilp/` prototype (formulation `04-opus-final.md`, owner answers `05-decisions.md`, the
+corrections in `driver/NOTES_plan.md`); equal to it on the live Courtside week (same moves, objective diff 0, judge
+P(win) equal; 2026-11-02). Supported: Yahoo, daily lineups, points. Elsewhere `/api/plan` is `{supported: false, reason}`.
+
+- **Rules encoded (owner-confirmed):** adds cost the week's claims, drops and IL moves are free. A dropped player is
+  unaddable league-wide for 3 days (`waiver_until`); re-adding my own drop is banned. IL takes only OUT players, but a
+  healthy player may stay there: that **freezes** the lineup (Yahoo's stored lineup plays) and **blocks adds** (Yahoo
+  help SLN6863) until he is activated, and activating needs an open active spot. Only starters score; the bench covers
+  absent starters (`_lineup_chance` layers, availability 0.86). A player in a game under way can't be dropped or moved today.
+- **Objective = the judge's own day value, Abel-summed:** `sum_r w_r v_(r) = sum_{k=n}^{R} c_k S_k`, `c_k = w_{k-1} - w_k`,
+  `w_R := 0`, S_k = best k active players' v. For n = 9, R = 13: c = 0.2213 0.2788 0.1952 0.1002 0.0645 (sum 0.86).
+  04's form (0.86 on the starters + dw on the bench) double-counted `w_n S_n` and dropped `w_13 S_13`: up to 216 FPTS/day off.
+  v carries no 0.86 (it lives in the weights) or it is counted twice.
+- **Positions off by default** (`solve(positions=False)`): the repo judge (`player_week_games`) ignores positions when
+  availability < 1, so a position-constrained ILP lost to greedy on the judge. Make the judge position-aware first.
+- **Freeze by enumeration:** each healthy IL player's activation day d* in {today..last day, never} (today skipped
+  while his game is on) is one MILP; the best objective wins. Activating on d* leaves him droppable, which covers
+  "drop him". Frozen days: stored starters at 0.86 each, no cover, no adds, no IL entries.
+- **Tie-breaks (FPTS):** 0.1 per day earlier on adds and drops (prefer later), 0.5 per drop, 0.25 per IL move (without
+  it the solver moved an OUT player out of IL for a day to drop him later).
+- **Assumes an atomic IL swap** (one player out of IL, another in, one submit on Yahoo; by Yahoo rule, unverified):
+  the payload warns whenever a day has both.
+- **Rolling:** only today's moves (`do_today`) are actionable; the plan is re-solved on each load (60 s result cache).
+  OUT = out all week, a healthy IL player stays healthy, the opponent makes no moves, claims land at once.
+- **Win chance** = `score_judge`: each day's roster through `Week.team` (one day's `remaining`/`doubtful` at a time),
+  then `category_win_chances` vs the opponent; "now" is the same judge on no moves (frozen days included, so it can
+  read lower than `/api/analyze`'s chance, which ignores the freeze).
+- **Cost:** one Week build + 7 Yahoo `team/.../roster;date=D` GETs (4 threads, cached 30 min in memory, one burst at a
+  time) + ~8 MILPs (~0.05 s each). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.

@@ -181,6 +181,8 @@ stats) is shared by all leagues.
   of it among the previous step's top 30, until nothing helps. Exhaustive claim combinations
   (5 of 150) are out of reach. ~0.4 s per league-week. `/api/analyze?add=&drop=` (repeatable) is
   the what-if; `moves=true` adds the best pickups.
+  Yahoo daily points leagues (Courtside) also get a **week plan** from an ILP (`claim_planner.py`, `/api/plan`): IL
+  moves, the freeze and waiver locks included; `best_moves` stays for the CLI and other leagues. lineup-optimizer.md "Week plan".
 - **Stage plan** (`plan_stage`, `/api/stage-plan`, `python lineup_optimizer.py <league> proj false true`): guillotine
   leagues only. The claims for each remaining week of the current stage: beam search (4 rosters) over `rank_moves`,
   each week judged against its scheduled opponent, the roster carrying over, so a claim that pays next week's

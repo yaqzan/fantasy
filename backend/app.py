@@ -653,6 +653,21 @@ def analyze():
     return jsonify(result)
 
 
+@fantasy_api.route('/plan')
+def week_plan():
+    """Pickup Desk week plan (claim_planner.py): every add, drop and IL move for the rest of the week, today's moves,
+    win chance now vs with the plan. Yahoo daily points leagues; elsewhere {supported: false, reason}. Cached 60 s."""
+    from claim_planner import cached_week_plan
+    league = current_league()
+    week_start, week_end, opponent = _requested_week(league, request.args.get('week_start'))
+    try:
+        result = cached_week_plan(league, request.args.get('timeframe') or default_stat_type(league),
+                                  week_start, week_end, opponent)
+    except RuntimeError as e:   # no feasible plan: a data gap, not a rule conflict
+        return jsonify({'error': str(e)}), 422
+    return jsonify(result)
+
+
 @fantasy_api.route('/stage-plan')
 def stage_plan():
     """Guillotine: the claims for each remaining week of the current stage (lineup_optimizer.plan_stage)."""

@@ -28,6 +28,7 @@ league id or person's name. Pre-2026-09-23 history (it holds a real password) is
 - `python pull_yahoo.py schedule --league <yahoo league number> [--apply]` - our weeks + opponents from Yahoo's scoreboards
 - `python pull_yahoo.py draft --league <n> [--apply] [--watch 20]` / `adp --league <n>` - draft order + live picks onto the board / Yahoo rank + ADP
 - `python lineup_optimizer.py [league] [timeframe] [moves]` - this week's matchup (and best pickups) in the terminal
+- `python claim_planner.py [league] [timeframe]` - the week plan (ILP: adds, drops, IL moves; Yahoo daily points leagues)
 - `ops\windows\install-tasks.ps1 -Controller C:\Development\server.ps1` - watchdog task; ELEVATED shell
 
 ## Invariants

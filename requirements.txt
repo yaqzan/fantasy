@@ -8,3 +8,4 @@ tqdm
 Unidecode
 defopt
 fantraxapi
+scipy>=1.9
