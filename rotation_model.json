@@ -1,0 +1,36 @@
+{
+ "pplay": {
+  "intercept": 0.9274086381151458,
+  "coef": [
+   0.000688203543731993,
+   3.276587977167198,
+   -3.4301435899649375,
+   0.15296470339193768,
+   0.06545912842813775
+  ],
+  "features": [
+   "baseline",
+   "starter",
+   "dnp_rate_last6",
+   "freed_min/48",
+   "n_active"
+  ]
+ },
+ "mif": {
+  "intercept": -2.14477294989878,
+  "starter": 2.144859789605187,
+  "new_starter": 0.386550590983052,
+  "new_bench": 0.26378319020378027,
+  "same_group": 0.3135727488687599,
+  "note": "baseline + intercept + starter*s + new_{starter|bench}*(new-absence min/10) + same_group*(same-group new-absence min/10)"
+ },
+ "alpha": 0.75,
+ "gamma": 0.5,
+ "fit": {
+  "trained_on": "2025-26",
+  "team_games": 2476,
+  "player_rows": 23205,
+  "fit_date": "2026-11-03",
+  "bench_shrink": 0.5
+ }
+}

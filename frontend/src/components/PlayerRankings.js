@@ -21,7 +21,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
   const chips = caps.positions?.length ? caps.positions : ['G', 'F', 'C'];
   const [view, setView] = useLeagueViewState(config.league?.id, 'players', {
     statType: config.default_stat_type || 'projected', positions: chips, available: true, healthy: true,
-    priceExponent: null, punts: [], tonight: false, tomorrow: false,
+    priceExponent: null, punts: [], tonight: false, tomorrow: false, opp: false, likely: false,
   }, (picked) => ({
     ...validStat(config)(picked),
     ...(picked.punts && { punts: picked.punts.filter(c => categoryKeys.includes(c)) }),
@@ -37,6 +37,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
   const dayLabel = (offset) => new Date(Date.now() + offset * 864e5).toLocaleDateString('en-US',
     { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
   const search = searchTerm.toLowerCase();
+  const rotationOn = players.some(p => p.rotation);   // the two rotation filters only apply while some lineup is posted
   const filtered = players.filter(player => {
     const mine = player.fantasy_team?.abbreviation === config.MY_TEAM_ABV;
     return (player.name.toLowerCase().includes(search) || player.team.toLowerCase().includes(search))
@@ -44,10 +45,12 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
       && (!showPositionFilter || view.positions.some(chip => playsPosition(player, chip)))
       && (!view.healthy || !player.is_injured)
       && (!view.tonight || player.plays_today)
-      && (!view.tomorrow || player.plays_tomorrow);
+      && (!view.tomorrow || player.plays_tomorrow)
+      && (!rotationOn || !view.opp || (player.rotation && !player.rotation.inactive && player.rotation.opp >= 2))
+      && (!rotationOn || !view.likely || (player.rotation && player.rotation.p >= 0.8));
   });
   const changed = [view.statType !== (config.default_stat_type || 'projected'), showPositionFilter && view.positions.length !== chips.length,
-    caps.auction && view.priceExponent != null, !view.available, !view.healthy, view.tonight, view.tomorrow].filter(Boolean).length;
+    caps.auction && view.priceExponent != null, !view.available, !view.healthy, view.tonight, view.tomorrow, rotationOn && view.opp, rotationOn && view.likely].filter(Boolean).length;
   const lever = filtersOpen ? 'flex' : 'hidden sm:flex';
   const togglePosition = (chip) => setView(v => ({
     positions: v.positions.includes(chip) ? v.positions.filter(p => p !== chip) : [...v.positions, chip],
@@ -132,6 +135,16 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
               <input type="checkbox" checked={view.tomorrow} onChange={(e) => setView({ tomorrow: e.target.checked })} className={checkboxClass} />
               <span className="ml-2 text-sm text-gray-300">Tomorrow ({dayLabel(1)})</span>
             </label>
+            {rotationOn && <>
+              <label className="flex items-center" title="Teammates who are out give him at least 2 extra minutes tonight (NBA lineup sheet; only teams with a posted lineup)">
+                <input type="checkbox" checked={view.opp} onChange={(e) => setView({ opp: e.target.checked })} className={checkboxClass} />
+                <span className="ml-2 text-sm text-gray-300">Opp +2 min</span>
+              </label>
+              <label className="flex items-center" title="At least an 80% chance of playing tonight (NBA lineup sheet; only teams with a posted lineup)">
+                <input type="checkbox" checked={view.likely} onChange={(e) => setView({ likely: e.target.checked })} className={checkboxClass} />
+                <span className="ml-2 text-sm text-gray-300">Likely to play</span>
+              </label>
+            </>}
             <label className="flex items-center">
               <input type="checkbox" checked={view.healthy} onChange={(e) => setView({ healthy: e.target.checked })} className={checkboxClass} />
               <span className="ml-2 text-sm text-gray-300">Healthy</span>

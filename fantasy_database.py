@@ -192,6 +192,46 @@ class ScannedGame(BaseModel):
     class Meta:
         table_name = 'pbp_scanned_games'
 
+class NbaLineup(BaseModel):
+    """One rostered player in one regular-season game, from the NBA's daily lineups JSON (nba_rotation.py):
+    Active / Inactive and starter as last seen. game_lines holds only games played, so this is where
+    "was Active but did not play" and "started" live."""
+    game_id = CharField(max_length=16)
+    player_id = IntegerField()
+    game_date = DateField(index=True)
+    team = CharField(max_length=8)
+    active = BooleanField()
+    starter = BooleanField()
+    lineup_status = CharField(max_length=12, null=True)  # 'Expected' / 'Confirmed'
+    game_status = IntegerField()                         # 1 not started, 2 live, 3 final
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'nba_lineups'
+        primary_key = CompositeKey('game_id', 'player_id')
+
+
+class RotationPick(BaseModel):
+    """What nba_rotation.py said about a player before tip-off, kept to score it against game_lines
+    (rotation_score.py). Rewritten each refresh until the game starts, then frozen."""
+    game_date = DateField()
+    player_id = IntegerField()
+    team = CharField(max_length=8)
+    p_play = FloatField()
+    base = FloatField(null=True)
+    mif = FloatField(null=True)      # minutes if he plays
+    opp = FloatField(null=True)      # the injury terms of mif
+    exp = FloatField(null=True)      # team-normalised expected minutes
+    starter = BooleanField()
+    lineup_status = CharField(max_length=12, null=True)
+    injury_status = CharField(max_length=8, null=True)
+    logged_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'rotation_picks'
+        primary_key = CompositeKey('game_date', 'player_id')
+
+
 class DailyPlayerStats(BaseModel):
     player_id = ForeignKeyField(Player, backref='daily_stats')
     player_name = CharField()
@@ -362,4 +402,4 @@ class TeamProjection(BaseModel):
 
 ALL_MODELS = [Team, Player, Game, League, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag, TechnicalFoul,
               ScannedGame, DailyPlayerStats, PlayerSeason, PlayerProjection, ProjectionAdjustment, TeamProjection,
-              GameLine, PreseasonLine]
+              GameLine, PreseasonLine, NbaLineup, RotationPick]

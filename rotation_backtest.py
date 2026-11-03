@@ -16,12 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 CACHE = Path(__file__).parent / '.horizon' / 'rotation'
-NORM = {'NO': 'NOP', 'NY': 'NYK', 'WSH': 'WAS', 'GS': 'GSW', 'SA': 'SAS', 'PHO': 'PHX', 'BRK': 'BKN', 'CHO': 'CHA'}
-WINDOW = 10            # baseline = mean of his last WINDOW played games
-PRIOR_N = 4            # last season's mpg counts as this many games
-OUT_MIN = 10.0         # an Inactive player with this baseline frees minutes
-NEW_WITHIN = 3         # "new" absence: Active in one of the team's previous NEW_WITHIN games
-GROUP = {'PG': 'G', 'SG': 'G', 'G': 'G', 'SF': 'W', 'F': 'W', 'PF': 'B', 'C': 'B', 'FC': 'B', 'GF': 'W'}
+from nba_rotation import NORM, WINDOW, PRIOR_N, OUT_MIN, NEW_WITHIN, GROUP  # shared with the live model
 
 
 def minutes_2526():
@@ -64,7 +59,7 @@ def team_games(first, last):
 def build(first, last, mins, prior, grp):
     """One record per team-game: active players with baseline + actual, and the new-absence list."""
     hist = defaultdict(list)           # pid -> minutes in games played, in order
-    recent_active = defaultdict(list)  # team -> list of sets of active pids
+    recent_played = defaultdict(list)  # team -> list of sets of pids who played (a sheet-Active injured player is not 'new')
     played = defaultdict(list)         # pid -> 1/0 per game he was Active: did he play
     recs = []
     for d, gid, team, pl in sorted(team_games(first, last), key=lambda x: (x[0], x[1])):
@@ -76,7 +71,7 @@ def build(first, last, mins, prior, grp):
                 return sum(h) / n if n >= 3 else None
             return (pr * PRIOR_N + sum(h)) / (PRIOR_N + n)
         active = {p for p, (a, s) in pl.items() if a}
-        prev = recent_active[team][-NEW_WITHIN:]
+        prev = recent_played[team][-NEW_WITHIN:]
         b = {p: base(p) for p in pl}
         out = [p for p, (a, s) in pl.items() if not a and b[p] and b[p] >= OUT_MIN]
         new_out = [p for p in out if any(p in s for s in prev)]
@@ -89,7 +84,7 @@ def build(first, last, mins, prior, grp):
             played[p].append(int(m > 0))
             if m > 0:
                 hist[p].append(m)
-        recent_active[team].append(active)
+        recent_played[team].append({p for p in active if mins.get((gid, p), 0.0) > 0})
     return recs
 
 

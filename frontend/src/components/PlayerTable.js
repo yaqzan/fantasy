@@ -26,6 +26,20 @@ const fptsDelta = (p) => {
   const f = p.stats?.FPTS || {};
   return f.value_proj && f.value_season ? f.value_season - f.value_proj : null;
 };
+// Rotation model (rotation.py): tonight's minutes if he plays, how much of that comes from teammates who are out
+// (opp), his chance of playing (p). Only players whose team has a posted lineup carry one. rotation_opp sorts it.
+const RISK_P = 0.6;
+const rotOpp = (p) => (p.rotation && !p.rotation.inactive && p.rotation.opp != null ? p.rotation.opp : null);
+const rotTip = (player, points) => {
+  const r = player.rotation;
+  if (!r) return undefined;
+  if (r.inactive) return 'Inactive tonight on the NBA lineup sheet';
+  const l10 = player.stats?.FPTS?.value_10;
+  const fpts = points && l10 && r.base ? ` (about ${r.opp >= 0 ? '+' : ''}${(l10 / r.base * r.opp).toFixed(1)} FPTS at his last-10 rate)` : '';
+  return [`${r.mif} min if he plays (usual ${r.base}); ${Math.round(r.p * 100)}% to play${r.confirmed ? '' : ', lineup not confirmed'}`,
+    r.opp ? `${r.opp > 0 ? '+' : ''}${r.opp} min from ${r.out?.length ? r.out.join(', ') : 'teammates'} out${fpts}` : null,
+    r.promoted ? 'Starting tonight, not his usual role' : null].filter(Boolean).join('. ');
+};
 const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
 
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
@@ -37,6 +51,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
   const PERCENTAGE_CATEGORIES = categoryMeta.filter(c => c.percent).map(c => c.key);
   const caps = config?.capabilities || {};
   const points = caps.scoring === 'points' && CATEGORIES.includes('FPTS');
+  const rotationOn = players.some(p => p.rotation);
   const [sortConfig, setSortConfig] = useState({ key: 'overall_rank', direction: 'asc' });
   const includedCategories = CATEGORIES.filter(c => !puntCategories.includes(c));
   const { customScores, loadingCustomScores, periodKey, getAuctionValue, getZScore, getOverallRank } =
@@ -124,6 +139,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
     else if (sortConfig.key === 'fpts_delta') {
       aValue = fptsDelta(a);
       bValue = fptsDelta(b);
+    }
+    else if (sortConfig.key === 'rotation_opp') {
+      aValue = rotOpp(a);
+      bValue = rotOpp(b);
+      if ((aValue == null) !== (bValue == null)) return aValue == null ? 1 : -1;  // no lineup yet: last either way
     }
     // Handle nested stat properties like "stats.PTS.value"
     else if (sortConfig.key.startsWith('stats.')) {
@@ -221,6 +241,12 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                       onClick={() => handleSort(`stats.FPTS.value_${n}`)}>{label}<span className="hidden sm:inline ml-1"><SortIcon columnKey={`stats.FPTS.value_${n}`} /></span></th>
                 ))}
               </>}
+              {rotationOn && (
+                <th className="table-header hidden sm:table-cell text-center w-14 cursor-pointer hover:text-white" onClick={() => handleSort('rotation_opp')}
+                    title={`Opportunity tonight: extra minutes from teammates who are out, per the NBA lineup sheet (as of ${config.rotation_as_of?.slice(11, 16) || '?'}). Click to sort.`}>
+                  Opp<span className="ml-1"><SortIcon columnKey="rotation_opp" /></span>
+                </th>
+              )}
               <th className="table-header text-center w-12" title="Games he has played this season">GP</th>
             </tr>
           </thead>
@@ -252,6 +278,21 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                           <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold text-white whitespace-nowrap bg-amber-600"
                                 title="Yahoo's injury status">
                             {player.injury_status}
+                          </span>
+                        )}
+                        {player.rotation && !player.is_injured && (player.rotation.inactive || player.rotation.p < RISK_P) && (
+                          <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold text-white whitespace-nowrap bg-gray-600"
+                                title={rotTip(player, points)}>
+                            {player.rotation.inactive ? 'Out tonight' : `${Math.round(player.rotation.p * 100)}%`}
+                          </span>
+                        )}
+                        {player.rotation?.promoted && !player.rotation.inactive && (
+                          <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold text-white whitespace-nowrap bg-emerald-700"
+                                title={rotTip(player, points)}>Starting</span>
+                        )}
+                        {rotOpp(player) != null && Math.abs(rotOpp(player)) >= 2 && (
+                          <span className={`sm:hidden shrink-0 text-[10px] font-semibold ${rotOpp(player) > 0 ? 'text-green-400' : 'text-red-400'}`} title={rotTip(player, points)}>
+                            {rotOpp(player) > 0 ? '+' : ''}{rotOpp(player).toFixed(1)}m
                           </span>
                         )}
                         {player.is_injured && (
@@ -334,6 +375,15 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                     })}
                   </>;
                 })()}
+                {rotationOn && (
+                  <td className={`hidden sm:table-cell text-center tabular-nums whitespace-nowrap ${fade}`} title={rotTip(player, points)}>
+                    {rotOpp(player) == null ? <span className="text-gray-600">-</span>
+                      : Math.abs(rotOpp(player)) < 0.5 ? <span className="text-gray-500">0</span>
+                      : <span className={`text-xs sm:text-sm font-semibold ${rotOpp(player) >= 2 ? 'text-green-400' : rotOpp(player) > 0 ? 'text-green-300' : 'text-red-400'}`}>
+                          {rotOpp(player) > 0 ? '+' : ''}{rotOpp(player).toFixed(1)}
+                        </span>}
+                  </td>
+                )}
                 <td className={`text-center text-gray-300 ${fade}`}>
                   {player.projected_only ? (
                     <span className="text-sky-400" title="No NBA games last season (rookie, or out all year): valued on his projection only">

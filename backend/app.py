@@ -21,6 +21,7 @@ from fantasy_team_helper import (get_current_fantasy_week_dates, get_week_info_f
 from leagues import (POINT_STATS, get_league, list_leagues, create_league, update_league, activate_league, delete_league,
                      generate_weeks, category_meta, CATEGORY_CATALOG, DEFAULT_SETTINGS, NotFound)
 from datetime import date, datetime, timedelta
+import nba_rotation as rotation
 from daily_leaders import NBA_TZ
 
 app = Flask(__name__, static_folder=None)  # /static/* belongs to the React build (serve_frontend)
@@ -264,6 +265,9 @@ def get_fantasy_players():
     players_data = []
     stats_all = player_stats
     fpts_range = _fpts_range(league)
+    rot = rotation.get_state()   # built by a background thread, never here
+    fresh = rot['as_of'] and (datetime.now() - datetime.fromisoformat(rot['as_of'])).total_seconds() < rotation.STATE_MAX_AGE
+    rot_players = rot['players'] if fresh and rot['day'] and rot['day'] >= today.isoformat() else {}
     for player_name, stats in top:
         player = players_by_name.get(player_name)
         team_name = player.team if player and player.team else "Unknown"
@@ -327,6 +331,7 @@ def get_fantasy_players():
             'injured_return': (player.injured_return if out else None),
             'injured_games': ((player.injured_games_to_miss or None) if out else None),
             'nba_year': stats.get('NBA_YEAR'),
+            'rotation': rot_players.get(player.id) if player else None,
             'what_if': _what_if_json(stats_all, league, player_name),
             'is_undroppable': player_name in undroppable,
             'drafted': team_id is not None,
@@ -336,7 +341,8 @@ def get_fantasy_players():
         })
 
     players_data.sort(key=lambda x: x['overall_rank'] if x['overall_rank'] else 999)
-    return jsonify({'players': players_data, 'total': len(players_data), 'config': league_config(league)})
+    return jsonify({'players': players_data, 'total': len(players_data),
+                    'config': {**league_config(league), 'rotation_as_of': rot['as_of'] if rot_players else None, 'rotation_day': rot['day'] if rot_players else None}})
 
 
 def _what_if_json(player_stats, league, name):
@@ -894,6 +900,7 @@ app.register_blueprint(fantasy_api, url_prefix='/api')
 if 'pytest' not in sys.modules:
     from daily_leaders import start_poller
     start_poller()
+    rotation.start_poller()
 
 # Serve the built React app (npm --prefix frontend run build). Unknown paths get index.html.
 FRONTEND_BUILD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'frontend', 'build')

@@ -23,7 +23,16 @@ Code: `rotation_data.py` (pull + cache under gitignored `.horizon/rotation/`), `
 - **Next-man-up by minutes rank is NOT supported.** Bench rank 1-2 gains +0.30/10 freed min, rank 3-4 +0.67, rank 5+ +0.78 (train; test same direction, smaller). The effect is diffuse, not a single backup.
 - Takeaway for the UI: a per-player "Opportunity" number would be small (usually under 2 min) except when a star sits. Worth showing as a sortable delta, but the value is in star-out nights and in the P(play) / starter-status flag (inactive/DNP risk), which move projections more than redistribution does.
 
+## Shipped (2026-11-03): live "Opp" + play-risk
+Files: `nba_rotation.py` (fetch, `Context`, `compute_team`, poller; NOT `rotation.py`: an Archivist `rotation.py` on the machine's Python path shadowed it and crashed the server), `rotation_model.json` (fit by `rotation_fit.py`, refit monthly), `rotation_score.py` (scores logged picks), tables `nba_lineups` + `rotation_picks`.
+- A daemon thread (`nba_rotation.start_poller`, started in `backend/app.py`) backfills missing days of `nba_lineups`, then refreshes the next unfinished slate (today, else tomorrow Eastern): every 10 min with games pending, 20 min when nothing is published, 1 h once all are final. `/fantasy` only reads `get_state()` (dict lookup); the state is ignored when older than 3 h or for a past day. No lineup posted = no `rotation` field = no Opp column (and the two filters are inert).
+- NBA endpoint: a day with no games = 200 + tiny body; an unpublished day = 302; 403 = a block (error, old state kept). The sheet lists long-term injured players `Active` and marks everything `Confirmed`, so: "new absence" = Inactive tonight (or Yahoo O/INJ) and PLAYED in one of the team's last 3 games (not merely Active: that made every Pacer +1 min a night for a month); Yahoo Q/D/P discounts P(play) for non-starters even when Confirmed (starters only while Expected).
+- Payload per player: `p`, `mif` (minutes if he plays), `base`, `opp` (injury terms only, capped at 6 min), `starter`, `promoted` (starts tonight, started <=1 of last 5), `confirmed`, `out` (up to 4 names), `exp` (validated team-normalised minutes; logged, not shown yet). UI: desktop "Opp" column (sortable, nulls last), chips for p < 60% / "Out tonight" / "Starting", phone inline +Xm at |Opp| >= 2, filters "Opp +2 min" and "Likely to play" (p >= 0.8). Points leagues add "about +X FPTS at his last-10 rate" to the tooltip.
+- Replay on 2026-10-27..11-01 through the live path (no Yahoo history, final sheet): minutes-if-plays MAE 4.69 vs baseline 5.00 (n=840); mean P(play) 0.82 vs 0.87 actual. Holdout fit MAE 4.88 vs 5.22.
+- Check it live with `python rotation_score.py` after a few game nights: calibration by P(play) bin, baseline vs mif MAE, and mean (actual - baseline) for Opp >= 2 vs the rest. If Opp >= 2 players do not beat the rest by >0, the redistribution terms are noise: drop to P(play) + starter only.
+
 ## Next
-1. Daily snapshot of the lineups JSON (Expected status before tip) so the live feature uses pregame data; the backtest used final status.
-2. Usage/rate bump on FPTS per minute (global elasticity), validated separately.
-3. Ship: player-table column "Opp" = projected min with tonight's Inactive list minus baseline, plus a DNP-risk marker; sort/filter on it. Feed the Yahoo daily-points optimizer and claim planner.
+1. Usage/rate bump on FPTS per minute (one global elasticity), validated on FPTS/min.
+2. Feed `exp`/`mif` into the Yahoo daily-points optimizer and claim planner (the optimizer already applies `DAY_TO_DAY_CHANCE`: don't discount twice).
+3. Refit monthly (`python rotation_fit.py --write`); add 2026-27 to the training set once it has ~500 team-games.
+4. Known gaps: a started game's state is rebuilt with final Active/Inactive; ESPN depth charts unused; traded players' baselines span both teams.
