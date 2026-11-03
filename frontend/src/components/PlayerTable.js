@@ -18,9 +18,14 @@ const percentileZ = (score) => {
   return q < 0.5 ? -z : z;
 };
 // Points leagues: columns after FPTS. 'Vs proj' = this season's average against the preseason projection; L5/L10 the recent averages.
-const RECENT = [['5', 'L5', 'Last 5 games'], ['10', 'L10', 'Last 10 games']];
+const RECENT = [['5', 'L5', 'Last 5 games'], ['10', 'L10', 'Last 10 games']];  // [n, label, title]; sorts on stats.FPTS.value_<n>
 const RECENT_DELTA_PER_SD = 4;   // FPTS a game that a recent average may sit from the season average per aura SD
 const deltaClass = (d) => d >= 3 ? 'text-green-400' : d >= 1 ? 'text-green-300' : d <= -3 ? 'text-red-400' : d <= -1 ? 'text-orange-300' : 'text-gray-400';
+// This season's FPTS a game minus the preseason projection (null until both exist): the Δ column and its sort.
+const fptsDelta = (p) => {
+  const f = p.stats?.FPTS || {};
+  return f.value_proj && f.value_season ? f.value_season - f.value_proj : null;
+};
 const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
 
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
@@ -116,6 +121,10 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
       aValue = getAuctionValue(a);
       bValue = getAuctionValue(b);
     }
+    else if (sortConfig.key === 'fpts_delta') {
+      aValue = fptsDelta(a);
+      bValue = fptsDelta(b);
+    }
     // Handle nested stat properties like "stats.PTS.value"
     else if (sortConfig.key.startsWith('stats.')) {
       const parts = sortConfig.key.split('.');
@@ -205,9 +214,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                 );
               })}
               {points && <>
-                <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title="This season's FPTS a game against the preseason projection: green is beating it">Δ</th>
-                {RECENT.map(([, label, title]) => (
-                  <th key={label} className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap`} title={`${title}: FPTS a game`}>{label}</th>
+                <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap cursor-pointer hover:text-white`} title="This season's FPTS a game against the preseason projection: green is beating it. Click to sort."
+                    onClick={() => handleSort('fpts_delta')}>Δ<span className="hidden sm:inline ml-1"><SortIcon columnKey="fpts_delta" /></span></th>
+                {RECENT.map(([n, label, title]) => (
+                  <th key={label} className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap cursor-pointer hover:text-white`} title={`${title}: FPTS a game. Click to sort.`}
+                      onClick={() => handleSort(`stats.FPTS.value_${n}`)}>{label}<span className="hidden sm:inline ml-1"><SortIcon columnKey={`stats.FPTS.value_${n}`} /></span></th>
                 ))}
               </>}
               <th className="table-header text-center w-12" title="Games he has played this season">GP</th>
@@ -300,7 +311,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                 })}
                 {points && (() => {
                   const f = player.stats.FPTS || {};
-                  const delta = f.value_proj && f.value_season ? f.value_season - f.value_proj : null;
+                  const delta = fptsDelta(player);
                   const cell = `px-px sm:px-1 py-1 text-center tabular-nums whitespace-nowrap ${STAT_W} ${fade}`;
                   return <>
                     <td className={cell} title={delta == null ? 'No projection or no games yet' : `${f.value_season} a game this season against a preseason projection of ${f.value_proj}${player.small_sample ? ' (small sample)' : ''}`}>
