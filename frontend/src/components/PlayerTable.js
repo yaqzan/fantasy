@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import DraftModal from './DraftModal';
 import { PlayerName } from './PlayerCard';
 import usePlayerValues from '../usePlayerValues';
 import { weekRange } from '../weeks';
@@ -33,7 +32,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
   const caps = config?.capabilities || {};
   const points = caps.scoring === 'points' && CATEGORIES.includes('FPTS');
   const [sortConfig, setSortConfig] = useState({ key: 'overall_rank', direction: 'asc' });
-  const [draftModalPlayer, setDraftModalPlayer] = useState(null);
   const includedCategories = CATEGORIES.filter(c => !puntCategories.includes(c));
   const { customScores, loadingCustomScores, periodKey, getAuctionValue, getZScore, getOverallRank } =
     usePlayerValues({ punts: puntCategories, statType, priceExponent });
@@ -212,7 +210,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                 ))}
               </>}
               <th className="table-header w-12" title="Games he has played this season">GP</th>
-              <th className="table-header w-16"></th>
             </tr>
           </thead>
           <tbody>
@@ -334,19 +331,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                     </span>
                   ) : player.games_played}
                 </td>
-                <td className="text-center px-1">
-                  <button
-                    onClick={() => setDraftModalPlayer({
-                      ...player,
-                      overall_rank: customScores[player.name]?.custom_z_rank || getOverallRank(player),
-                      auction_value: getAuctionValue(player),
-                    })}
-                    className="btn-primary text-xs !py-0.5 !px-2"
-                    disabled={fantasyTeams.length === 0}
-                  >
-                    Edit
-                  </button>
-                </td>
               </tr>
               );
             })}
@@ -354,16 +338,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
         </table>
       </div>
 
-      {draftModalPlayer && (
-        <DraftModal
-          player={draftModalPlayer}
-          teams={fantasyTeams}
-          onClose={() => setDraftModalPlayer(null)}
-          onDraft={onDraftPlayer}
-          onUndraft={onUndraftPlayer}
-          isDrafted={draftModalPlayer.drafted}
-        />
-      )}
     </>
   );
 };
