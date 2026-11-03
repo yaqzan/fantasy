@@ -26,20 +26,24 @@ const fptsDelta = (p) => {
   const f = p.stats?.FPTS || {};
   return f.value_proj && f.value_season ? f.value_season - f.value_proj : null;
 };
-// Rotation model (rotation.py): tonight's minutes if he plays, how much of that comes from teammates who are out
-// (opp), his chance of playing (p). Only players whose team has a posted lineup carry one. rotation_opp sorts it.
+// Rotation model (nba_rotation.py + role_minutes.py): tonight's minutes if he plays (mif), the change from teammates
+// who are out or back against what his projection carries (opp, the optimizer's factor), why (one line), his chance
+// of playing (p). Points leagues: fpts = expected FPTS tonight if he plays, gain = vs his projection. Only players
+// whose team has a posted lineup carry one. rotation_opp / rotation_tonight sort them.
 const RISK_P = 0.6;
 const rotOpp = (p) => (p.rotation && !p.rotation.inactive && p.rotation.opp != null ? p.rotation.opp : null);
+const rotTonight = (p) => (p.rotation && !p.rotation.inactive && p.rotation.fpts != null ? p.rotation.fpts * p.rotation.p : null);
 const rotTip = (player, points) => {
   const r = player.rotation;
   if (!r) return undefined;
   if (r.inactive) return 'Inactive tonight on the NBA lineup sheet';
   const l10 = player.stats?.FPTS?.value_10;
-  // FPTS: the extra minutes at his last-10 rate, plus a small per-minute lift (r.rate_pct %, measured on 2025-26) on all of tonight's minutes.
-  const gain = points && l10 && r.base ? l10 / r.base * (r.opp + r.mif * (r.rate_pct || 0) / 100) : null;
-  const fpts = gain != null && Math.abs(gain) >= 0.5 ? ` (about ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} FPTS at his last-10 rate)` : '';
-  return [`${r.mif} min if he plays (usual ${r.base}); ${Math.round(r.p * 100)}% to play${r.confirmed ? '' : ', lineup not confirmed'}`,
-    r.opp || fpts ? `${r.opp > 0 ? '+' : ''}${r.opp} min from ${r.out?.length ? r.out.join(', ') : 'teammates'} out${fpts}` : null,
+  // FPTS: the server's figure (projected FPTS x tonight's minutes factor) when there is one, else the extra minutes at his last-10 rate.
+  const gain = r.gain != null ? r.gain : (points && l10 && r.base ? l10 / r.base * r.opp : null);
+  const fpts = gain != null && Math.abs(gain) >= 0.5 ? ` (about ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} FPTS${r.fpts != null ? `, ${r.fpts} expected if he plays` : ''})` : '';
+  return [`${r.mif} min if he plays (usual ${r.base}); ${Math.round(r.p * 100)}% to play${r.confirmed ? ', lineup confirmed' : ', lineup expected, not confirmed'}`,
+    r.why || null,
+    r.opp || fpts ? `${r.opp > 0 ? '+' : ''}${r.opp} min against his projection${fpts}` : null,
     r.promoted ? 'Starting tonight, not his usual role' : null].filter(Boolean).join('. ');
 };
 const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
@@ -147,6 +151,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
       bValue = rotOpp(b);
       if ((aValue == null) !== (bValue == null)) return aValue == null ? 1 : -1;  // no lineup yet: last either way
     }
+    else if (sortConfig.key === 'rotation_tonight') {
+      aValue = rotTonight(a);
+      bValue = rotTonight(b);
+      if ((aValue == null) !== (bValue == null)) return aValue == null ? 1 : -1;
+    }
     // Handle nested stat properties like "stats.PTS.value"
     else if (sortConfig.key.startsWith('stats.')) {
       const parts = sortConfig.key.split('.');
@@ -247,6 +256,12 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                 <th className="table-header hidden sm:table-cell text-center w-14 cursor-pointer hover:text-white" onClick={() => handleSort('rotation_opp')}
                     title={`Opportunity tonight: extra minutes from teammates who are out, per the NBA lineup sheet (as of ${config.rotation_as_of?.slice(11, 16) || '?'}). Click to sort.`}>
                   Opp<span className="ml-1"><SortIcon columnKey="rotation_opp" /></span>
+                </th>
+              )}
+              {rotationOn && points && (
+                <th className="table-header hidden sm:table-cell text-center w-16 cursor-pointer hover:text-white" onClick={() => handleSort('rotation_tonight')}
+                    title="Tonight: expected FPTS if he plays (his projection at tonight's expected minutes); sorts by that x his chance to play. Click to sort.">
+                  Tonight<span className="ml-1"><SortIcon columnKey="rotation_tonight" /></span>
                 </th>
               )}
               <th className="table-header text-center w-12" title="Games he has played this season">GP</th>
@@ -383,6 +398,14 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                       : Math.abs(rotOpp(player)) < 0.5 ? <span className="text-gray-500">0</span>
                       : <span className={`text-xs sm:text-sm font-semibold ${rotOpp(player) >= 2 ? 'text-green-400' : rotOpp(player) > 0 ? 'text-green-300' : 'text-red-400'}`}>
                           {rotOpp(player) > 0 ? '+' : ''}{rotOpp(player).toFixed(1)}
+                        </span>}
+                  </td>
+                )}
+                {rotationOn && points && (
+                  <td className={`hidden sm:table-cell text-center tabular-nums whitespace-nowrap ${fade}`} title={rotTip(player, points)}>
+                    {rotTonight(player) == null ? <span className="text-gray-600">-</span>
+                      : <span className={`text-xs sm:text-sm ${player.rotation.gain >= 2 ? 'text-green-400 font-semibold' : player.rotation.gain <= -2 ? 'text-red-400' : 'text-gray-200'}`}>
+                          {player.rotation.fpts.toFixed(1)}{player.rotation.confirmed ? '' : <span className="text-gray-500">*</span>}
                         </span>}
                   </td>
                 )}
