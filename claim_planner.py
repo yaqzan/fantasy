@@ -56,6 +56,10 @@ class PlayerData:
     locked_start: bool = False
     first_add: Optional[int] = None
     has_stats: bool = True
+    mf: list = field(default_factory=list)   # per day: role_minutes factor (that night's expected minutes / usual); [] = 1.0
+
+    def f(self, t):
+        return self.mf[t] if self.mf else 1.0
 
 
 @dataclass
@@ -222,6 +226,7 @@ def build_instance(lg, week, suffix, opp):
     stats = week.stats
     tipped = week.actual.tipped if week.actual else set()
     weights = week.day_weights or {}
+    mfac = week.minutes_factor(suffix)   # role_minutes: each day's minutes factor, so v[t] (and the judge) see it
 
     # today's canon: who already played / is playing in a counted slot (Week.team's locked / taken)
     lines = week.canon.lines.get(week.my_canon) if (week.canon and week.my_canon) else None
@@ -317,17 +322,19 @@ def build_instance(lg, week, suffix, opp):
         doubt = week.doubtful.get(p, 1.0)
         nxt = next_game(p, None if owned else max(start, week.waivers.get(p, start))) if doubt < 1 else None
         game, v = [], []
+        mfp = mfac.get(p, {})
+        mf = [mfp.get(d, 1.0) for d in days] if mfp else []
         for t, d in enumerate(days):
             open_game = d in week.remaining.get(team, {}) and (team, d) not in tipped
             game.append(bool(open_game))
-            val = fpts * (doubt if d == nxt else 1.0) if open_game and not out else 0.0
+            val = fpts * (doubt if d == nxt else 1.0) * (mf[t] if mf else 1.0) if open_game and not out else 0.0
             v.append(max(val, 0.0))
         lk = bool(days) and (team, days[0]) in tipped
         live_share = weights.get((team, days[0]), 1.0) if lk else 0.0
         locked_start = lk and p in counted_today
         return PlayerData(team=team, fpts=fpts, zscore=float(s.get(f'Z-SCORE{suffix}', 0) or 0), elig=sorted(elig),
                           owned=owned, il=p in il, undroppable=owned and p in undroppable, out=out, game=game, v=v,
-                          doubt=doubt, lk=lk, live_share=live_share, locked_start=locked_start, first_add=first_add)
+                          doubt=doubt, lk=lk, live_share=live_share, locked_start=locked_start, first_add=first_add, mf=mf)
 
     players = {p: pdata(p, True) for p in owned_all}
     for p in (stored[0] if stored else {}):
@@ -426,7 +433,7 @@ def _split_doubtful(inst):
                 continue
             c = copy.copy(d)
             c.first_add, c.last_add = lo, hi
-            c.v = [max(d.fpts * (d.doubt if t == g else 1.0), 0.0) if d.game[t] and not d.out else 0.0 for t in range(T)]
+            c.v = [max(d.fpts * (d.doubt if t == g else 1.0) * d.f(t), 0.0) if d.game[t] and not d.out else 0.0 for t in range(T)]
             copies.append((g, c))
         if len(copies) <= 1:      # one window: his v already carries the factor on that game
             players[p] = d
@@ -451,7 +458,7 @@ def _solve_one(inst: Instance, C, dstar, positions=False, time_limit=60, alias=N
             if P is inst.players:
                 P = dict(P)
             P[q] = copy.copy(d)
-            P[q].v = [max(d.fpts * (d.doubt if t == g else 1.0), 0.0) if d.game[t] and not d.out else 0.0
+            P[q].v = [max(d.fpts * (d.doubt if t == g else 1.0) * d.f(t), 0.0) if d.game[t] and not d.out else 0.0
                       for t in range(T)]
     frozen = [any(t < dstar.get(q, T) for q in healthy) for t in range(T)]
     m = _Model()

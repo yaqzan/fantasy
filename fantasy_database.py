@@ -233,6 +233,48 @@ class RotationPick(BaseModel):
         primary_key = CompositeKey('game_date', 'player_id')
 
 
+class InjuryReport(BaseModel):
+    """One player in one daily snapshot of ESPN's injuries feed (injury_reports.py): status and the stated return date,
+    kept day by day so estimate-vs-actual return can be scored (injury_score.py). player_id = our NBA id by name match
+    (null when no match)."""
+    snapshot_date = DateField()
+    espn_id = IntegerField()
+    player_id = IntegerField(null=True, index=True)
+    name = CharField(max_length=64)
+    team = CharField(max_length=8, null=True)
+    status = CharField(max_length=16)                    # 'Out' / 'Day-To-Day'
+    fantasy_status = CharField(max_length=8, null=True)  # 'OUT' / 'GTD' / 'OFS'
+    return_date = DateField(null=True)
+    injury_type = CharField(max_length=32, null=True)    # 'Hamstring'
+    detail = CharField(max_length=64, null=True)
+    side = CharField(max_length=16, null=True)
+    comment = CharField(max_length=500, null=True)       # ESPN's shortComment
+    reported = DateTimeField(null=True)                  # when ESPN's note was written
+    source = CharField(max_length=8, default='espn')
+    fetched_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'injury_reports'
+        primary_key = CompositeKey('snapshot_date', 'espn_id')
+
+
+class DepthChart(BaseModel):
+    """One slot of ESPN's editorial depth chart in one daily snapshot (depth_charts.py): team, position, rank (0 =
+    starter). role_minutes uses it as a prior for who succeeds an absent player."""
+    snapshot_date = DateField(index=True)
+    team = CharField(max_length=8)
+    pos = CharField(max_length=4)
+    rank = IntegerField()
+    espn_id = IntegerField()
+    player_id = IntegerField(null=True)
+    name = CharField(max_length=64)
+    fetched_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = 'depth_charts'
+        primary_key = CompositeKey('snapshot_date', 'team', 'pos', 'rank')
+
+
 class DailyPlayerStats(BaseModel):
     player_id = ForeignKeyField(Player, backref='daily_stats')
     player_name = CharField()
@@ -403,4 +445,4 @@ class TeamProjection(BaseModel):
 
 ALL_MODELS = [Team, Player, Game, League, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag, TechnicalFoul,
               ScannedGame, DailyPlayerStats, PlayerSeason, PlayerProjection, ProjectionAdjustment, TeamProjection,
-              GameLine, PreseasonLine, NbaLineup, RotationPick]
+              GameLine, PreseasonLine, NbaLineup, RotationPick, InjuryReport, DepthChart]

@@ -267,6 +267,7 @@ def get_fantasy_players():
     fpts_range = _fpts_range(league)
     rot = rotation.get_state()   # built by a background thread, never here
     rot_players = rotation.current(today)
+    points_league = league.categories == ['FPTS']
     for player_name, stats in top:
         player = players_by_name.get(player_name)
         team_name = player.team if player and player.team else "Unknown"
@@ -330,7 +331,7 @@ def get_fantasy_players():
             'injured_return': (player.injured_return if out else None),
             'injured_games': ((player.injured_games_to_miss or None) if out else None),
             'nba_year': stats.get('NBA_YEAR'),
-            'rotation': rot_players.get(player.id) if player else None,
+            'rotation': _rotation_json(rot_players.get(player.id) if player else None, stats, points_league),
             'what_if': _what_if_json(stats_all, league, player_name),
             'is_undroppable': player_name in undroppable,
             'drafted': team_id is not None,
@@ -342,6 +343,19 @@ def get_fantasy_players():
     players_data.sort(key=lambda x: x['overall_rank'] if x['overall_rank'] else 999)
     return jsonify({'players': players_data, 'total': len(players_data),
                     'config': {**league_config(league), 'rotation_as_of': rot['as_of'] if rot_players else None, 'rotation_day': rot['day'] if rot_players else None}})
+
+
+def _rotation_json(r, stats, points):
+    """The poller's tonight entry for a player (never mutated: it is shared state), plus in points leagues `fpts`
+    (expected FPTS tonight if he plays: his projected FPTS x tonight's minutes over his projected minutes, the
+    optimizer's factor) and `gain` (that minus his projected FPTS). The "Tonight" sort is p x fpts."""
+    if not r or r.get('inactive') or not points:
+        return r
+    fp, mins = stats.get('FPTS_projected'), stats.get('MIN_projected')
+    if not fp or not mins or mins < 4 or r.get('opp') is None:
+        return r
+    f = min(max((mins + r['opp']) / mins, 0.5), 2.0)
+    return {**r, 'fpts': round(fp * f, 1), 'gain': round(fp * (f - 1), 1)}
 
 
 def _what_if_json(player_stats, league, name):

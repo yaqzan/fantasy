@@ -65,8 +65,10 @@ class Week:
     """Everything one league-week needs, loaded once: stats as the league sees them, the NBA
     schedule, injuries."""
 
-    def __init__(self, league, week_start, week_end):
+    def __init__(self, league, week_start, week_end, role_minutes=True):
         self.league = league
+        self.use_role_minutes = role_minutes   # False: every game at the player's usual minutes (the pre-2026-11-03 model)
+        self._factors = {}
         self.week_start, self.week_end = week_start, week_end
         self.stats = league_player_stats(league)
         self.schedule = week_schedule(week_start, week_end)
@@ -90,6 +92,22 @@ class Week:
         self.my_canon = me.platform_team_id if me else None
         self.waivers = get_waiver_dates(league)   # {free agent: the day he clears waivers}
         self.opponent_now = None   # {category: total so far} of the opponent Week.opponent last returned
+
+    def minutes_factor(self, suffix):
+        """{player: {day: factor}}: each remaining game's expected minutes (teammates out or back, ESPN return dates,
+        tonight's NBA sheet) over the minutes his `suffix` numbers carry (role_minutes.factors). Built once per suffix;
+        {} when switched off or the model can't be built (every game at his usual minutes)."""
+        if not self.use_role_minutes:
+            return {}
+        if suffix not in self._factors:
+            import role_minutes
+            days = sorted({d for g in self.schedule.values() for d in g})   # the whole week (score_judge narrows remaining)
+            try:
+                self._factors[suffix] = role_minutes.factors(self.stats, days, suffix)
+            except Exception as e:   # never block the optimizer on it
+                print(f'role_minutes factors: {e}')
+                self._factors[suffix] = {}
+        return self._factors[suffix]
 
     @property
     def start_day(self):
@@ -143,11 +161,14 @@ class Week:
             lineups = lineup_of(self.actual, owned, suffix)
             locked = {(p, day) for day, got in lineups.items() for p in got}
             taken = {day: len(got) for day, got in lineups.items()}
+        mf = self.minutes_factor(suffix)
+        eff = {}
         games, wins, game_var = player_week_games(players, self.stats, self.remaining, league, suffix, self.injured,
                                                   availability=AVAILABILITY, variance=True, day_weights=self.day_weights,
                                                   tipped=self.actual.tipped if self.actual else (), locked=locked, taken=taken,
-                                                  windows=windows, doubtful=self.doubtful)
-        totals = team_week_totals(players, self.stats, games, wins, league.categories, suffix, game_var, carried)
+                                                  windows=windows, doubtful=self.doubtful, minutes_factor=mf, effective=eff)
+        totals = team_week_totals(players, self.stats, eff if mf else games, wins, league.categories, suffix, game_var, carried,
+                                  games_played=games if mf else None)
         return Side(totals, games, wins, carried)
 
     def so_far(self, carried):

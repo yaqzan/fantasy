@@ -194,7 +194,9 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   scoring ran under the model line: PTS -9%, 3PM -12%, AST -10%, FGA -9%, MIN -5%; TOV +9%, STL +8%, FTA +7%. A level shift
   hits every roster alike (H2H unaffected); the in-season blend already closes half of it (PTS -5%). Too short to retune K/R:
   the backtest above still says heavier weight on a few games is worse. Role changes (a teammate's long injury) are what the
-  blend can't see: use the owner's `ProjectionAdjustment` (Projections tab, `production` x), e.g. +18% for the next man up.
+  blend can't see. The optimizer and week plan now move each game's minutes for who is out that night (`role_minutes`,
+  rotation.md "Role-aware minutes"; the projection itself is unchanged); a lasting view on one player is still the owner's
+  `ProjectionAdjustment` (Projections tab, `production` x).
 - **Preseason signal (backtest 2026-10-17, `.horizon/preseason-2026/`: `backtest.py`, `holdout.py`).** In the app
   as step one of the `'_projected'` timeframe (`preseason.py` holds the constants below; the in-season update, next entry,
   runs on top; there is no separate preseason stats choice any more). Players projected 32+ MPG keep their minutes (below). Lines: `game_log.store_preseason` -> `preseason_lines` (every

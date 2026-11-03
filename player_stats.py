@@ -361,7 +361,7 @@ def _lineup_chance(rank, slots, availability):
 
 def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=(),
                       availability=1.0, variance=False, day_weights=None, tipped=(), locked=(), taken=None,
-                      windows=None, doubtful=None):
+                      windows=None, doubtful=None, minutes_factor=None, effective=None):
     """Games and expected wins each rostered player contributes over the week.
 
     Daily lineups: each day only the players whose team plays and who make that day's lineup count
@@ -389,12 +389,22 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
 
     `doubtful` {player: chance he plays}: day-to-day. It applies to his next game only (the one the status is about);
     his later games count as for anyone else.
+
+    `minutes_factor` {player: {day: factor}} (role_minutes.factors): that day's expected minutes over the minutes his
+    numbers already carry (a teammate out, or back). It scales what the game adds to his stats, not the game count
+    or wins, and in daily leagues it also reorders that day's lineup (score + (factor - 1) x |score|). Each game's
+    games x factor goes to `effective` ({} to fill), which team_week_totals takes as the stat games. Absent = 1.0.
     """
     doubtful = doubtful or {}
     weight = (lambda team, day: day_weights.get((team, day), 1.0)) if day_weights else (lambda team, day: 1.0)
+    mf = minutes_factor or {}
+    fac = (lambda p, day: mf.get(p, {}).get(day, 1.0)) if mf else (lambda p, day: 1.0)
+    eff = effective if effective is not None else {}
     games = {p: 0 for p in roster}
     wins = {p: 0.0 for p in roster}
     game_var = {p: 0.0 for p in roster}
+    for p in roster:
+        eff[p] = 0.0
     players = [p for p in roster if p in player_stats and p not in unavailable]
     out = lambda: (games, wins, game_var) if variance else (games, wins)  # noqa: E731
     if not league.daily_lineups:
@@ -404,10 +414,12 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
             days = {d: v for d, v in schedule.get(team, {}).items() if not ((first and d < first) or (last and d > last))}
             share = sum(weight(team, d) for d in days)
             games[p], wins[p] = share * availability, sum(v * weight(team, d) for d, v in days.items()) * availability
+            eff[p] = sum(weight(team, d) * fac(p, d) for d in days) * availability
             if p in doubtful and days:
                 nxt = min(days)
                 games[p] -= (1 - doubtful[p]) * availability * weight(team, nxt)
                 wins[p] -= (1 - doubtful[p]) * availability * days[nxt] * weight(team, nxt)
+                eff[p] -= (1 - doubtful[p]) * availability * weight(team, nxt) * fac(p, nxt)
             game_var[p] = share * availability * (1 - availability)
         return out()
     by_day = {}
@@ -424,6 +436,7 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
             by_day.setdefault(day, []).append((p, p_win, weight(team, day), (team, day) in tipped))
     slots = league.slots
     taken = taken or {}
+    score = {p: player_stats[p].get(f'Z-SCORE{last_n_games}', 0) or 0 for p in players} if mf else {}
     for day, entries in by_day.items():
         open_entries = []
         for p, p_win, w, live in entries:
@@ -432,7 +445,10 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
             elif (p, day) in locked:
                 games[p] += w
                 wins[p] += p_win
+                eff[p] += w * fac(p, day)
         entries = open_entries
+        if mf and any(day in mf.get(p, {}) for p, _, _ in entries):   # a bigger night moves him up that day's lineup
+            entries = sorted(entries, key=lambda e: -(score[e[0]] + (fac(e[0], day) - 1) * abs(score[e[0]])))
         n_slots = len(slots) - taken.get(day, 0)
         if n_slots <= 0:
             continue
@@ -442,6 +458,7 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
                 f = doubtful[p] if next_game.get(p) == day else 1.0
                 games[p] += playing[p][1] * f
                 wins[p] += playing[p][0] * playing[p][1] * f
+                eff[p] += playing[p][1] * f * fac(p, day)
             continue
         for rank, (p, p_win, w) in enumerate(entries):
             chance = _lineup_chance(rank, n_slots, availability) * w
@@ -449,6 +466,7 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
                 chance *= doubtful[p]
             games[p] += chance
             wins[p] += chance * p_win
+            eff[p] += chance * fac(p, day)
             game_var[p] += chance * (1 - chance)
     return out()
 
@@ -489,17 +507,20 @@ def calculate_team_totals(roster, player_stats, player_games, player_wins, categ
             totals[key] = total(category)
     return totals
 
-def team_week_totals(players, player_stats, player_games, player_wins, categories, last_n_games='', game_var=None, carried=None):
+def team_week_totals(players, player_stats, player_games, player_wins, categories, last_n_games='', game_var=None, carried=None,
+                     games_played=None):
     """{category: (total, variance)} for a team's week: calculate_team_totals' totals, and how far
     each can swing on game-to-game noise (CATEGORY_CATALOG `noise` / `attempt_sd`; wins as coin
     flips at each game's win chance). `game_var`: {player: variance of games played}
     (player_week_games(variance=True)); a count's variance gains per-game value^2 x that.
     `carried`: the played part of the week (calculate_team_totals); it adds to the totals but not to the
-    variance, since a played game no longer swings."""
+    variance, since a played game no longer swings. `games_played`: the real game counts when `player_games` are
+    minutes-scaled stat games (player_week_games `effective`); wins and their variance use them."""
     n = last_n_games
     carried = carried or {}
     totals = calculate_team_totals(players, player_stats, player_games, player_wins, categories, n, carried)
     played = [p for p in players if p in player_stats and player_games.get(p)]
+    gp = games_played or player_games
 
     def per_game(p, terms):
         return sum(coef * (1.0 if stat is None else abs(player_stats[p].get(f'{stat}{n}') or 0)) for stat, coef in terms)
@@ -510,8 +531,9 @@ def team_week_totals(players, player_stats, player_games, player_wins, categorie
         if spec['kind'] == 'wins':
             variance = 0.0
             for p in played:
-                q = min(max(player_wins.get(p, 0) / player_games[p], 0.0), 1.0)
-                variance += player_games[p] * q * (1 - q) + (game_var or {}).get(p, 0.0) * q * q
+                g = gp.get(p) or player_games[p]
+                q = min(max(player_wins.get(p, 0) / g, 0.0), 1.0)
+                variance += g * q * (1 - q) + (game_var or {}).get(p, 0.0) * q * q
         elif spec['kind'] == 'ratio':
             attempts = sum(player_games[p] * per_game(p, spec['attempts']) for p in played)
             done = sum(coef * carried.get(stat, 0) for stat, coef in spec['attempts'])

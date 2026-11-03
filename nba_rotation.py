@@ -231,16 +231,54 @@ def compute_day(day, games, ctx=None, model=None):
     ctx = ctx or Context(day)
     model = model or load_model()
     out = {}
+    sheet, teams = {}, []
     for g in games:
         if not str(g.get('gameId', '')).startswith('002'):
             continue
         for side in ('homeTeam', 'awayTeam'):
             t = g[side]
             pl = {p['personId']: (p['rosterStatus'] == 'Active', bool(p['position']), p.get('lineupStatus')) for p in t['players']}
-            for pid, v in compute_team(norm_team(t['teamAbbreviation']), pl, ctx, model).items():
-                v['game_id'], v['game_status'], v['team'] = g['gameId'], g.get('gameStatus') or 1, norm_team(t['teamAbbreviation'])
+            team = norm_team(t['teamAbbreviation'])
+            if any(s for _, s, _ in pl.values()):   # lineup posted
+                teams.append(team)
+                sheet.update({p: (a, s, ls == 'Confirmed') for p, (a, s, ls) in pl.items()})
+            for pid, v in compute_team(team, pl, ctx, model).items():
+                v['game_id'], v['game_status'], v['team'] = g['gameId'], g.get('gameStatus') or 1, team
                 out[pid] = v
+    role_opp(day, sheet, teams, out)
     return out
+
+
+ROLE_OPP_CAP = 10.0   # minutes shown either way
+
+
+def role_opp(day, sheet, teams, out):
+    """Replace the shipped injury terms (`opp`, inside `mif`) with the role-aware model's delta for tonight
+    (role_minutes: who inherits an absent teammate's minutes, return dates; .claude/docs/rotation.md "Role-aware
+    minutes"). Adds `rm_exp` (its minutes if he plays), `why` (one line), `back` (that teammate's ESPN return date).
+    Model unavailable = the shipped numbers stay. Replaces `mif` with the role model's minutes too."""
+    if not teams:
+        return
+    try:
+        import role_minutes
+        rm = role_minutes.tonight_day(day, sheet, teams)
+    except Exception as e:
+        print(f'rotation: role minutes {e}')
+        return
+    for pid, v in out.items():
+        r = rm.get(pid)
+        if v.get('inactive') or r is None or v.get('base') is None:
+            continue
+        # Opp = the optimizer's delta (vs what the projection carries); mif = the role model's own minutes, which beat
+        # the shipped mif on the 10-27..11-02 replay (MAE 4.54 vs 4.69, baseline 5.01; base + shipped terms + this
+        # delta was 4.79, so the two are not added)
+        v['opp'] = round(max(-ROLE_OPP_CAP, min(ROLE_OPP_CAP, r['delta']['_projected'])), 1)
+        v['mif'] = r['exp']
+        v['rm_exp'] = r['exp']
+        v['why'] = r.get('why') or ''
+        v['back'] = r.get('back')
+        if r.get('reason'):
+            v['out'] = [n for n, _, _ in r['reason']]
 
 
 # ---------------------------------------------------------------- state + poller
@@ -327,6 +365,13 @@ def start_poller():
         except Exception as e:
             print(f'rotation backfill: {e}')
         while True:
+            try:
+                import injury_reports   # ESPN return dates for role_minutes: at most every 3 h, 6 h cool-down on a block
+                injury_reports.maybe_snapshot()
+                import depth_charts     # ESPN depth charts (successor prior): at most every 20 h, 30 calls 1 s apart
+                depth_charts.maybe_snapshot()
+            except Exception as e:
+                print(f'rotation poller injuries: {e}')
             try:
                 wait = refresh()
             except Exception as e:
