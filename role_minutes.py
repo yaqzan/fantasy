@@ -586,7 +586,7 @@ def reason_text(r, reports, s):
     rep = reports.get(pid) if pid is not None else None
     back = rep.get('return_date') if rep else None
     parts = [w for w in (name or '?').split(' ') if w.rstrip('.').lower() not in ('jr', 'sr', 'ii', 'iii', 'iv')]
-    last = parts[-1] if parts else name
+    last = f'{parts[0][0]}. {parts[-1]}' if len(parts) > 1 else (parts[-1] if parts else name)   # initial + surname: two Williams on one team
     when = f' (back ~{back:%b} {back.day})' if back else ''
     sure = '' if p >= 0.95 else f' ({round(p * 100)}% out)'
     return f'{last} out{when}{sure}: +{mins:.0f} min', back.isoformat() if back else None

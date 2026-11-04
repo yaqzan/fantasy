@@ -4,6 +4,7 @@ import TeamManager from './components/TeamManager';
 import Header from './components/Header';
 import LineupOptimizer from './components/LineupOptimizer';
 import DailyLeaders from './components/DailyLeaders';
+import TonightPickups from './components/TonightPickups';
 import TeamStandings from './components/TeamStandings';
 import WeeklyPickups from './components/WeeklyPickups';
 import Projections from './components/Projections';
@@ -18,7 +19,7 @@ import {
 // Tabs: [key, label, in-season only (hidden in draft mode)]. Each tab keeps its own view state per
 // league (useLeagueViewState) and follows the league's capabilities, never its platform or id.
 const ALL_TABS = [
-  ['start', 'Start', true], ['daily', 'Daily Leaders', true], ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true],
+  ['start', 'Start', true], ['daily', 'Daily Leaders', true], ['tonight', 'Tonight', true], ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true],
   ['pickups', 'Weekly Pickups', true], ['projections', 'Projections'], ['standings', 'Team Standings', true],
   ['draft', 'Draft Day'], ['teams', 'Teams'],
 ];
@@ -373,6 +374,7 @@ function App() {
         {activeTab === 'projections' && <Projections config={config} />}
         {activeTab === 'pickups' && <WeeklyPickups config={config} />}
         {activeTab === 'daily' && <DailyLeaders config={config} />}
+        {activeTab === 'tonight' && <TonightPickups players={players} config={config} />}
         {activeTab === 'start' && startToday && <StartDay config={config} status={startStatus} />}
         {activeTab === 'standings' && <TeamStandings config={config} />}
         {activeTab === 'draft' && <DraftDay />}

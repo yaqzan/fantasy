@@ -258,19 +258,19 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
               {rotationOn && (
                 <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 sm:w-14 cursor-pointer hover:text-white whitespace-nowrap`} onClick={() => handleSort('rotation_opp')}
                     title={`Opportunity tonight: extra minutes from teammates who are out, per the NBA lineup sheet (as of ${config.rotation_as_of?.slice(11, 16) || '?'}). Click to sort.`}>
-                  Opp<span className="ml-1"><SortIcon columnKey="rotation_opp" /></span>
+                  Opp<span className="hidden sm:inline ml-1"><SortIcon columnKey="rotation_opp" /></span>
                 </th>
               )}
               {rotationOn && points && (
                 <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 sm:w-16 cursor-pointer hover:text-white whitespace-nowrap`} onClick={() => handleSort('rotation_tonight')}
                     title="Tonight: expected FPTS if he plays (his projection at tonight's expected minutes); sorts by that x his chance to play. Click to sort.">
-                  Tonight<span className="ml-1"><SortIcon columnKey="rotation_tonight" /></span>
+                  <span className="sm:hidden">Tngt</span><span className="hidden sm:inline">Tonight</span><span className="hidden sm:inline ml-1"><SortIcon columnKey="rotation_tonight" /></span>
                 </th>
               )}
               {rosOn && (
                 <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 sm:w-14 cursor-pointer hover:text-white whitespace-nowrap`} onClick={() => handleSort('ros_value')}
                     title="Rest of season: rank by his projection x the games he is expected to play from here. Click to sort.">
-                  ROS<span className="ml-1"><SortIcon columnKey="ros_value" /></span>
+                  ROS<span className="hidden sm:inline ml-1"><SortIcon columnKey="ros_value" /></span>
                 </th>
               )}
               {points && <>
@@ -339,9 +339,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                           </span>
                         )}
                       </div>
-                      {player.rotation?.why && !player.rotation.inactive && Math.abs(rotOpp(player) ?? 0) >= 1 && (
-                        <div className="sm:hidden text-[10px] leading-tight text-emerald-400/90 truncate" title={rotTip(player, points)}>{player.rotation.why}</div>
-                      )}
                     </div>
                   </div>
                 </td>
