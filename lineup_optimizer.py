@@ -545,9 +545,24 @@ def plan_stage(league, timeframe='projected', beam=4, alternatives=5):
     roster = get_all_my_team_players(league)
     undroppable = set(get_undroppable_players(league))
     owned0 = list(roster)    # the current week's played games belong to today's roster, not to a path's claims
+    built, ranks = {}, {}    # the alternatives pass below repeats the beam pass's weeks and its first rank_moves
+
+    def week_of(w):
+        key = (w['start'], w['end'])
+        if key not in built:
+            built[key] = Week(league, date.fromisoformat(w['start']), date.fromisoformat(w['end']))
+        return built[key]
+
+    def ranked_moves(week, r, theirs, candidates, keep, windows=None, ghosts=()):
+        key = (id(week), tuple(r), repr(sorted(theirs.items())), tuple(candidates), frozenset(keep),
+               repr(sorted((windows or {}).items())), tuple(ghosts))
+        if key not in ranks:
+            ranks[key] = rank_moves(week, r, theirs, suffix, candidates, keep, owned0, windows, ghosts)
+        return ranks[key]
+
     states = [(0.0, roster, undroppable, [])]    # (summed expected, roster, keep, plan so far)
     for w in weeks:
-        week = Week(league, date.fromisoformat(w['start']), date.fromisoformat(w['end']))
+        week = week_of(w)
         if not any(p in week.stats for p in roster):
             return {'error': f"No players on your team ({league.my_team}) in this league yet"}
         pool = week.free_agents(suffix)
@@ -561,7 +576,7 @@ def plan_stage(league, timeframe='projected', beam=4, alternatives=5):
             for _ in range(league.claims_per_week):
                 nxt = []
                 for r, k, made, _e, win, ghosts in frontier:
-                    ranked, _ = rank_moves(week, r, theirs_now, suffix, [c for c in pool if c not in r], k, owned0, win, ghosts)
+                    ranked, _ = ranked_moves(week, r, theirs_now, [c for c in pool if c not in r], k, win, ghosts)
                     for m in ranked[:beam]:
                         r2 = [p for p in r if p != m.drop] + [m.add]
                         e = _e + m.gain
@@ -592,11 +607,10 @@ def plan_stage(league, timeframe='projected', beam=4, alternatives=5):
     # the next-best claims for each week of the chosen path
     path = list(get_all_my_team_players(league))
     for step, w in zip(plan, weeks):
-        week = Week(league, date.fromisoformat(w['start']), date.fromisoformat(w['end']))
+        week = week_of(w)
         label, theirs = week.opponent(w['opponent'] or None, suffix)
         theirs = theirs or week.team(path, suffix, owned0).totals
-        ranked, _ = rank_moves(week, path, theirs, suffix, [c for c in week.free_agents(suffix) if c not in path],
-                               undroppable, owned0)
+        ranked, _ = ranked_moves(week, path, theirs, [c for c in week.free_agents(suffix) if c not in path], undroppable)
         chosen = {c['add'] for c in step['claims']}
         step['alternatives'] = [{'add': m.add, 'drop': m.drop, 'day': m.day.isoformat(), 'gain': round(m.gain, 3)}
                                 for m in ranked if m.add not in chosen][:alternatives]
