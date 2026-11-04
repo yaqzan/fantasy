@@ -15,6 +15,9 @@ import time
 from datetime import date, datetime, timedelta
 
 import requests
+from zoneinfo import ZoneInfo
+
+NBA_TZ = ZoneInfo('America/New_York')   # same Eastern day as daily_leaders.NBA_TZ
 
 URL = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries'
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
@@ -67,7 +70,8 @@ def _date(s):
 
 def _datetime(s):
     try:
-        return datetime.fromisoformat(s.replace('Z', '+00:00')).replace(tzinfo=None) if s else None
+        # ESPN stamps UTC; the app's days are Eastern (an evening note belongs to that evening's date)
+        return datetime.fromisoformat(s.replace('Z', '+00:00')).astimezone(NBA_TZ).replace(tzinfo=None) if s else None
     except ValueError:
         return None
 
@@ -121,8 +125,11 @@ def latest(today=None, max_age_days=2):
            .where(InjuryReport.snapshot_date <= today, InjuryReport.snapshot_date >= today - timedelta(days=max_age_days)).scalar())
     if not day:
         return {}
+    # only the newest fetch of that day: the upsert never deletes, so a player ESPN cleared since would linger as Out
+    fetched = InjuryReport.select(fn.MAX(InjuryReport.fetched_at)).where(InjuryReport.snapshot_date == day).scalar()
     out = {}
-    for r in InjuryReport.select().where(InjuryReport.snapshot_date == day, InjuryReport.player_id.is_null(False)).dicts():
+    for r in InjuryReport.select().where(InjuryReport.snapshot_date == day, InjuryReport.fetched_at == fetched,
+                                         InjuryReport.player_id.is_null(False)).dicts():
         r['quality'] = quality(r)
         out[r['player_id']] = r
     return out

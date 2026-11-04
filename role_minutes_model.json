@@ -42,7 +42,7 @@
   ]
  },
  "pair_kp": 10,
- "depth_boost": 1.0,
+ "depth_boost": 0.0,
  "xbar": {
   "role": 6.380653014533695,
   "equal": 6.380653014533518
@@ -497,5 +497,19 @@
   "trained_on": "2014-15..2025-26 game logs",
   "fit_date": "2026-11-03",
   "research": ".horizon/role-minutes (build.py, walk2.py, hazard.py, evaluate.py)"
+ },
+ "center": {
+  "H": {
+   "tonightB": -1.6,
+   "tonightS": 1.4,
+   "futureB": -1.53,
+   "futureS": 0.21
+  },
+  "_projected": {
+   "tonightB": -1.4,
+   "tonightS": 1.34,
+   "futureB": -1.27,
+   "futureS": 0.17
+  }
  }
 }

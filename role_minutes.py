@@ -38,14 +38,14 @@ OUT_FLOOR = 0.9          # Yahoo O/INJ with no usable date: at least this likely
 # enough returns (no history of ESPN estimates exists): rarely early, usually within a week late, a long tail.
 SLIP = [(-4, 0.05), (-1, 0.15), (0, 0.40), (3, 0.60), (7, 0.75), (14, 0.88), (28, 0.95)]
 SHORT_FLOOR = 0.85       # a "short" ESPN date (placeholder): out at least this likely before it
+WT = '_projected'        # the one stats choice factors() serves (MIN_projected)
 FACTOR_MIN, FACTOR_MAX = 0.5, 2.0
 DELTA_CAP = 15.0         # minutes, either way
 MAX_MIN = 44.0
 REBUILD_EVERY = 15 * 60  # seconds: the season walk is rebuilt when game_lines change, checked at most this often
-WEIGHTINGS = {'H': None, '_projected': None, '': None, '_5': None, '_10': None, '_proj': None}
 
 _lock = threading.Lock()
-_cache = {'key': None, 'season': None, 'checked': 0.0}
+_cache = {'key': None, 'seasons': {}, 'checked': 0.0}
 
 
 def load_model():
@@ -435,28 +435,36 @@ class Season:
 # ---------------------------------------------------------------- cache + public API
 
 def season(today=None):
-    """The cached Season, rebuilt when this season's game lines change (checked every REBUILD_EVERY s). None on error."""
+    """The cached Season for `today` (Eastern date), rebuilt when this season's game lines change (checked every
+    REBUILD_EVERY s). One per day: the poller asks for tomorrow after a slate ends while web requests ask for today.
+    None on error."""
     from fantasy_database import GameLine
     from projections import season_label
+    from daily_leaders import nba_today
     from peewee import fn
+    t = today or nba_today()
     now = time.time()
     with _lock:
-        if _cache['season'] is not None and now - _cache['checked'] < REBUILD_EVERY and (today is None or _cache['season'].today == today):
-            return _cache['season']
+        seasons = _cache['seasons']
+        if t in seasons and now - _cache['checked'] < REBUILD_EVERY:
+            return seasons[t]
         try:
-            t = today or date.today()
             key = (GameLine.select(fn.COUNT(GameLine.player_id)).where(GameLine.season == season_label(t)).scalar(),
-                   GameLine.select(fn.MAX(GameLine.game_date)).where(GameLine.season == season_label(t)).scalar(), t)
-            if _cache['season'] is None or _cache['key'] != key:
-                _cache['season'] = Season(today=t)
+                   GameLine.select(fn.MAX(GameLine.game_date)).where(GameLine.season == season_label(t)).scalar())
+            if _cache['key'] != key:
+                seasons.clear()
                 _cache['key'] = key
+            if t in seasons:
+                seasons[t].refresh_status()
             else:
-                _cache['season'].refresh_status()
+                for old in [d for d in seasons if d != t][:-1]:   # keep two days at most
+                    del seasons[old]
+                seasons[t] = Season(today=t)
             _cache['checked'] = now
         except Exception as e:
             print(f'role_minutes: {e}')
-            return _cache['season']
-        return _cache['season']
+            return seasons.get(t)
+        return seasons[t]
 
 
 def context(today, sheet=None):
@@ -488,12 +496,13 @@ def factors(player_stats, days, suffix, today=None, sheet=None):
     / MIN{suffix}, delta = expected minutes change vs what that stats choice already contains, clipped to
     [FACTOR_MIN, FACTOR_MAX]. Players without data get no entry (factor 1.0). {} if the model can't be built."""
     from daily_leaders import nba_today
+    if suffix != WT:
+        return {}   # only THE projection carries a minutes line the role model's delta is measured against
     today = today or nba_today()
     s = season(today)
     if s is None:
         return {}
     ctx = context(today, tonight_sheet(today) if sheet is None else sheet)
-    wt = suffix if suffix in WEIGHTINGS else '_projected'
     pid_of = {v: k for k, v in s.names.items()}
     teams = defaultdict(list)
     for name, st in player_stats.items():
@@ -505,8 +514,8 @@ def factors(player_stats, days, suffix, today=None, sheet=None):
     scen = {}
     for team in teams:
         for d, k in s.team_days(team, days).items():
-            scen[(team, d)] = s.scenario(team, d, k, ctx, (wt,))
-    center(scen, wt, s, ctx)
+            scen[(team, d)] = s.scenario(team, d, k, ctx, (WT,))
+    center(scen, WT, s)
     out = defaultdict(dict)
     for (team, d), sc in scen.items():
         for name, pid, st in teams[team]:
@@ -514,36 +523,23 @@ def factors(player_stats, days, suffix, today=None, sheet=None):
             base = float(st.get(f'MIN{suffix}') or 0)
             if r is None or base < 4:
                 continue
-            f = (base + r['delta'][wt]) / base
+            f = (base + r['delta'][WT]) / base
             if math.isfinite(f) and abs(f - 1) > 0.005:
                 out[name][d] = round(min(max(f, FACTOR_MIN), FACTOR_MAX), 3)
     return dict(out)
 
 
-def center(scen, wt, s=None, ctx=None):
-    """Subtract the league-wide mean delta per (tonight/forecast, starter/bench), weighted by the chance he plays: the
-    league as a whole is neutral context, so what is left is each team's own situation. Measured 2026-11-03 before
-    centering (7 forecast days): bench -1.4 min, starters -0.1 (the pair term prices returns from absences already in
-    his numbers). When `scen` holds few teams (one night's slate) the means come from every team's next game instead
-    (`s`, `ctx`), so one gutted roster can't center itself away. Mutates `scen` {(team, day): {pid: result}}."""
-    ref = scen
-    if s is not None and len({t for t, _ in scen}) < 20:
-        ref = dict(scen)
-        for team in set(s.roster.values()):
-            nxt = sorted(s.team_days(team, [ctx['today'] + timedelta(days=i) for i in range(7)]).items())
-            if nxt and (team, nxt[0][0]) not in ref:
-                ref[(team, nxt[0][0])] = s.scenario(team, nxt[0][0], nxt[0][1], ctx, (wt,))
-    acc = defaultdict(lambda: [0.0, 0.0])
-    for (team, d), sc in ref.items():
+def center(scen, wt, s):
+    """Subtract the league-neutral mean delta (model['center'][wt], fit-time constants in role_minutes_model.json by
+    tonight/forecast x starter/bench; `python .horizon/role-minutes/calibrate_center.py`): the league as a whole is
+    neutral context, so what is left is each team's own situation. Raw means were bench -1.4 min, starters -0.1 (the
+    pair term prices returns from absences already in his numbers). Constants, not live slate means: those moved with
+    how many teams had posted a lineup (reviewed 2026-11-04). Mutates `scen` {(team, day): {pid: result}}."""
+    c = s.m.get('center', {}).get(wt, {})
+    for sc in scen.values():
         for r in sc.values():
-            if r['p_out'] < 0.5:
-                a = acc[(r.get('tonight', False), r['starter'])]; w = 1 - r['p_out']
-                a[0] += w * r['delta'][wt]; a[1] += w
-    for (team, d), sc in scen.items():
-        for r in sc.values():
-            a = acc.get((r.get('tonight', False), r['starter']))
-            if a and a[1] >= 20:
-                m = a[0] / a[1]
+            m = c.get(('tonight' if r.get('tonight') else 'future') + ('S' if r['starter'] else 'B'))
+            if m:
                 r['delta'][wt] -= m
                 r['center'] = round(m, 2)
 
@@ -561,8 +557,8 @@ def tonight_day(day, sheet, teams):
         k = s.team_days(team, [day]).get(day)
         if k:
             scen[(team, day)] = s.scenario(team, day, k, ctx, ('H', '_projected'))
-    center(scen, 'H', s, ctx)
-    center(scen, '_projected', s, ctx)
+    center(scen, 'H', s)
+    center(scen, '_projected', s)
     out = {}
     for sc in scen.values():
         for pid, r in sc.items():

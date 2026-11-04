@@ -368,8 +368,6 @@ def start_poller():
             try:
                 import injury_reports   # ESPN return dates for role_minutes: at most every 3 h, 6 h cool-down on a block
                 injury_reports.maybe_snapshot()
-                import depth_charts     # ESPN depth charts (successor prior): at most every 20 h, 30 calls 1 s apart
-                depth_charts.maybe_snapshot()
             except Exception as e:
                 print(f'rotation poller injuries: {e}')
             try:
@@ -377,6 +375,11 @@ def start_poller():
             except Exception as e:
                 print(f'rotation poller: {e}')
                 wait = FAST_REFRESH
+            try:
+                import depth_charts     # data only (weight 0 until scored forward): once per 20 h, 30 calls 1 s apart, after the refresh so it never delays a lineup
+                depth_charts.maybe_snapshot()
+            except Exception as e:
+                print(f'rotation poller depth charts: {e}')
             finally:
                 from fantasy_database import DB
                 if not DB.is_closed():
