@@ -46,12 +46,11 @@ const rotTip = (player, points) => {
     r.opp || fpts ? `${r.opp > 0 ? '+' : ''}${r.opp} min against his projection${fpts}` : null,
     r.promoted ? 'Starting tonight, not his usual role' : null].filter(Boolean).join('. ');
 };
-// Rest of season (player_stats._rest_of_season): his projection x expected games left, the role model's minutes over
-// the next 10 team games included. ros_rank orders it (points: total FPTS; categories: z over replacement x games).
-const rosTip = (p, points) => p.ros_rank == null ? undefined : [
-  `Rest of season #${p.ros_rank}: ${points && p.ros_fpts != null ? `${p.ros_fpts} FPTS` : `${p.ros_value} (z over replacement x games)`}`,
-  `${p.ros_games} games, ${p.ros_min} min expected`,
-  p.ros_why || null].filter(Boolean).join('. ');
+// Rest of season (player_stats._rest_of_season): his projection x the games he is expected to play from here.
+// ros_rank orders it (points: total FPTS; categories: z over the scaling pool's edge x games).
+const rosTip = (p, points) => p.ros_rank == null ? undefined :
+  `Rest of season #${p.ros_rank}: ${points && p.ros_fpts != null ? `${p.ros_fpts} FPTS` : `${p.ros_value} (z over the pool edge x games)`}. ` +
+  `${p.ros_games} games, ${p.ros_min} min expected`;
 const PLAYER_W ='w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
 
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
@@ -164,8 +163,8 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
       if ((aValue == null) !== (bValue == null)) return aValue == null ? 1 : -1;
     }
     else if (sortConfig.key === 'ros_value') {
-      aValue = a.ros_value;
-      bValue = b.ros_value;
+      aValue = a.ros_rank == null ? null : -a.ros_rank;   // the rank breaks ties below the pool edge (value 0)
+      bValue = b.ros_rank == null ? null : -b.ros_rank;
       if ((aValue == null) !== (bValue == null)) return aValue == null ? 1 : -1;
     }
     // Handle nested stat properties like "stats.PTS.value"
@@ -278,7 +277,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
               )}
               {rosOn && (
                 <th className="table-header hidden sm:table-cell text-center w-14 cursor-pointer hover:text-white" onClick={() => handleSort('ros_value')}
-                    title="Rest of season: rank by his projection x the games he is expected to play from here (teammates' absences over the next 10 games included). Click to sort.">
+                    title="Rest of season: rank by his projection x the games he is expected to play from here. Click to sort.">
                   ROS<span className="ml-1"><SortIcon columnKey="ros_value" /></span>
                 </th>
               )}
@@ -430,7 +429,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                 {rosOn && (
                   <td className={`hidden sm:table-cell text-center tabular-nums whitespace-nowrap ${fade}`} title={rosTip(player, points)}>
                     {player.ros_rank == null ? <span className="text-gray-600">-</span>
-                      : <span className={`text-xs sm:text-sm ${player.ros_why ? (player.ros_role_min > 0 ? 'text-green-400' : 'text-red-400') : 'text-gray-200'}`}>
+                      : <span className="text-xs sm:text-sm text-gray-200">
                           {player.ros_rank}
                         </span>}
                   </td>
