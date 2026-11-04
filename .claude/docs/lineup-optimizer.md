@@ -59,7 +59,7 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
 - **Keep value (2026-11-04, `keep_values`):** before it, a player with no games left looked worthless, so plans sold
   roster quality for one-game streams (Jalen Green, ROS rank 77, dropped on the week's last day: the old objective
   was an exact tie between dropping him and a streamer). keep = max(his FPTS/g - replacement, 0) x the games he is
-  expected to play in the next `KEEP_WEEKS` = 2 fantasy weeks (league schedule; chance per game = `role_minutes`
+  expected to play in the next 2 fantasy weeks, weighted `KEEP_WEEK_WEIGHTS` 1 / 0.5 (a 2-week matchup counts its first week only; league schedule; chance per game = `role_minutes`
   Season.p_out: ESPN return date, Yahoo status, streak; a game he misses costs nothing, he sits in IL). Replacement =
   the `claims_per_week`-th best healthy free agent's FPTS/g. Season's last week (no next week) = no keep: pure
   streaming; a week whose NBA schedule is not stored = `AVG_WEEK_GAMES` 3.5 games x ROS_SHARE (noted). No claim
@@ -68,10 +68,14 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
   Evidence (`.horizon/keep-value/`, `driver/sim.py` + `summary.py`): 51 start weeks of 2023-24..2025-26 game logs x 4
   draft slots, no look-ahead (walk-forward priors + `inseason.project`), other teams re-take the top 117 every
   Monday, the planner re-solved every morning, realised FPTS of the top 9 who played. Over 3 weeks keep beats no-keep
-  by +135 FPTS (95% CI +100..+170, of ~4580; it gives up ~15 in the first week), +297 more in the 14 days after;
-  top-100 drops 3.98 -> 0.63 per trial, adds unchanged (15). Weights tried: weeks +1/+2 at 1/0.5 -10 FPTS
-  (CI -20..-1) vs 1/1, 0.5/0.25 worse, a third week no better (-8, CI -20..+3), replacement = the best free agent
-  worse (-14). Don't add a discount or a third week without a new run.
+  by +135 FPTS in that 10-team world (95% CI +100..+170, of ~4580; it gives up ~15 in the first week); the review's
+  independent sim (`.horizon/review-keep/rsim.py`) at Courtside's real 14 teams: **+57 (CI +29..+89), ~1.4%**; plentiful
+  free agents +28 (CI -5..+52), streaming unhurt. A bare tie-break (of two zero-value drops, drop the worse player)
+  already earns +23..+26 of it; the keep value still beats that (-32 for the tie-break, CI -56..-6). Top-100 drops
+  3.98 -> 0.63 per trial, adds unchanged (15). Weights 1/1 vs the shipped 1/0.5: no measurable difference (the first
+  sim said 1/1 by +10, CI 1..20; the review's sim +5, not significant); 0.5/0.25 worse, a third week no better,
+  replacement = the best free agent worse. A flat `max(fpg - repl, 0) x 7` keeps 90-96% of the gain (3-11 FPTS behind,
+  not significant) but cannot see return dates, which no sim can test.
 - **Positions off by default** (`solve(positions=False)`): the repo judge (`player_week_games`) ignores positions when
   availability < 1, so a position-constrained ILP lost to greedy on the judge. Make the judge position-aware first.
 - **Freeze by search over d*:** each healthy IL player's activation day d* in {today..last day, never} (today skipped
@@ -103,4 +107,4 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
   read lower than `/api/analyze`'s chance, which ignores the freeze).
 - **Cost:** one Week build + 7 Yahoo `team/.../roster;date=D` GETs (4 threads, cached 30 min in memory, one burst at a
   time) + ~8 MILPs (~0.05 s each; live Courtside 2026-11-02: 1 MILP, 0.07 s, endpoint ~4.5 s cold). Keep values:
-  ~0.01 s (the Season role_minutes already built + one `injury_reports` read). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.
+  ~0.23 s (the Season role_minutes already built + one `injury_reports` read). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.

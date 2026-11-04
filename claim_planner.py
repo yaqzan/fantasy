@@ -205,19 +205,19 @@ def select_pool(inst, mult=1.0):
     return chosen
 
 
-KEEP_WEEKS = 2           # fantasy weeks past this one a keep value counts, undiscounted (keep_values; .claude/docs)
+KEEP_WEEK_WEIGHTS = (1.0, 0.5)   # the next two fantasy weeks' games count this much (owner's choice: the 1/1 vs 1/0.5 difference is within noise)
 AVG_WEEK_GAMES = 3.5      # NBA games per team-week (82 over ~23.5 weeks): a week whose schedule is not stored yet
 
 
 def keep_of(fpg, plays, repl):
     """Keep value: (his FPTS per game - the replacement's, floored at 0) x the games he is expected to play past
-    this week (plays = the chance he plays each team game). A game he misses costs nothing: he sits in IL."""
+    this week (plays = the chance he plays each team game, times its week's weight). A game he misses costs nothing: he sits in IL."""
     return max(fpg - repl, 0.0) * sum(plays)
 
 
 def keep_values(lg, week, suffix, names, notes):
     """{name: keep}: what holding each of `names` past this week is worth, in the plan's units (FPTS): keep_of over
-    his team's games in the next KEEP_WEEKS fantasy weeks (league schedule). The chance he plays a game is
+    his team's games in the next two fantasy weeks (weighted KEEP_WEEK_WEIGHTS) (league schedule). The chance he plays a game is
     role_minutes Season.p_out's (ESPN return dates, Yahoo's status, his absence streak; k = team games from today).
     Replacement = the claims_per_week-th best healthy free agent's FPTS per game (the worst of one week's claims).
     No next week in the schedule (the season's last week) = {}: pure streaming."""
@@ -225,11 +225,13 @@ def keep_values(lg, week, suffix, names, notes):
     import daily_leaders
     from fantasy_team_helper import get_next_week_dates, get_available_players
     weeks, ws = [], week.week_start
-    for _ in range(KEEP_WEEKS):
+    for _ in KEEP_WEEK_WEIGHTS:
         ws, we = get_next_week_dates(lg, ws)
         if ws is None:
             break
-        weeks.append((ws, we))
+        weeks.append((ws, min(we, ws + timedelta(days=6))))   # a 2-week matchup counts its first week only
+    if not weeks:
+        notes.append('keep values off: no next fantasy week in the league schedule (the last week of the season, or this week is not in it)')
     today = daily_leaders.nba_today()
     s = role_minutes.season(today) if weeks else None
     if s is None:
@@ -248,12 +250,13 @@ def keep_values(lg, week, suffix, names, notes):
     def plays(p):
         st = stats[p]
         team = s.abv_of_full.get(st.get('TEAM'))
-        out = [AVG_WEEK_GAMES * (st.get('ROS_SHARE') or 0.0) for _ in missing]
+        out = [KEEP_WEEK_WEIGHTS[i] * AVG_WEEK_GAMES * (st.get('ROS_SHARE') or 0.0) for i in missing]
         for k, d in enumerate(s.schedule(team), 1):
             if d > weeks[-1][1]:
                 break
-            if any(a <= d <= b for a, b in weeks):
-                out.append(1.0 - s.p_out(st.get('NBA_ID'), team, d, k, ctx))
+            for i, (a, b) in enumerate(weeks):
+                if a <= d <= b:
+                    out.append(KEEP_WEEK_WEIGHTS[i] * (1.0 - s.p_out(st.get('NBA_ID'), team, d, k, ctx)))
         return out
 
     per_game = sorted((fpg(p) for p in get_available_players(lg, stats)), reverse=True)
