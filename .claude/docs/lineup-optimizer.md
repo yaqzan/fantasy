@@ -17,7 +17,7 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 | Per-player games, lineups, category totals and chances | `player_stats.py` (`player_week_games`, `fill_slots`, `team_week_totals`, `category_win_chances`) |
 | Claims already used this week | `fantasy_team_helper.claims_left` (Yahoo only) |
 | Per-day minutes factor (teammates out / back, ESPN return dates, tonight's sheet) | `role_minutes.factors` via `Week.minutes_factor(suffix)`; model in rotation.md "Role-aware minutes" |
-| Week plan (ILP: adds, drops, IL moves, claim days; Yahoo daily points leagues) | `claim_planner.py` (`week_plan`, `solve`, `score_judge`), `/api/plan`; card `components/WeekPlan.js` |
+| Week plan (ILP: adds, drops, IL moves, claim days; Yahoo daily points leagues) | `claim_planner.py` (`week_plan`, `solve`, `score_judge`, `keep_values`), `/api/plan`; card `components/WeekPlan.js` |
 | Page | `frontend/src/components/LineupOptimizer.js`; API client `services/api.js` (`analyze`, `pickups`, `getPlan`); sibling `WeeklyPickups.js` |
 | Terminal | `python lineup_optimizer.py <league> proj [moves] [plan]` ; `python claim_planner.py <league>` |
 
@@ -45,7 +45,8 @@ corrections in `driver/NOTES_plan.md`); equal to it on the live Courtside week (
 P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounded d* search and doubt split below
 (the prototype's `driver/plan.py`/`extract.py` take force options and a league id, so they stay separate). Supported: Yahoo, daily lineups, points. Elsewhere `/api/plan` is `{supported: false, reason}`.
 
-- **Rules encoded (owner-confirmed):** adds cost the week's claims, drops and IL moves are free. A dropped player is
+- **Rules encoded (owner-confirmed):** adds cost the week's claims, drops and IL moves are free (but a drop gives up
+  his keep value, below). A dropped player is
   unaddable league-wide for 3 days (`waiver_until`); re-adding my own drop is banned. IL takes only OUT players, but a
   healthy player may stay there: that **freezes** the lineup (Yahoo's stored lineup plays) and **blocks adds** (Yahoo
   help SLN6863) until he is activated, and activating needs an open active spot. Only starters score; the bench covers
@@ -53,7 +54,24 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
 - **Objective = the judge's own day value, Abel-summed:** `sum_r w_r v_(r) = sum_{k=n}^{R} c_k S_k`, `c_k = w_{k-1} - w_k`,
   `w_R := 0`, S_k = best k active players' v. For n = 9, R = 13: c = 0.2213 0.2788 0.1952 0.1002 0.0645 (sum 0.86).
   04's form (0.86 on the starters + dw on the bench) double-counted `w_n S_n` and dropped `w_13 S_13`: up to 216 FPTS/day off.
-  v carries no 0.86 (it lives in the weights) or it is counted twice.
+  v carries no 0.86 (it lives in the weights) or it is counted twice. Plus each player's keep value on o[last day]
+  (mine at the week's end); `model_fpts` and the judge exclude it, so "points" and win chance stay this week's.
+- **Keep value (2026-11-04, `keep_values`):** before it, a player with no games left looked worthless, so plans sold
+  roster quality for one-game streams (Jalen Green, ROS rank 77, dropped on the week's last day: the old objective
+  was an exact tie between dropping him and a streamer). keep = max(his FPTS/g - replacement, 0) x the games he is
+  expected to play in the next `KEEP_WEEKS` = 2 fantasy weeks (league schedule; chance per game = `role_minutes`
+  Season.p_out: ESPN return date, Yahoo status, streak; a game he misses costs nothing, he sits in IL). Replacement =
+  the `claims_per_week`-th best healthy free agent's FPTS/g. Season's last week (no next week) = no keep: pure
+  streaming; a week whose NBA schedule is not stored = `AVG_WEEK_GAMES` 3.5 games x ROS_SHARE (noted). No claim
+  carry-over (claims reset weekly); the 3-day unaddable rule needs nothing extra (a drop forfeits all of it).
+  Payload: `keep` on add/drop transactions, `plan.keep_total` (week-end roster's keep minus today's).
+  Evidence (`.horizon/keep-value/`, `driver/sim.py` + `summary.py`): 51 start weeks of 2023-24..2025-26 game logs x 4
+  draft slots, no look-ahead (walk-forward priors + `inseason.project`), other teams re-take the top 117 every
+  Monday, the planner re-solved every morning, realised FPTS of the top 9 who played. Over 3 weeks keep beats no-keep
+  by +135 FPTS (95% CI +100..+170, of ~4580; it gives up ~15 in the first week), +297 more in the 14 days after;
+  top-100 drops 3.98 -> 0.63 per trial, adds unchanged (15). Weights tried: weeks +1/+2 at 1/0.5 -10 FPTS
+  (CI -20..-1) vs 1/1, 0.5/0.25 worse, a third week no better (-8, CI -20..+3), replacement = the best free agent
+  worse (-14). Don't add a discount or a third week without a new run.
 - **Positions off by default** (`solve(positions=False)`): the repo judge (`player_week_games`) ignores positions when
   availability < 1, so a position-constrained ILP lost to greedy on the judge. Make the judge position-aware first.
 - **Freeze by search over d*:** each healthy IL player's activation day d* in {today..last day, never} (today skipped
@@ -65,7 +83,7 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
   past it the best plan so far is returned and the payload warns. Checked 2026-11-02 (`.horizon/claims-ilp/out/b3_check.json`):
   40 small instances identical to full enumeration; 20 largest (64-3375 combos) objective gap 0, max 8.1 s (one hit the budget, still exact) vs 100 s.
 - **Pool:** per day t and base position, the top C+9 free agents by v[t] PLUS the top C+9 by the rest of the week
-  if added on t (sum of v[t..]). The day-only rule cut multi-game streamers who top no single day (13/2000 property
+  if added on t (sum of v[t..] + keep). The day-only rule cut multi-game streamers who top no single day (13/2000 property
   instances lost up to 8.4 FPTS); with both, all 13 match the objective with every free agent. Pool ~60-90.
 - **Doubtful players:** the Q/D factor is about his NEXT game, so it sits on his first game after the day he is
   actually added (the judge's rule). A doubtful free agent is split into one candidate per add window (days whose
@@ -84,4 +102,5 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
   then `category_win_chances` vs the opponent; "now" is the same judge on no moves (frozen days included, so it can
   read lower than `/api/analyze`'s chance, which ignores the freeze).
 - **Cost:** one Week build + 7 Yahoo `team/.../roster;date=D` GETs (4 threads, cached 30 min in memory, one burst at a
-  time) + ~8 MILPs (~0.05 s each; live Courtside 2026-11-02: 1 MILP, 0.07 s, endpoint ~4.5 s cold). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.
+  time) + ~8 MILPs (~0.05 s each; live Courtside 2026-11-02: 1 MILP, 0.07 s, endpoint ~4.5 s cold). Keep values:
+  ~0.01 s (the Season role_minutes already built + one `injury_reports` read). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.

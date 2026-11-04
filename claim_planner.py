@@ -57,6 +57,7 @@ class PlayerData:
     first_add: Optional[int] = None
     has_stats: bool = True
     mf: list = field(default_factory=list)   # per day: role_minutes factor (that night's expected minutes / usual); [] = 1.0
+    keep: float = 0.0   # FPTS of holding him past this week (keep_values): earned if he is mine at the week's end
 
     def f(self, t):
         return self.mf[t] if self.mf else 1.0
@@ -187,13 +188,13 @@ def load_week(lg, week_start, week_end, timeframe=None):
 
 def select_pool(inst, mult=1.0):
     """The candidate pool, in place: keep the free agents that are, for some base position and some day t, among the
-    top round((C + 9) x mult) addable free agents by v[t] (that day) OR by sum_{t' >= t} v[t'] (the rest of the week
-    if added on t: a multi-game streamer who tops no single day). Returns the kept names."""
+    top round((C + 9) x mult) addable free agents by v[t] (that day) OR by sum_{t' >= t} v[t'] + keep (what adding
+    him on t is worth: a multi-game streamer who tops no single day, or a keeper). Returns the kept names."""
     k = int(round((inst.claims_left + 9) * mult))
     fa = {p: d for p, d in inst.players.items() if not d.owned}
     chosen = set()
     for t in range(inst.T):
-        rest = {p: sum(d.v[t:]) for p, d in fa.items()}
+        rest = {p: sum(d.v[t:]) + d.keep for p, d in fa.items()}
         for pos in BASE_POSITIONS:
             ok = [p for p, d in fa.items() if d.first_add is not None and d.first_add <= t and pos in d.elig]
             chosen.update(sorted((p for p in ok if fa[p].v[t] > 0), key=lambda p: (-fa[p].v[t], p))[:k])
@@ -202,6 +203,63 @@ def select_pool(inst, mult=1.0):
         if p not in chosen:
             del inst.players[p]
     return chosen
+
+
+KEEP_WEEKS = 2           # fantasy weeks past this one a keep value counts, undiscounted (keep_values; .claude/docs)
+AVG_WEEK_GAMES = 3.5      # NBA games per team-week (82 over ~23.5 weeks): a week whose schedule is not stored yet
+
+
+def keep_of(fpg, plays, repl):
+    """Keep value: (his FPTS per game - the replacement's, floored at 0) x the games he is expected to play past
+    this week (plays = the chance he plays each team game). A game he misses costs nothing: he sits in IL."""
+    return max(fpg - repl, 0.0) * sum(plays)
+
+
+def keep_values(lg, week, suffix, names, notes):
+    """{name: keep}: what holding each of `names` past this week is worth, in the plan's units (FPTS): keep_of over
+    his team's games in the next KEEP_WEEKS fantasy weeks (league schedule). The chance he plays a game is
+    role_minutes Season.p_out's (ESPN return dates, Yahoo's status, his absence streak; k = team games from today).
+    Replacement = the claims_per_week-th best healthy free agent's FPTS per game (the worst of one week's claims).
+    No next week in the schedule (the season's last week) = {}: pure streaming."""
+    import role_minutes
+    import daily_leaders
+    from fantasy_team_helper import get_next_week_dates, get_available_players
+    weeks, ws = [], week.week_start
+    for _ in range(KEEP_WEEKS):
+        ws, we = get_next_week_dates(lg, ws)
+        if ws is None:
+            break
+        weeks.append((ws, we))
+    today = daily_leaders.nba_today()
+    s = role_minutes.season(today) if weeks else None
+    if s is None:
+        if weeks:
+            notes.append('keep values off: the role_minutes season model could not be built')
+        return {}
+    ctx = role_minutes.context(today, {})
+    stats = week.stats
+    stored = {d for t in set(s.abv_of_full.values()) for d in s.schedule(t)}
+    missing = [i for i, (a, b) in enumerate(weeks) if not any(a <= d <= b for d in stored)]
+    if missing:
+        notes.append(f'NBA schedule not stored for {len(missing)} of the next {len(weeks)} weeks: keep values assume '
+                     f'{AVG_WEEK_GAMES} games there at his rest-of-season share')
+    fpg = lambda p: float(stats[p].get(f'FPTS{suffix}') or 0.0)  # noqa: E731
+
+    def plays(p):
+        st = stats[p]
+        team = s.abv_of_full.get(st.get('TEAM'))
+        out = [AVG_WEEK_GAMES * (st.get('ROS_SHARE') or 0.0) for _ in missing]
+        for k, d in enumerate(s.schedule(team), 1):
+            if d > weeks[-1][1]:
+                break
+            if any(a <= d <= b for a, b in weeks):
+                out.append(1.0 - s.p_out(st.get('NBA_ID'), team, d, k, ctx))
+        return out
+
+    per_game = sorted((fpg(p) for p in get_available_players(lg, stats)), reverse=True)
+    C = lg.claims_per_week or 5
+    repl = per_game[min(C, len(per_game)) - 1] if per_game else 0.0
+    return {p: keep_of(fpg(p), plays(p), repl) for p in names if p in stats}
 
 
 def build_instance(lg, week, suffix, opp):
@@ -343,6 +401,8 @@ def build_instance(lg, week, suffix, opp):
             notes.append(f'{p}: in Yahoo\'s lineup, not in the DB roster: present with v=0')
     for p in week.free_agents(suffix):
         players[p] = pdata(p, False)
+    for p, k in keep_values(lg, week, suffix, list(players), notes).items():
+        players[p].keep = k
     live_const = sum(d.fpts * d.live_share for d in players.values() if d.locked_start)
     inst = Instance(league=lg.id, week_start=week.week_start.isoformat(), week_end=week.week_end.isoformat(),
                     suffix=suffix, days=[d.isoformat() for d in days], slots=slots, open_slots=open_slots,
@@ -606,6 +666,9 @@ def _solve_one(inst: Instance, C, dstar, positions=False, time_limit=60, alias=N
                     m.row([(j, 1.0)] + [(key, -c) for key, c in act(p, t)], ub=0.0)
                 if us and len(us) > k:
                     m.row([(j, 1.0) for j in us], ub=k)
+    for p in pl:   # past this week: his keep value if he is still mine at the end (a drop forfeits it, an add earns it)
+        if P[p].keep:
+            m.add_obj(('o', p, T - 1), P[p].keep)
     t0 = time.time()
     res = m.solve(time_limit)
     dt = time.time() - t0
@@ -641,10 +704,11 @@ def _solve_one(inst: Instance, C, dstar, positions=False, time_limit=60, alias=N
             lineups.append({alias.get(p, p): 'any' for p in sorted(act_p, key=lambda p: -P[p].v[t])[:inst.n_slots[t]]})
     obj = -res.fun
     pen = sum(-m.obj[j] * x[j] for k, j in m.idx.items() if k[0] in ('a', 'd', 'g'))
+    keep_end = sum(P[p].keep * val(('o', p, T - 1)) for p in pl)
     return Plan(moves=moves, lineups=lineups, frozen=frozen, objective=obj + inst.my_carried + inst.live_const,
-                model_fpts=inst.my_carried + inst.live_const + obj + pen,
+                model_fpts=inst.my_carried + inst.live_const + obj + pen - keep_end,
                 meta={'dstar': {q: (inst.days[d] if d < T else 'never') for q, d in dstar.items()}, 'solve_s': round(dt, 3),
-                      'vars': len(m.lb), 'rows': len(m.rows), 'penalty': pen})
+                      'vars': len(m.lb), 'rows': len(m.rows), 'penalty': pen, 'keep_end': keep_end})
 
 
 def solve(inst: Instance, positions=False, budget=SOLVE_BUDGET, full_limit=FULL_ENUM, split_doubt=True) -> Plan:
@@ -767,6 +831,8 @@ def score_judge(inst: Instance, plan: Plan, week, rules=True):
 
 ASSUMPTIONS = [
     'Adds use the week\'s claims; drops and IL moves are free.',
+    'A player is worth his next two weeks too (keep: his FPTS per game above a free agent you could claim '
+    'instead, x the games he should play): a drop gives it up, an add gains it.',
     'A dropped player cannot be added by anyone for 3 days.',
     'IL takes only OUT players. A healthy player left in IL freezes the lineup and blocks adds until he is activated, '
     'and activating him needs an open active spot.',
@@ -794,11 +860,12 @@ def unsupported_reason(lg, week_start, week_end):
 def _note(inst, m, n_add):
     d = inst.players.get(m['player'])
     kind = m['type']
+    keep = f' · keep {d.keep:.0f}' if d.keep >= 0.5 else ''
     if kind == 'add':
         games = sum(1 for t in range(m['t'], inst.T) if d.game[t])
-        return f"claim {n_add} · {games} game{'s' if games != 1 else ''} left · {d.fpts:.1f} FPTS/g"
+        return f"claim {n_add} · {games} game{'s' if games != 1 else ''} left · {d.fpts:.1f} FPTS/g{keep}"
     if kind == 'drop':
-        return ('OUT · ' if d.out else '') + f'{d.fpts:.1f} FPTS/g · unaddable 3 days'
+        return ('OUT · ' if d.out else '') + f'{d.fpts:.1f} FPTS/g{keep} · unaddable 3 days'
     if kind == 'il_in':
         return 'OUT: frees an active spot'
     return 'activate' if not d.out else 'back to the active roster'
@@ -827,7 +894,9 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None)
             if m['t'] != t:
                 continue
             n_add += m['type'] == 'add'
-            tx.append({'type': m['type'], 'player': m['player'], 'note': _note(inst, m, n_add)})
+            d = inst.players.get(m['player'])
+            tx.append({'type': m['type'], 'player': m['player'], 'note': _note(inst, m, n_add),
+                       'keep': round(d.keep, 1) if d and m['type'] in ('add', 'drop') else None})
         days.append({'date': day, 'frozen': bool(plan.frozen[t]), 'today': t == 0, 'transactions': tx})
     warnings = []
     if inst.stored_source != 'yahoo':
@@ -844,7 +913,9 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None)
         'claims_per_week': lg.claims_per_week,
         'now': {'win_chance': round(none['p_win'], 4), 'points': round(none['fpts'], 1)},
         'plan': {'win_chance': round(judged['p_win'], 4), 'points': round(judged['fpts'], 1),
-                 'model_points': round(plan.model_fpts, 1)},
+                 'model_points': round(plan.model_fpts, 1),
+                 # next-2-weeks value of the week-end roster minus today's (keep_values; negative = the plan sells future value)
+                 'keep_total': round(plan.meta['keep_end'] - sum(d.keep for d in inst.players.values() if d.owned), 1)},
         'opponent_points': round(inst.opp_mean, 1),
         'days': days, 'do_today': days[0]['transactions'],
         'warnings': warnings, 'assumptions': ASSUMPTIONS,
@@ -890,7 +961,8 @@ def main(league=None, timeframe=None):
         txt = '  '.join(f"{sym[x['type']]}{x['player']} ({x['note']})" for x in d['transactions']) or '.'
         print(f"{d['date'][5:]} {'FROZEN' if d['frozen'] else '      '} {txt}")
     print(f"now {out['now']['points']:.0f} FPTS, {out['now']['win_chance']:.1%} -> plan {out['plan']['points']:.0f} "
-          f"FPTS, {out['plan']['win_chance']:.1%}  ({out['solver']['solves']} solves, {out['solver']['seconds']} s)")
+          f"FPTS, {out['plan']['win_chance']:.1%}; next 2 weeks {out['plan']['keep_total']:+.0f} FPTS of keep value  "
+          f"({out['solver']['solves']} solves, {out['solver']['seconds']} s)")
     for w in out['warnings']:
         print('!', w)
 
