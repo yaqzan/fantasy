@@ -506,10 +506,10 @@
    "futureS": 0.21
   },
   "_projected": {
-   "tonightB": -1.4,
-   "tonightS": 1.34,
-   "futureB": -1.27,
-   "futureS": 0.17
+   "tonightS": -0.01,
+   "tonightB": -0.73,
+   "futureS": -0.36,
+   "futureB": -1.98
   }
  }
 }

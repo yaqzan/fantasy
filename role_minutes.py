@@ -16,8 +16,7 @@ Future nights: each teammate's chance of being out (o_j -> P_j(d)) from tonight'
 (injury_reports), Yahoo status and the game-log absence tables (P(out k team games ahead | streak)).
 
 Consumers: `factors()` (per-day minutes multiplier for the optimizer / week plan / player_week_games), `tonight()`
-(the live Opp column, nba_rotation), `ros_deltas()` (minutes delta over the next ROS_GAMES games, for the
-rest-of-season value; built by the poller, `refresh_ros`, read with `ros_cached`).
+(the live Opp column, nba_rotation).
 Everything degrades to "no change" (factor 1.0, delta 0) when a player or team has no data.
 """
 import json
@@ -44,8 +43,7 @@ FACTOR_MIN, FACTOR_MAX = 0.5, 2.0
 DELTA_CAP = 15.0         # minutes, either way
 MAX_MIN = 44.0
 REBUILD_EVERY = 15 * 60  # seconds: the season walk is rebuilt when game_lines change, checked at most this often
-ROS_GAMES = 10           # team games ahead the rest-of-season value takes the role model's redistribution for (rotation.md)
-ROS_WHY_MIN = 5.0        # minutes over those games before the ROS column says why
+FORECAST_GAMES = 4       # team games ahead a factor is served for; further out 1.0 (the 2023-26 walk scored k <= 4: rotation.md)
 
 _lock = threading.Lock()
 _cache = {'key': None, 'seasons': {}, 'checked': 0.0}
@@ -299,9 +297,9 @@ class Season:
         tot = k0 + w.sum()
         if tot <= 0:
             return self.xbar.copy(), 0.0, {}
-        # the prior's context: 'H' (as fit) a typical night; a projection's prior knew who was out at the start of the
-        # season (a season-long injury is in every expert line), so its context = his first games' (up to 3)
-        x0 = self.xbar if weighting == 'H' or not h else np.mean([x[2] for x in h[:3]], axis=0)
+        # the prior's context: a typical night (xbar). Not his first games' context: on U's weights that baked one debut
+        # night into a 64-game prior (Max Strus -12 min a game) and scored worse on the 2023-26 walk (rotation.md)
+        x0 = self.xbar
         X = (k0 * x0 + sum(wi * x[2] for wi, x in zip(w, h))) / tot
         # starter share over his games only (a prior has no starter history): None = no games, no change
         st = sum(wi * x[3] for wi, x in zip(w, h)) / w.sum() if w.sum() > 0 else None
@@ -397,8 +395,12 @@ class Season:
         ph = np.array([H[p] for p in pool]); pw = np.array([1 - P[p] for p in pool])
         sheet = ctx.get('sheet') or {}
         starters = {p for p, v in sheet.items() if v[1] and v[0]} if d == ctx.get('today') else set()
-        likely = [p for p in pool if P[p] < 0.5]
-        top5 = starters & set(pool) if len(starters & set(pool)) >= 5 else set(sorted(likely, key=lambda p: -H[p])[:5])
+        if len(starters & set(pool)) >= 5:
+            top5 = starters & set(pool)
+        else:   # the 5 highest H likely to play the team's NEXT game, the same set every forecast night (no flip at k)
+            nxt = (self.schedule(team) or [d])[0]
+            P1 = P if k == 1 else {p: self.p_out(p, team, nxt, 1, ctx) for p in pool}
+            top5 = set(sorted((p for p in pool if P1[p] < 0.5), key=lambda p: -H[p])[:5])
         X = np.zeros((len(pool), 2)); contrib = defaultdict(lambda: defaultdict(float))
         for j in M:
             h = H[j]
@@ -521,7 +523,8 @@ def factors(player_stats, days, suffix, today=None, sheet=None):
     scen = {}
     for team in teams:
         for d, k in s.team_days(team, days).items():
-            scen[(team, d)] = s.scenario(team, d, k, ctx, (WT,))
+            if k <= FORECAST_GAMES:
+                scen[(team, d)] = s.scenario(team, d, k, ctx, (WT,))
     center(scen, WT, s)
     out = defaultdict(dict)
     for (team, d), sc in scen.items():
@@ -537,11 +540,10 @@ def factors(player_stats, days, suffix, today=None, sheet=None):
 
 
 def center(scen, wt, s):
-    """Subtract the league-neutral mean delta (model['center'][wt], fit-time constants in role_minutes_model.json by
-    tonight/forecast x starter/bench; `python .horizon/role-minutes/calibrate_center.py`): the league as a whole is
-    neutral context, so what is left is each team's own situation. Raw means were bench -1.4 min, starters -0.1 (the
-    pair term prices returns from absences already in his numbers). Constants, not live slate means: those moved with
-    how many teams had posted a lineup (reviewed 2026-11-04). Mutates `scen` {(team, day): {pid: result}}."""
+    """Subtract the centre (model['center'][wt], constants in role_minutes_model.json by tonight/forecast x
+    starter/bench). '_projected': the value that makes U's minutes + delta unbiased per group on the 2023-26 season walk
+    (`.horizon/review-U/walk_u.py`, then `.horizon/role-minutes/calibrate_center.py --write`; rotation.md). Constants,
+    not live slate means: those moved with how many teams had posted a lineup. Mutates `scen` {(team, day): {pid: result}}."""
     c = s.m.get('center', {}).get(wt, {})
     for sc in scen.values():
         for r in sc.values():
@@ -588,63 +590,6 @@ def reason_text(r, reports, s):
     when = f' (back ~{back:%b} {back.day})' if back else ''
     sure = '' if p >= 0.95 else f' ({round(p * 100)}% out)'
     return f'{last} out{when}{sure}: +{mins:.0f} min', back.isoformat() if back else None
-
-
-def ros_deltas(today=None, sheet=None):
-    """{pid: (minutes, games, why)}: the role model's minutes delta vs what THE projection carries, summed over his
-    team's next ROS_GAMES games (if he plays them: the caller weights by his availability), the number of those games,
-    and a one-line reason. Further out the redistribution is not trusted (rotation.md "Rest of season"). Each team's
-    scenario per night is computed once for all its players. ~1-2 s: the poller builds it (refresh_ros), requests read
-    the cache (ros_cached)."""
-    from daily_leaders import nba_today
-    today = today or nba_today()
-    s = season(today)
-    if s is None:
-        return {}
-    ctx = context(today, tonight_sheet(today) if sheet is None else sheet)
-    teams = {t for t in s.roster.values() if t}
-    scen = {}
-    for team in teams:
-        for k, d in enumerate(s.schedule(team)[:ROS_GAMES], start=1):
-            scen[(team, d)] = s.scenario(team, d, k, ctx, (WT,))
-    center(scen, WT, s)
-    tot, n, best = defaultdict(float), defaultdict(int), {}
-    for (team, d), sc in scen.items():
-        for pid, r in sc.items():
-            if s.roster.get(pid) != team:
-                continue
-            dl = r['delta'][WT]
-            tot[pid] += dl; n[pid] += 1
-            if abs(dl) > abs(best.get(pid, (0.0, None))[0]):
-                best[pid] = (dl, r)
-    out = {}
-    for pid, total in tot.items():
-        why = ''
-        if abs(total) >= ROS_WHY_MIN and pid in best:
-            line, _ = reason_text(best[pid][1], ctx['reports'], s)
-            why = (f'{line}; ' if line and total > 0 else '') + f'{total:+.0f} min over the next {n[pid]} games'
-        out[pid] = (round(total, 1), n[pid], why)
-    return out
-
-
-_ros = {'key': None, 'at': 0.0, 'deltas': {}}
-
-
-def refresh_ros(today=None, every=3600):
-    """Rebuild the ROS deltas when the day or this season's lines changed, or `every` s passed (poller thread only)."""
-    from daily_leaders import nba_today
-    today = today or nba_today()
-    key = (today, _cache['key'])
-    if key == _ros['key'] and time.time() - _ros['at'] < every:
-        return
-    deltas = ros_deltas(today)
-    _ros.update({'key': (today, _cache['key']), 'at': time.time(), 'deltas': deltas, 'day': today})
-
-
-def ros_cached(today=None):
-    """The poller's ROS deltas for `today` ({} before its first build, or when they are for another day)."""
-    from daily_leaders import nba_today
-    return _ros['deltas'] if _ros.get('day') == (today or nba_today()) else {}
 
 
 if __name__ == '__main__':

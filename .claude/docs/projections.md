@@ -199,6 +199,9 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   `inseason.project` equals the research spec to 2e-14 (parity.py). **The prior fades, slowly:** share of the estimate that is still
   the prior at ~50 games played: MIN 18%, PTS/AST 20%, REB/3PM 29%, BLK 38%, STL 55%. Forcing a fast fade (tau 5) was worse at every
   checkpoint (spec.md). The backtest prior is our model alone; with the expert blend as prior the same K are best (K x1 to x1.5).
+  FG%: FGM's K (12) above FGA's (6) leaves players whose shot volume moved off (10 games: risers -1.8 FG% points, fallers +1.8);
+  FGM at K 6 fixes those slices but is worse overall (FG% RMSE 3.86 -> 4.15 points; the refit picks 12 in every test season,
+  `verify_fgm.py`), so K stays 12.
   Re-fit after a season of live games. A first-game call-up has no prior of his own (no line): he sits outside the pool.
   The old form (per stat `(K x prior + games + R x last 10) / (K + n + R x n10)`, 2026-10-24) is the "live" column above; before it,
   a "Recent form" default (half season, half last 10, no prior) was 25-59% worse than either.
@@ -209,10 +212,12 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   what `GP_projected` carries) -> .744 (+.068 [+.054,+.083]); his own games alone (no streak) .736, the streak adds +.009 [+.007,+.011];
   better at every checkpoint (60 games: .570 -> .688); games MAE 11.0 -> 9.7. In production the projected games are the expert blend's
   (they run ~10 high; the 15-game shrink takes most of it). Used for the `_projected` auction $ (surplus x share, `_games_share`;
-  `_proj` keeps projected games / 82), never for per-game z. **ROS value** (`ros_value` / `ros_rank` on `/api/fantasy` and
-  `/api/projections/players`, "ROS" column on the desktop player table): ROS minutes = share x (team games left x MPG + the role
-  model's minutes delta over the next 10 team games, rotation.md "Rest of season"); points leagues = FPTS per minute x ROS minutes
-  (total FPTS), category leagues = (summed z of his line scaled by ROS minutes / (games x MPG) - the replacement player's) x GP_ros.
+  `_proj` keeps projected games / 82), never for per-game z. **ROS value** (`ros_value` / `ros_rank` / `ros_games` / `ros_min` on `/api/fantasy` and
+  `/api/projections/players`, "ROS" column on the desktop player table, sorted by rank): GP_ros x THE projection's per-game line.
+  Points leagues: total FPTS. Category leagues: max(summed z - the scaling pool's last player's (`drafted x SCALING_POOL_FACTOR`), 0)
+  x GP_ros, ties below that edge by per-game value (a negative surplus x games ranked a player out for weeks above a healthy one:
+  review 2026-11-05). No role-model minutes (rotation.md "Rest of season"). The schedule can hold fewer than 82 games a team (NBA Cup
+  knockouts dated late): games left = 82 - played then; a game today counts as played once its lines are in.
   His own return date is not in it (the streak factor stands in; ESPN dates are unscored).
 - **Week-1 check (2026-10-25, `.horizon/week1-review/bias.py`, 242 players 2+ games, projected 18+ MPG, 4 days).** League-wide
   scoring ran under the model line: PTS -9%, 3PM -12%, AST -10%, FGA -9%, MIN -5%; TOV +9%, STL +8%, FTA +7%. A level shift

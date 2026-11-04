@@ -361,14 +361,13 @@ def _rotation_json(r, stats, points):
 
 def _ros_json(stats, league):
     """The rest-of-season value (player_stats._rest_of_season): `ros_value` (total FPTS in points leagues, summed z over
-    replacement x games otherwise), `ros_rank`, `ros_fpts` (points leagues), expected `ros_games` / `ros_min` left,
-    `ros_role_min` (the role model's part of those minutes) and `ros_why` (one line when it moved him)."""
+    the scaling pool's edge x games otherwise, 0 below it), `ros_rank`, `ros_fpts` (points leagues), expected
+    `ros_games` / `ros_min` left."""
     if stats.get('ROS_RANK') is None:
         return {}
     return {'ros_value': round(stats['ROS_VALUE'], 1), 'ros_rank': stats['ROS_RANK'],
             'ros_fpts': round(stats['ROS_FPTS']) if league.is_points else None,
-            'ros_games': round(stats['GP_ros'], 1), 'ros_min': round(stats['ROS_MIN']),
-            'ros_role_min': round(stats['ROS_ROLE_MIN'], 1), 'ros_why': stats.get('ROS_WHY') or None}
+            'ros_games': round(stats['GP_ros'], 1), 'ros_min': round(stats['ROS_MIN'])}
 
 
 def _what_if_json(player_stats, league, name):
