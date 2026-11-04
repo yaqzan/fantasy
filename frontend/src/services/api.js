@@ -213,3 +213,7 @@ export const getTeamStandings = async (statType, healthyOnly, view = 'per_game')
 // Player card: game log + Projection / Preseason / Season / Last 10 / Last 5 in the league's categories.
 export const getPlayerCard = async ({ id, name }) =>
   (await api.get('/player-card', { params: id ? { id } : { name } })).data;
+
+// Start tab: does a crowded day exist (badge), and who to start on one (start_day.py).
+export const getStartDayStatus = async () => (await api.get('/start-day/status')).data;
+export const getStartDay = async () => (await api.get('/start-day')).data;

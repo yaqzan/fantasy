@@ -19,6 +19,7 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 | Per-day minutes factor (teammates out / back, ESPN return dates, tonight's sheet) | `role_minutes.factors` via `Week.minutes_factor(suffix)`; model in rotation.md "Role-aware minutes" |
 | Week plan (ILP: adds, drops, IL moves, claim days; Yahoo daily points leagues) | `claim_planner.py` (`week_plan`, `solve`, `score_judge`, `keep_values`), `/api/plan`; card `components/WeekPlan.js` |
 | Page | `frontend/src/components/LineupOptimizer.js`; API client `services/api.js` (`analyze`, `pickups`, `getPlan`); sibling `WeeklyPickups.js` |
+| Crowded day: who to start (the Start tab; daily category leagues, all-UTIL slots) | `start_day.py` (`status`, `lineups`), `/api/start-day[/status]`; `components/StartDay.js`, tab logic in `App.js` |
 | Terminal | `python lineup_optimizer.py <league> proj [moves] [plan]` ; `python claim_planner.py <league>` |
 
 ## Traps
@@ -108,3 +109,24 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
 - **Cost:** one Week build + 7 Yahoo `team/.../roster;date=D` GETs (4 threads, cached 30 min in memory, one burst at a
   time) + ~8 MILPs (~0.05 s each; live Courtside 2026-11-02: 1 MILP, 0.07 s, endpoint ~4.5 s cold). Keep values:
   ~0.23 s (the Season role_minutes already built + one `injury_reports` read). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.
+
+## Start tab (start_day.py, 2026-11-04)
+
+Fantrax category leagues (WSOP, Guillotine) set `roster.active` (6) starters of 10, and on a night when almost everyone
+plays the question is who. Capability by rule, not id: `supported` = daily lineups + category scoring + all-UTIL slots.
+- **Method:** every legal lineup of the players who can still start (healthy, game today, not tipped) goes through
+  `Week.team`; the sat players get a window starting tomorrow, so the rest of the week plays as usual. Value = expected
+  categories won against this week's opponent, plus the week-win chance (Poisson-binomial). Exact search up to
+  `MAX_LINEUPS` 600 (6 of 10 = 210 lineups, 3-5 s cold, cached 60 s); more is reported as `too_many`, not searched.
+- **Roles:** MUST = benching him costs >= `MUST_COST` 0.03 categories of the best lineup; the rest compete for the open
+  spots ("toss-up" within `TOSSUP_LOSS` 0.04 of the best lineup, else bench), each with what the best lineup containing
+  him loses. Q/GTD players keep `DAY_TO_DAY_CHANCE` and show "% to play".
+- **Tab:** `/api/start-day/status` (no lineup search, but builds a Week: ~2 s cold, 60-s cache) decides it; the tab shows only when TODAY has more candidates than
+  slots, is first in the row and lit with a pulsing dot (phones show three tabs), and the tab row fades at a cut edge.
+  Only TODAY is searched (`?day=` other than today is refused): sitting a player uses `windows`, which also removes his
+  earlier games, so a later day would be wrong. `conflict_days` is in the status but the page doesn't show it.
+- **Not modelled:** a tipped player counts as locked in (his slot is taken); the real lineup set on Fantrax isn't read;
+  swing numbers carry the model's usual overconfidence (leagues.md "Calibrated"). Seen 2026-11-04: best vs worst six was about 6-7 points of
+  week-win chance in WSOP, 3 in Guillotine. A finished game today counts as locked in; a sat Q/GTD player's doubt is dropped
+  for that lineup (else it moved onto his next game).
+

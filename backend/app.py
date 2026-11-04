@@ -710,6 +710,26 @@ def stage_plan():
     return jsonify(result)
 
 
+@fantasy_api.route('/start-day/status')
+def start_day_status():
+    """The Start tab's badge: does the league have a crowded day (more healthy players with a game than active
+    slots), and which days of this week (start_day.status). Cached 60 s."""
+    import start_day
+    return jsonify(start_day.status(current_league()))
+
+
+@fantasy_api.route('/start-day')
+def start_day_lineups():
+    """Who to start on a crowded day: must-starts, the toss-ups for the open spots, the swing in expected
+    categories and week-win chance (start_day.lineups). Today only (?day= must equal it)."""
+    import start_day
+    try:
+        day = date.fromisoformat(request.args['day']) if request.args.get('day') else None
+    except ValueError:
+        return jsonify({'error': 'day must be YYYY-MM-DD'}), 400
+    return jsonify(start_day.lineups(current_league(), day))
+
+
 # ---------------------------------------------------------------- projections (NBA-wide)
 
 def _projection_season():

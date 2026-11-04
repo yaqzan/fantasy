@@ -9,18 +9,52 @@ import WeeklyPickups from './components/WeeklyPickups';
 import Projections from './components/Projections';
 import LeagueSettings from './components/LeagueSettings';
 import DraftDay from './components/DraftDay';
+import StartDay from './components/StartDay';
 import {
   getPlayers, getFantasyTeams, draftPlayer, undraftPlayer,
-  getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage, getDraftDay, getDefaultTab
+  getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage, getDraftDay, getDefaultTab, getStartDayStatus
 } from './services/api';
 
 // Tabs: [key, label, in-season only (hidden in draft mode)]. Each tab keeps its own view state per
 // league (useLeagueViewState) and follows the league's capabilities, never its platform or id.
 const ALL_TABS = [
-  ['daily', 'Daily Leaders', true], ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true],
+  ['start', 'Start', true], ['daily', 'Daily Leaders', true], ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true],
   ['pickups', 'Weekly Pickups', true], ['projections', 'Projections'], ['standings', 'Team Standings', true],
   ['draft', 'Draft Day'], ['teams', 'Teams'],
 ];
+
+// The Start tab exists only on a day with more healthy players than active slots (start_day.py), first in the row and
+// lit, since phones show three tabs at a time. Re-asked every 5 minutes: tip-off or an injury can end the conflict.
+function useStartStatus(leagueId) {
+  const [status, setStatus] = useState(null);
+  const [asked, setAsked] = useState(null);   // the league the status answers (or failed for): until then the tab is undecided
+  useEffect(() => {
+    setStatus(null); setAsked(null);
+    if (!leagueId) return undefined;
+    let cancelled = false;
+    // a failed poll keeps the last answer: one tunnel blip must not take the tab away
+    const load = () => getStartDayStatus().then(s => { if (!cancelled) { setStatus(s); setAsked(leagueId); } }).catch(() => { if (!cancelled) setAsked(leagueId); });
+    load();
+    const timer = setInterval(() => { if (!document.hidden) load(); }, 300000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [leagueId]);
+  return [status, asked === leagueId];
+}
+
+// The row of tabs scrolls sideways with no scrollbar; a fade at each cut edge says there is more.
+function useScrollEdges(dep) {
+  const [el, ref] = useState(null);   // a callback ref: the row mounts after the loading screen, so an effect on a ref object would miss it
+  const [edges, setEdges] = useState({ left: false, right: false });
+  useEffect(() => {
+    if (!el) return undefined;
+    const update = () => setEdges({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => { el.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
+  }, [el, dep]);
+  return [ref, edges];
+}
 
 // Phones fold the Fantasy Teams panel into the Teams tab; wider screens keep it above the tabs.
 const PHONE = '(max-width: 639px)';
@@ -85,11 +119,16 @@ function App() {
   // Each league has its own Draft Day plan, or none (capability draft_plan).
   const draftPlan = draftMode && caps.draft_plan && draftPlanData?.league === leagueId ? draftPlanData : null;
 
-  const TABS = ALL_TABS.filter(([key, , inSeason]) => !(draftMode && inSeason) && (key !== 'draft' || caps.draft_plan) && (key !== 'teams' || isPhone));
+  const [startStatus, startReady] = useStartStatus(leagueId);
+  const startToday = Boolean(startStatus?.supported && startStatus.conflict);
+  const TABS = ALL_TABS.filter(([key, , inSeason]) => !(draftMode && inSeason) && (key !== 'draft' || caps.draft_plan) && (key !== 'teams' || isPhone)
+    && (key !== 'start' || startToday));
+  const [navRef, edges] = useScrollEdges(TABS.length);
   useEffect(() => {
+    if (activeTab === 'start' && !startReady) return;   // undecided until the league's status answers
     if (!loading && activeTab !== null && !TABS.some(([key]) => key === activeTab)) setActiveTab('players');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftMode, caps.draft_plan, isPhone, loading, activeTab === null]);
+  }, [draftMode, caps.draft_plan, isPhone, loading, activeTab === null, startToday, startReady]);
 
   useEffect(() => {
     loadLeagues();
@@ -285,21 +324,28 @@ function App() {
         {/* Phones: the tabs scroll sideways in one row; the draft-mode pill stays put */}
         <div className="mb-2 sm:mb-2">
           <div className="border-b border-gray-700 flex items-center gap-3">
-            <nav className="-mb-px flex-1 min-w-0 flex items-center gap-1 sm:gap-4 overflow-x-auto hide-scrollbar">
+            <div className="relative flex-1 min-w-0">
+            <nav ref={navRef} className="-mb-px flex items-center gap-1 sm:gap-4 overflow-x-auto hide-scrollbar">
               {TABS.map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => setActiveTab(key)}
                   className={`py-3 sm:py-2 px-2 border-b-2 font-medium text-sm whitespace-nowrap flex-shrink-0 touch-manipulation ${
-                    activeTab === key
+                    key === 'start' && activeTab !== key
+                      ? 'border-nba-orange bg-nba-orange text-onaccent rounded-t'
+                      : activeTab === key
                       ? 'border-nba-orange text-nba-orange'
                       : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-300'
                   }`}
                 >
-                  {label}
+                  {key === 'start' && <span className="inline-block w-2 h-2 mr-1.5 rounded-full bg-current animate-pulse" aria-hidden="true" />}
+                  {key === 'start' ? `${label} ${startStatus.slots}` : label}
                 </button>
               ))}
             </nav>
+            {edges.left && <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-gray-900 to-transparent" />}
+            {edges.right && <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-gray-900 to-transparent flex items-center justify-end pr-1 text-gray-400 text-xs">&rsaquo;</div>}
+            </div>
             <button
               onClick={toggleDraftMode}
               title="Draft mode shows only what matters for the draft: no in-season tabs or columns. On by default until the draft."
@@ -327,6 +373,7 @@ function App() {
         {activeTab === 'projections' && <Projections config={config} />}
         {activeTab === 'pickups' && <WeeklyPickups config={config} />}
         {activeTab === 'daily' && <DailyLeaders config={config} />}
+        {activeTab === 'start' && startToday && <StartDay config={config} />}
         {activeTab === 'standings' && <TeamStandings config={config} />}
         {activeTab === 'draft' && <DraftDay />}
         {activeTab === 'teams' && isPhone && (
