@@ -46,7 +46,13 @@ const rotTip = (player, points) => {
     r.opp || fpts ? `${r.opp > 0 ? '+' : ''}${r.opp} min against his projection${fpts}` : null,
     r.promoted ? 'Starting tonight, not his usual role' : null].filter(Boolean).join('. ');
 };
-const PLAYER_W = 'w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
+// Rest of season (player_stats._rest_of_season): his projection x expected games left, the role model's minutes over
+// the next 10 team games included. ros_rank orders it (points: total FPTS; categories: z over replacement x games).
+const rosTip = (p, points) => p.ros_rank == null ? undefined : [
+  `Rest of season #${p.ros_rank}: ${points && p.ros_fpts != null ? `${p.ros_fpts} FPTS` : `${p.ros_value} (z over replacement x games)`}`,
+  `${p.ros_games} games, ${p.ros_min} min expected`,
+  p.ros_why || null].filter(Boolean).join('. ');
+const PLAYER_W ='w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
 
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
   // The league's categories, in display order, with labels and percent/inverse flags.
@@ -58,6 +64,7 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
   const caps = config?.capabilities || {};
   const points = caps.scoring === 'points' && CATEGORIES.includes('FPTS');
   const rotationOn = players.some(p => p.rotation);
+  const rosOn = players.some(p => p.ros_rank != null);
   const [sortConfig, setSortConfig] = useState({ key: 'overall_rank', direction: 'asc' });
   const includedCategories = CATEGORIES.filter(c => !puntCategories.includes(c));
   const { customScores, loadingCustomScores, periodKey, getAuctionValue, getZScore, getOverallRank } =
@@ -154,6 +161,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
     else if (sortConfig.key === 'rotation_tonight') {
       aValue = rotTonight(a);
       bValue = rotTonight(b);
+      if ((aValue == null) !== (bValue == null)) return aValue == null ? 1 : -1;
+    }
+    else if (sortConfig.key === 'ros_value') {
+      aValue = a.ros_value;
+      bValue = b.ros_value;
       if ((aValue == null) !== (bValue == null)) return aValue == null ? 1 : -1;
     }
     // Handle nested stat properties like "stats.PTS.value"
@@ -262,6 +274,12 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                 <th className="table-header hidden sm:table-cell text-center w-16 cursor-pointer hover:text-white" onClick={() => handleSort('rotation_tonight')}
                     title="Tonight: expected FPTS if he plays (his projection at tonight's expected minutes); sorts by that x his chance to play. Click to sort.">
                   Tonight<span className="ml-1"><SortIcon columnKey="rotation_tonight" /></span>
+                </th>
+              )}
+              {rosOn && (
+                <th className="table-header hidden sm:table-cell text-center w-14 cursor-pointer hover:text-white" onClick={() => handleSort('ros_value')}
+                    title="Rest of season: rank by his projection x the games he is expected to play from here (teammates' absences over the next 10 games included). Click to sort.">
+                  ROS<span className="ml-1"><SortIcon columnKey="ros_value" /></span>
                 </th>
               )}
               <th className="table-header text-center w-12" title="Games he has played this season">GP</th>
@@ -406,6 +424,14 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                     {rotTonight(player) == null ? <span className="text-gray-600">-</span>
                       : <span className={`text-xs sm:text-sm ${player.rotation.gain >= 2 ? 'text-green-400 font-semibold' : player.rotation.gain <= -2 ? 'text-red-400' : 'text-gray-200'}`}>
                           {player.rotation.fpts.toFixed(1)}{player.rotation.confirmed ? '' : <span className="text-gray-500">*</span>}
+                        </span>}
+                  </td>
+                )}
+                {rosOn && (
+                  <td className={`hidden sm:table-cell text-center tabular-nums whitespace-nowrap ${fade}`} title={rosTip(player, points)}>
+                    {player.ros_rank == null ? <span className="text-gray-600">-</span>
+                      : <span className={`text-xs sm:text-sm ${player.ros_why ? (player.ros_role_min > 0 ? 'text-green-400' : 'text-red-400') : 'text-gray-200'}`}>
+                          {player.ros_rank}
                         </span>}
                   </td>
                 )}
