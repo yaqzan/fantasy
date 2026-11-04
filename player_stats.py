@@ -425,7 +425,7 @@ def _lineup_chance(rank, slots, availability):
 
 def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=(),
                       availability=1.0, variance=False, day_weights=None, tipped=(), locked=(), taken=None,
-                      windows=None, doubtful=None, minutes_factor=None, effective=None):
+                      windows=None, doubtful=None, minutes_factor=None, effective=None, sit=()):
     """Games and expected wins each rostered player contributes over the week.
 
     Daily lineups: each day only the players whose team plays and who make that day's lineup count
@@ -450,6 +450,8 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
     `windows` {player: (first day, last day)}, either end None = open: a mid-week pickup plays only from
     the day he is added, a drop only until the day before. A game in `tipped` ignores them (a game
     that has started stays with the lineup it started in).
+
+    `sit` {(player, day)}: a game he is kept out of by choice (daily lineups only; the Start tab's bench).
 
     `doubtful` {player: chance he plays}: day-to-day. It applies to his next game only (the one the status is about);
     his later games count as for anyone else.
@@ -496,6 +498,8 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
             next_game[p] = min((d for d in schedule.get(team, {}) if not (first and d < first)), default=None)
         for day, p_win in schedule.get(team, {}).items():
             if ((first and day < first) or (last and day > last)) and (team, day) not in tipped:
+                continue
+            if (p, day) in sit:
                 continue
             by_day.setdefault(day, []).append((p, p_win, weight(team, day), (team, day) in tipped))
     slots = league.slots

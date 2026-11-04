@@ -216,4 +216,4 @@ export const getPlayerCard = async ({ id, name }) =>
 
 // Start tab: does a crowded day exist (badge), and who to start on one (start_day.py).
 export const getStartDayStatus = async () => (await api.get('/start-day/status')).data;
-export const getStartDay = async () => (await api.get('/start-day')).data;
+export const getStartDay = async (day = null) => (await api.get('/start-day', { params: day ? { day } : {} })).data;

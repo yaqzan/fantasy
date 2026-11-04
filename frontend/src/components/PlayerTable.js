@@ -255,6 +255,24 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                   </th>
                 );
               })}
+              {rotationOn && (
+                <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 sm:w-14 cursor-pointer hover:text-white whitespace-nowrap`} onClick={() => handleSort('rotation_opp')}
+                    title={`Opportunity tonight: extra minutes from teammates who are out, per the NBA lineup sheet (as of ${config.rotation_as_of?.slice(11, 16) || '?'}). Click to sort.`}>
+                  Opp<span className="ml-1"><SortIcon columnKey="rotation_opp" /></span>
+                </th>
+              )}
+              {rotationOn && points && (
+                <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 sm:w-16 cursor-pointer hover:text-white whitespace-nowrap`} onClick={() => handleSort('rotation_tonight')}
+                    title="Tonight: expected FPTS if he plays (his projection at tonight's expected minutes); sorts by that x his chance to play. Click to sort.">
+                  Tonight<span className="ml-1"><SortIcon columnKey="rotation_tonight" /></span>
+                </th>
+              )}
+              {rosOn && (
+                <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 sm:w-14 cursor-pointer hover:text-white whitespace-nowrap`} onClick={() => handleSort('ros_value')}
+                    title="Rest of season: rank by his projection x the games he is expected to play from here. Click to sort.">
+                  ROS<span className="ml-1"><SortIcon columnKey="ros_value" /></span>
+                </th>
+              )}
               {points && <>
                 <th className={`table-header text-center ${STAT_W} !px-0 sm:!px-1 whitespace-nowrap cursor-pointer hover:text-white`} title="This season's FPTS a game against the preseason projection: green is beating it. Click to sort."
                     onClick={() => handleSort('fpts_delta')}>Δ<span className="hidden sm:inline ml-1"><SortIcon columnKey="fpts_delta" /></span></th>
@@ -263,24 +281,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                       onClick={() => handleSort(`stats.FPTS.value_${n}`)}>{label}<span className="hidden sm:inline ml-1"><SortIcon columnKey={`stats.FPTS.value_${n}`} /></span></th>
                 ))}
               </>}
-              {rotationOn && (
-                <th className="table-header hidden sm:table-cell text-center w-14 cursor-pointer hover:text-white" onClick={() => handleSort('rotation_opp')}
-                    title={`Opportunity tonight: extra minutes from teammates who are out, per the NBA lineup sheet (as of ${config.rotation_as_of?.slice(11, 16) || '?'}). Click to sort.`}>
-                  Opp<span className="ml-1"><SortIcon columnKey="rotation_opp" /></span>
-                </th>
-              )}
-              {rotationOn && points && (
-                <th className="table-header hidden sm:table-cell text-center w-16 cursor-pointer hover:text-white" onClick={() => handleSort('rotation_tonight')}
-                    title="Tonight: expected FPTS if he plays (his projection at tonight's expected minutes); sorts by that x his chance to play. Click to sort.">
-                  Tonight<span className="ml-1"><SortIcon columnKey="rotation_tonight" /></span>
-                </th>
-              )}
-              {rosOn && (
-                <th className="table-header hidden sm:table-cell text-center w-14 cursor-pointer hover:text-white" onClick={() => handleSort('ros_value')}
-                    title="Rest of season: rank by his projection x the games he is expected to play from here. Click to sort.">
-                  ROS<span className="ml-1"><SortIcon columnKey="ros_value" /></span>
-                </th>
-              )}
               <th className="table-header text-center w-12" title="Games he has played this season">GP</th>
             </tr>
           </thead>
@@ -324,11 +324,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                           <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold text-white whitespace-nowrap bg-emerald-700"
                                 title={rotTip(player, points)}>Starting</span>
                         )}
-                        {rotOpp(player) != null && Math.abs(rotOpp(player)) >= 2 && (
-                          <span className={`sm:hidden shrink-0 text-[10px] font-semibold ${rotOpp(player) > 0 ? 'text-green-400' : 'text-red-400'}`} title={rotTip(player, points)}>
-                            {rotOpp(player) > 0 ? '+' : ''}{rotOpp(player).toFixed(1)}m
-                          </span>
-                        )}
                         {player.is_injured && (
                           <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded-full text-[10px] leading-tight font-semibold bg-red-600 text-white whitespace-nowrap"
                                 title={`INJ${player.injured_return ? ` - ${player.injured_return}` : ''}${player.injured_games ? ` (${player.injured_games} missed)` : ''}`}>
@@ -344,6 +339,9 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                           </span>
                         )}
                       </div>
+                      {player.rotation?.why && !player.rotation.inactive && Math.abs(rotOpp(player) ?? 0) >= 1 && (
+                        <div className="sm:hidden text-[10px] leading-tight text-emerald-400/90 truncate" title={rotTip(player, points)}>{player.rotation.why}</div>
+                      )}
                     </div>
                   </div>
                 </td>
@@ -384,6 +382,31 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                     </td>
                   );
                 })}
+                {rotationOn && (
+                  <td className={`text-center tabular-nums whitespace-nowrap px-px sm:px-1 ${STAT_W} ${fade}`} title={rotTip(player, points)}>
+                    {rotOpp(player) == null ? <span className="text-gray-600">-</span>
+                      : Math.abs(rotOpp(player)) < 0.5 ? <span className="text-gray-500">0</span>
+                      : <span className={`text-xs sm:text-sm font-semibold ${rotOpp(player) >= 2 ? 'text-green-400' : rotOpp(player) > 0 ? 'text-green-300' : 'text-red-400'}`}>
+                          {rotOpp(player) > 0 ? '+' : ''}{rotOpp(player).toFixed(1)}
+                        </span>}
+                  </td>
+                )}
+                {rotationOn && points && (
+                  <td className={`text-center tabular-nums whitespace-nowrap px-px sm:px-1 ${STAT_W} ${fade}`} title={rotTip(player, points)}>
+                    {rotTonight(player) == null ? <span className="text-gray-600">-</span>
+                      : <span className={`text-xs sm:text-sm ${player.rotation.gain >= 2 ? 'text-green-400 font-semibold' : player.rotation.gain <= -2 ? 'text-red-400' : 'text-gray-200'}`}>
+                          {player.rotation.fpts.toFixed(1)}{player.rotation.confirmed ? '' : <span className="text-gray-500">*</span>}
+                        </span>}
+                  </td>
+                )}
+                {rosOn && (
+                  <td className={`text-center tabular-nums whitespace-nowrap px-px sm:px-1 ${STAT_W} ${fade}`} title={rosTip(player, points)}>
+                    {player.ros_rank == null ? <span className="text-gray-600">-</span>
+                      : <span className="text-xs sm:text-sm text-gray-200">
+                          {player.ros_rank}
+                        </span>}
+                  </td>
+                )}
                 {points && (() => {
                   const f = player.stats.FPTS || {};
                   const delta = fptsDelta(player);
@@ -409,31 +432,6 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                     })}
                   </>;
                 })()}
-                {rotationOn && (
-                  <td className={`hidden sm:table-cell text-center tabular-nums whitespace-nowrap ${fade}`} title={rotTip(player, points)}>
-                    {rotOpp(player) == null ? <span className="text-gray-600">-</span>
-                      : Math.abs(rotOpp(player)) < 0.5 ? <span className="text-gray-500">0</span>
-                      : <span className={`text-xs sm:text-sm font-semibold ${rotOpp(player) >= 2 ? 'text-green-400' : rotOpp(player) > 0 ? 'text-green-300' : 'text-red-400'}`}>
-                          {rotOpp(player) > 0 ? '+' : ''}{rotOpp(player).toFixed(1)}
-                        </span>}
-                  </td>
-                )}
-                {rotationOn && points && (
-                  <td className={`hidden sm:table-cell text-center tabular-nums whitespace-nowrap ${fade}`} title={rotTip(player, points)}>
-                    {rotTonight(player) == null ? <span className="text-gray-600">-</span>
-                      : <span className={`text-xs sm:text-sm ${player.rotation.gain >= 2 ? 'text-green-400 font-semibold' : player.rotation.gain <= -2 ? 'text-red-400' : 'text-gray-200'}`}>
-                          {player.rotation.fpts.toFixed(1)}{player.rotation.confirmed ? '' : <span className="text-gray-500">*</span>}
-                        </span>}
-                  </td>
-                )}
-                {rosOn && (
-                  <td className={`hidden sm:table-cell text-center tabular-nums whitespace-nowrap ${fade}`} title={rosTip(player, points)}>
-                    {player.ros_rank == null ? <span className="text-gray-600">-</span>
-                      : <span className="text-xs sm:text-sm text-gray-200">
-                          {player.ros_rank}
-                        </span>}
-                  </td>
-                )}
                 <td className={`text-center text-gray-300 ${fade}`}>
                   {player.projected_only ? (
                     <span className="text-sky-400" title="No NBA games last season (rookie, or out all year): valued on his projection only">

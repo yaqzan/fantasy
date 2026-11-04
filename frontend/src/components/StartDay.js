@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getStartDay, errorMessage } from '../services/api';
-import { shortDate } from '../weeks';
+import { shortDate, weekdayLetter } from '../weeks';
 import { PlayerName } from './PlayerCard';
 
 const pct = (x) => `${Math.round(x * 100)}%`;
@@ -27,18 +27,20 @@ const PlayerRow = ({ p, labels, pick }) => (
   </div>
 );
 
-const StartDay = ({ config }) => {
+const StartDay = ({ config, status }) => {
+  const days = status?.conflict_days || [];
+  const [day, setDay] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     setData(null); setError(null);
     let cancelled = false;
-    getStartDay()
+    getStartDay(day)
       .then(r => { if (!cancelled) setData(r); })
       .catch(e => { if (!cancelled) setError(errorMessage(e)); });
     return () => { cancelled = true; };
-  }, []);
+  }, [day]);
 
   const labels = data?.category_labels || {};
   const musts = data?.players?.filter(p => p.role === 'must') || [];
@@ -50,7 +52,13 @@ const StartDay = ({ config }) => {
     <div className="bg-gray-700 rounded-lg border border-gray-600 p-2 sm:p-3 min-w-0 max-w-3xl">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-semibold text-gray-100">Who to start</span>
-        {data?.day && <span className="text-xs text-gray-400">{shortDate(data.day)}</span>}
+        {days.length > 1 && days.map(d => (
+          <button key={d} onClick={() => setDay(d)}
+            className={`px-2 py-0.5 rounded text-xs border ${(data?.day || days[0]) === d ? 'border-nba-orange text-nba-orange' : 'border-gray-600 text-gray-400'}`}>
+            {weekdayLetter(d)} {shortDate(d)}
+          </button>
+        ))}
+        {data?.day && days.length <= 1 && <span className="text-xs text-gray-400">{shortDate(data.day)}</span>}
       </div>
       {!data && !error && <div className="text-xs text-gray-400 mt-2">Trying every lineup...</div>}
       {error && <div className="text-xs text-red-300 mt-2">{error}</div>}

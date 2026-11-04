@@ -123,8 +123,8 @@ plays the question is who. Capability by rule, not id: `supported` = daily lineu
   him loses. Q/GTD players keep `DAY_TO_DAY_CHANCE` and show "% to play".
 - **Tab:** `/api/start-day/status` (no lineup search, but builds a Week: ~2 s cold, 60-s cache) decides it; the tab shows only when TODAY has more candidates than
   slots, is first in the row and lit with a pulsing dot (phones show three tabs), and the tab row fades at a cut edge.
-  Only TODAY is searched (`?day=` other than today is refused): sitting a player uses `windows`, which also removes his
-  earlier games, so a later day would be wrong. `conflict_days` is in the status but the page doesn't show it.
+  Day chips list the week's conflict days (`conflict_days`); `?day=` takes any day left this week. A sat player is left
+  out of that one game only (`player_week_games(sit=)`, `Week.team(sit=)`); `windows` would cut his earlier games too.
 - **Not modelled:** a tipped player counts as locked in (his slot is taken); the real lineup set on Fantrax isn't read;
   swing numbers carry the model's usual overconfidence (leagues.md "Calibrated"). Seen 2026-11-04: best vs worst six was about 6-7 points of
   week-win chance in WSOP, 3 in Guillotine. A finished game today counts as locked in; a sat Q/GTD player's doubt is dropped

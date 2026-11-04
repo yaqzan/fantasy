@@ -134,12 +134,13 @@ class Week:
         """A player whose team's game is under way is locked in his slot: no claim can drop him that day."""
         return not (self.actual and (self.stats.get(name, {}).get('TEAM'), day) in self.actual.tipped)
 
-    def team(self, players, suffix, owned=None, windows=None, canon=None):
+    def team(self, players, suffix, owned=None, windows=None, canon=None, sit=()):
         """Side for a roster. Weekly-lineup leagues count their best healthy starters' games.
         `owned`: who the played games belong to (default `players`). A what-if roster passes today's: a
         pickup adds only the games still to play, a drop keeps the games he already played for you.
         `windows`: {player: (first day, last day)} for mid-week adds and drops (player_week_games).
-        `canon`: the platform team id whose real lineups are the played part (default: mine; False: none, a guess)."""
+        `canon`: the platform team id whose real lineups are the played part (default: mine; False: none, a guess).
+        `sit`: {(player, day)} games left out by choice (player_week_games)."""
         league = self.league
         players = [p for p in players if p in self.stats]
         owned = [p for p in (owned if owned is not None else players) if p in self.stats]
@@ -166,7 +167,7 @@ class Week:
         games, wins, game_var = player_week_games(players, self.stats, self.remaining, league, suffix, self.injured,
                                                   availability=AVAILABILITY, variance=True, day_weights=self.day_weights,
                                                   tipped=self.actual.tipped if self.actual else (), locked=locked, taken=taken,
-                                                  windows=windows, doubtful=self.doubtful, minutes_factor=mf, effective=eff)
+                                                  windows=windows, doubtful=self.doubtful, minutes_factor=mf, effective=eff, sit=sit)
         totals = team_week_totals(players, self.stats, eff if mf else games, wins, league.categories, suffix, game_var, carried,
                                   games_played=games if mf else None)
         return Side(totals, games, wins, carried)

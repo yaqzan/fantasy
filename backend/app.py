@@ -721,7 +721,7 @@ def start_day_status():
 @fantasy_api.route('/start-day')
 def start_day_lineups():
     """Who to start on a crowded day: must-starts, the toss-ups for the open spots, the swing in expected
-    categories and week-win chance (start_day.lineups). Today only (?day= must equal it)."""
+    categories and week-win chance (start_day.lineups). ?day=YYYY-MM-DD (a day left this week), default today."""
     import start_day
     try:
         day = date.fromisoformat(request.args['day']) if request.args.get('day') else None

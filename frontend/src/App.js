@@ -373,7 +373,7 @@ function App() {
         {activeTab === 'projections' && <Projections config={config} />}
         {activeTab === 'pickups' && <WeeklyPickups config={config} />}
         {activeTab === 'daily' && <DailyLeaders config={config} />}
-        {activeTab === 'start' && startToday && <StartDay config={config} />}
+        {activeTab === 'start' && startToday && <StartDay config={config} status={startStatus} />}
         {activeTab === 'standings' && <TeamStandings config={config} />}
         {activeTab === 'draft' && <DraftDay />}
         {activeTab === 'teams' && isPhone && (

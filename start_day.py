@@ -106,8 +106,8 @@ def _lineups(league, day):
     week = lo.Week(league, week_start, week_end)
     roster, il = lo._active_roster(league)
     day = day or week.start_day
-    if day != week.start_day:   # sitting a player removes ALL his games before `day` (windows), exact only for today
-        return {'supported': True, 'error': 'Only today can be searched.'}
+    if not week.start_day <= day <= week_end:
+        return {'supported': True, 'error': f'{day.isoformat()} is not a day left this week'}
     free, locked = _candidates(week, roster, day)
     slots = len(league.slots)
     open_slots = slots - len(locked)
@@ -121,14 +121,15 @@ def _lineups(league, day):
     if theirs is None:
         return {**base, 'conflict': True, 'error': 'No opponent to judge lineups against yet.'}
     owned = roster + il
-    after = day + timedelta(days=1)
     grid = []   # (expected categories, week-win chance, lineup, {category: chance})
     doubtful = week.doubtful
+    next_game = {p: min(week.remaining.get(week.stats[p]['TEAM'], {}), default=None) for p in doubtful if p in week.stats}
     for chosen in itertools.combinations(free, open_slots):
         sat = [p for p in free if p not in chosen]
-        windows = {p: (after, None) for p in sat}
-        week.doubtful = {p: v for p, v in doubtful.items() if p not in sat}   # his doubt is about today's game: sat, it must not move to tomorrow's
-        chances = category_win_chances(week.team(roster, suffix, owned, windows).totals, theirs, league)
+        sit = {(p, day) for p in sat}
+        # a doubtful player's doubt belongs to his next game; sat on it, it must not move to a later game
+        week.doubtful = {p: v for p, v in doubtful.items() if p not in sat or next_game.get(p) != day}
+        chances = category_win_chances(week.team(roster, suffix, owned, sit=sit).totals, theirs, league)
         grid.append((sum(chances.values()), _week_win(list(chances.values())), frozenset(chosen), chances))
     best = max(grid, key=lambda g: g[0])
     worst = min(grid, key=lambda g: g[0])
