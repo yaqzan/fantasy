@@ -16,7 +16,8 @@ Future nights: each teammate's chance of being out (o_j -> P_j(d)) from tonight'
 (injury_reports), Yahoo status and the game-log absence tables (P(out k team games ahead | streak)).
 
 Consumers: `factors()` (per-day minutes multiplier for the optimizer / week plan / player_week_games), `tonight()`
-(the live Opp column, nba_rotation), `ros_minutes()` (expected minutes over the rest of the season).
+(the live Opp column, nba_rotation), `ros_deltas()` (minutes delta over the next ROS_GAMES games, for the
+rest-of-season value; built by the poller, `refresh_ros`, read with `ros_cached`).
 Everything degrades to "no change" (factor 1.0, delta 0) when a player or team has no data.
 """
 import json
@@ -43,6 +44,8 @@ FACTOR_MIN, FACTOR_MAX = 0.5, 2.0
 DELTA_CAP = 15.0         # minutes, either way
 MAX_MIN = 44.0
 REBUILD_EVERY = 15 * 60  # seconds: the season walk is rebuilt when game_lines change, checked at most this often
+ROS_GAMES = 10           # team games ahead the rest-of-season value takes the role model's redistribution for (rotation.md)
+ROS_WHY_MIN = 5.0        # minutes over those games before the ROS column says why
 
 _lock = threading.Lock()
 _cache = {'key': None, 'seasons': {}, 'checked': 0.0}
@@ -277,10 +280,9 @@ class Season:
         n = len(self.hist.get(p, ()))
         if weighting == 'H':
             return (self.K if p in self.prior else 0.0), self.lam ** np.arange(n - 1, -1, -1)
-        if weighting == '_projected':   # inseason.blend for MIN: prior 16 games, last 10 count 3x
-            from inseason import constants, RECENT_GAMES
-            k, r = constants('MIN')
-            w = np.ones(n); w[max(0, n - RECENT_GAMES):] += r
+        if weighting == '_projected':   # THE projection's minutes weights, the one shared definition (inseason.py)
+            from inseason import minutes_weights
+            k, w = minutes_weights(n)
             return float(k), w
         if weighting in ('_5', '_10'):
             w = np.zeros(n); w[max(0, n - int(weighting[1:])):] = 1.0
@@ -365,16 +367,21 @@ class Season:
             return table(max(streak, 1) if streak else 1)
         return table(streak)
 
+    def schedule(self, team):
+        """The team's game dates from today on (sorted); every team's read in one query, once per Season."""
+        if not hasattr(self, '_sched'):
+            from fantasy_database import Game
+            sched = defaultdict(set)
+            for home, away, d in Game.select(Game.team_home, Game.team_away, Game.date).where(Game.date >= self.today).tuples():
+                for full in (home, away):
+                    sched[self.abv_of_full.get(full)].add(d)
+            self._sched = {t: sorted(v) for t, v in sched.items() if t}
+        return self._sched.get(team, [])
+
     def team_days(self, team, days):
         """The team's games on `days` (sorted), with k = game number counted from today (1 = next game)."""
-        from fantasy_database import Game
-        full = self.full_of_abv.get(team)
-        if not full or not days:
-            return {}
-        last = max(days)
-        dates = sorted({g.date for g in Game.select(Game.date).where(((Game.team_home == full) | (Game.team_away == full))
-                                                                       & (Game.date >= self.today) & (Game.date <= last))})
-        return {d: i + 1 for i, d in enumerate(dates) if d in set(days)}
+        want = set(days)
+        return {d: i + 1 for i, d in enumerate(self.schedule(team)) if d in want}
 
     def scenario(self, team, d, k, ctx, weightings=('H',)):
         """{pid: result} for every likely member of `team` on day d: exp (H-level minutes if he plays), base (H),
@@ -583,22 +590,61 @@ def reason_text(r, reports, s):
     return f'{last} out{when}{sure}: +{mins:.0f} min', back.isoformat() if back else None
 
 
-def ros_minutes(pid, today=None):
-    """Expected minutes over his team's remaining regular-season games: sum of (1 - P(out)) x expected minutes."""
+def ros_deltas(today=None, sheet=None):
+    """{pid: (minutes, games, why)}: the role model's minutes delta vs what THE projection carries, summed over his
+    team's next ROS_GAMES games (if he plays them: the caller weights by his availability), the number of those games,
+    and a one-line reason. Further out the redistribution is not trusted (rotation.md "Rest of season"). Each team's
+    scenario per night is computed once for all its players. ~1-2 s: the poller builds it (refresh_ros), requests read
+    the cache (ros_cached)."""
     from daily_leaders import nba_today
     today = today or nba_today()
     s = season(today)
-    if s is None or pid not in s.roster:
-        return None
-    team = s.roster[pid]
-    ctx = context(today, tonight_sheet(today))
-    end = today + timedelta(days=200)
-    total = 0.0
-    for d, k in s.team_days(team, [today + timedelta(days=i) for i in range((end - today).days)]).items():
-        r = s.scenario(team, d, k, ctx).get(pid)
-        if r:
-            total += (1 - r['p_out']) * r['exp']
-    return round(total, 1)
+    if s is None:
+        return {}
+    ctx = context(today, tonight_sheet(today) if sheet is None else sheet)
+    teams = {t for t in s.roster.values() if t}
+    scen = {}
+    for team in teams:
+        for k, d in enumerate(s.schedule(team)[:ROS_GAMES], start=1):
+            scen[(team, d)] = s.scenario(team, d, k, ctx, (WT,))
+    center(scen, WT, s)
+    tot, n, best = defaultdict(float), defaultdict(int), {}
+    for (team, d), sc in scen.items():
+        for pid, r in sc.items():
+            if s.roster.get(pid) != team:
+                continue
+            dl = r['delta'][WT]
+            tot[pid] += dl; n[pid] += 1
+            if abs(dl) > abs(best.get(pid, (0.0, None))[0]):
+                best[pid] = (dl, r)
+    out = {}
+    for pid, total in tot.items():
+        why = ''
+        if abs(total) >= ROS_WHY_MIN and pid in best:
+            line, _ = reason_text(best[pid][1], ctx['reports'], s)
+            why = (f'{line}; ' if line and total > 0 else '') + f'{total:+.0f} min over the next {n[pid]} games'
+        out[pid] = (round(total, 1), n[pid], why)
+    return out
+
+
+_ros = {'key': None, 'at': 0.0, 'deltas': {}}
+
+
+def refresh_ros(today=None, every=3600):
+    """Rebuild the ROS deltas when the day or this season's lines changed, or `every` s passed (poller thread only)."""
+    from daily_leaders import nba_today
+    today = today or nba_today()
+    key = (today, _cache['key'])
+    if key == _ros['key'] and time.time() - _ros['at'] < every:
+        return
+    deltas = ros_deltas(today)
+    _ros.update({'key': (today, _cache['key']), 'at': time.time(), 'deltas': deltas, 'day': today})
+
+
+def ros_cached(today=None):
+    """The poller's ROS deltas for `today` ({} before its first build, or when they are for another day)."""
+    from daily_leaders import nba_today
+    return _ros['deltas'] if _ros.get('day') == (today or nba_today()) else {}
 
 
 if __name__ == '__main__':

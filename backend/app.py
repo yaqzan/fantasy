@@ -332,6 +332,7 @@ def get_fantasy_players():
             'injured_games': ((player.injured_games_to_miss or None) if out else None),
             'nba_year': stats.get('NBA_YEAR'),
             'rotation': _rotation_json(rot_players.get(player.id) if player else None, stats, points_league),
+            **_ros_json(stats, league),
             'what_if': _what_if_json(stats_all, league, player_name),
             'is_undroppable': player_name in undroppable,
             'drafted': team_id is not None,
@@ -356,6 +357,18 @@ def _rotation_json(r, stats, points):
         return r
     f = min(max((mins + r['opp']) / mins, 0.5), 2.0)
     return {**r, 'fpts': round(fp * f, 1), 'gain': round(fp * (f - 1), 1)}
+
+
+def _ros_json(stats, league):
+    """The rest-of-season value (player_stats._rest_of_season): `ros_value` (total FPTS in points leagues, summed z over
+    replacement x games otherwise), `ros_rank`, `ros_fpts` (points leagues), expected `ros_games` / `ros_min` left,
+    `ros_role_min` (the role model's part of those minutes) and `ros_why` (one line when it moved him)."""
+    if stats.get('ROS_RANK') is None:
+        return {}
+    return {'ros_value': round(stats['ROS_VALUE'], 1), 'ros_rank': stats['ROS_RANK'],
+            'ros_fpts': round(stats['ROS_FPTS']) if league.is_points else None,
+            'ros_games': round(stats['GP_ros'], 1), 'ros_min': round(stats['ROS_MIN']),
+            'ros_role_min': round(stats['ROS_ROLE_MIN'], 1), 'ros_why': stats.get('ROS_WHY') or None}
 
 
 def _what_if_json(player_stats, league, name):
@@ -786,6 +799,7 @@ def get_player_projections():
                      'rank': stats['RANK_proj'], 'auction_value': stats.get('AUCTION_VALUE_proj', 1),
                      'fpts': stats.get('FPTS_proj') if league.is_points else None,
                      'what_if': _what_if_json(player_stats, league, name),
+                     **_ros_json(stats, league),
                      'line': {k: round(line[k], 2) for k in shown},
                      'sources': {s: {k: round(r[k], 2) if r.get(k) is not None else None for k in shown}
                                  for s, r in by_player.get(player.id, {}).items()},

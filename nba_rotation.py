@@ -376,6 +376,11 @@ def start_poller():
                 print(f'rotation poller: {e}')
                 wait = FAST_REFRESH
             try:
+                import role_minutes     # rest-of-season minutes deltas: hourly, or when the day / game lines change
+                role_minutes.refresh_ros()
+            except Exception as e:
+                print(f'rotation poller ros: {e}')
+            try:
                 import depth_charts     # data only (weight 0 until scored forward): once per 20 h, 30 calls 1 s apart, after the refresh so it never delays a lineup
                 depth_charts.maybe_snapshot()
             except Exception as e:

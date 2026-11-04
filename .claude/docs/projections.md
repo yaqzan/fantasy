@@ -118,7 +118,8 @@ team wins (`team_strength`). NBA-wide, shared by every league.
   Before 2026-10-03 every returning Net, Hornet and Sun was weighted as a team changer; fixing it
   moved 18 players' type and at most $1.
 - **Auction $ on the projection are games-weighted** (2026-10-01): surplus over replacement x
-  projected games / 82, so a known absence (ACL return in January) is priced. 4-season backtest of
+  projected games / 82, so a known absence (ACL return in January) is priced. The `_projected` $ use his share of
+  the team's games left instead ("Rest of season", below). 4-season backtest of
   the blend ($ of delivered season value, top 140): error 9.37 per game only -> 9.05 weighted (better
   in 3 of 4 seasons, level in the other); players projected under 55 games were $17 overpriced, now $10. Weighting
   only the under-55 group gives 9.15. Ranks and z stay per game. On 2026-27 it moves the 140 drafted
@@ -167,33 +168,56 @@ team wins (`team_strength`). NBA-wide, shared by every league.
 - **Check a new source before blending it**: median per-game ratio to ESPN per stat and games.
   CBS 2026-27 came out at .84 points / 1.12 games (totals over too many games) and is in
   `NOT_BLENDED`; the others sit within ~7% (ESPN is the most optimistic, as in the backtests).
-- **In-season update (2026-10-24; `inseason.py`, backtest `.horizon/preseason-2026/inseason.py` + `inseason_rank.py`,
-  logs `data/rs_*.csv`, `fetch_rs.py`).** `_projected`, THE projection (the one stats choice besides Season / Last 10 / Last 5), per stat per game:
-  `(K x prior + games + R x last-10 games) / (K + n + R x n10)`; prior = the blended line moved by his preseason games.
-  Before: one K=12 for every stat, no recency, minutes never updated, plus a separate "Recent form" (half season, half last 10,
-  no prior) that was the default once games existed: on 2-3 games it made Davion Mitchell a +0.55 pickup against +0.06
-  on the projection. K, R fit 2016-2022 (prior = `project_season` + `preseason.adjust`, checkpoints after 5/10/20/30 games, error on his
-  REST-of-season per-game stat, players projected 15+ MPG, weighted by games left), scored on 2023-2025 (12,354 rows):
-  | | MIN | PTS | REB | AST | STL | BLK | 3PM | TOV | FGA | FGM | FTA | FTM |
-  |---|---|---|---|---|---|---|---|---|---|---|---|---|
-  | K (games) | 16 | 12 | 16 | 12 | 32 | 32 | 16 | 16 | 16 | 16 | 16 | 16 |
-  | R | 2 | 1 | 1 | 1 | 0 | .5 | .5 | .5 | 2 | 1 | .5 | .5 |
-  BLKA / PF / DD / TD / TECH borrow a neighbour's (`inseason.FOLLOW`). Minutes now update too (game lines).
-  Out of sample error (MSE / variance of the stat) vs prior only / old K=12 / recent form: PTS .155 / .244 / .157 / .230, REB .156,
-  AST .152, MIN .260 / .454 / .275 / .358, FGA .148 / .259 / .157 / .197, STL .373 / .450 / .400 / .916. Fitted beats
-  K=12 by 0-2% on PTS REB AST 3PM TOV FTA, 4-7% on MIN FGA STL BLK; recent form is 25-59% WORSE than the fitted blend and
-  worse than the prior alone on REB, STL, BLK, 3PM, TOV, FTA. By games played (mean over stats): 5 g prior .269, K12 .217, form .500,
-  fitted .211; 10 g .280 / .203 / .335 / .200; 20 g .300 / .194 / .266 / .187. **Ranking** (composite z of PTS REB AST STL BLK 3PM TOV,
-  Spearman with rest-of-season, 2023-25 mean): after 5 games prior .806, form .775, K12 .853, fitted .857; 10 g .798 / .821 / .861 / .863;
-  20 g .782 / .844 / .867 / .871; of the real top 30 found: 18 / 18 / 20 / 21 (5 g). So the gain over the old blend is small and
-  consistent; the big fix is dropping "recent form" and the prior-less default. R is real but modest: R=1 (the last 10 count double) is
-  the optimum for volume stats, 0 for steals. The backtest prior is our model alone, so the live prior (experts blended in) is a little better and
-  would want a slightly higher K. Re-fit when a season of live games is in. A first-game call-up has no
-  prior of his own (no line): he sits outside the pool.
+- **In-season update, spec U (2026-11-04; `inseason.py`; research `.horizon/unified-projection/`: build.py rows, fit.py, spec.py,
+  verify_U.py, parity.py, live.py).** `_projected`, THE projection (the one stats choice besides Season / Last 10 / Last 5): the blended
+  line moved by his preseason games (prior), then his games this season, minutes and per-minute rates on different clocks
+  (a = games ago, 0 = latest; n = games played):
+  `MPG = (Km x prior MPG + sum w x min) / (Km + sum w)`, w = 1 + 16 x 2^(-a/5), Km = 64 / (1 + n/80);
+  `rate = (Ks x prior MPG x prior rate + sum v x stat) / (Ks x prior MPG + sum v x min)`, v = 2^(-a/20), Ks = K / (1 + n/80),
+  K: PTS 10, REB 16, AST 10, STL 48, BLK 24, 3PM 16, TOV 20, FGA 6, FGM 12, FTA 16, FTM 16; per game = MPG x rate. PF / BLKA / DD /
+  TD / TECH borrow a neighbour's K (`inseason.FOLLOW`; PF takes REB's, unfitted); BLKA and TECH come as season totals only (NBA), spread
+  at his season per-minute rate; DD / TD per game from the line. Game-by-game lines in one query (`player_stats._season_lines`, re-read only when count / latest date / NBA-row count of
+  `game_lines` change; a request costs the same as before, ~0.2 s for `load_player_stats`).
+  Constants fit 2016-2025 (prior = `project_season` + `preseason.adjust`, checkpoints 5/10/20/30/45/60 team games, error on his
+  rest-of-season per-game stat, players projected 15+ MPG, weighted by games left, error = MSE / variance).
+  **Walk-forward check (verify_U.py, refit before each test season 2023-25 on earlier seasons only; U - the old per-stat blend, 90% cluster
+  bootstrap by player-season):**
+  | games (T) | error | Spearman 9-cat | Spearman FPTS |
+  |---|---|---|---|
+  | 5 | .221 -> .213 [-.010,-.004] | .811 -> .832 [+.014,+.027] | .860 -> .865 [+.002,+.008] |
+  | 10 | .205 -> .200 [-.007,-.002] | .823 -> .838 [+.009,+.020] | .874 -> .878 [+.001,+.007] |
+  | 20 | .190 -> .185 [-.007,-.003] | .847 -> .855 [+.003,+.013] | .895 -> .898 [+.001,+.006] |
+  | 30 | .191 -> .188 [-.005,-.000] | .837 -> .843 [+.001,+.011] | .892 -> .895 [+.000,+.005] |
+  | 45 | .211 -> .206 [-.007,-.002] | .829 -> .834 [-.000,+.011] | .888 -> .892 [+.001,+.007] |
+  | 60 | .250 -> .233 [-.021,-.013] | .819 -> .839 [+.011,+.027] | .881 -> .897 [+.012,+.023] |
+  Per stat (all checkpoints) every stat improves or ties (MIN .280 -> .275, STL .382 -> .367, TOV .233 -> .219; BLK .214 -> .215).
+  The refit picked the same structure every season (tau 160 / 40 instead of 80 / 80, K within one grid step); the shipped constants
+  score the same. **Which half earns it:** U's rates on the old minutes get most of the ranking gain at 5-10 games; U's minutes
+  alone (old per-game stats) only move minutes (MIN error better at 20/45/60, ranks don't use minutes), but full U beats "U rates on
+  old minutes" at 20-60 games (60: error .233 vs .242, FPTS .897 vs .889), so both ship. 2026-27 holdout (live.py: projected from
+  games before 10-27, scored on 10-27..11-02, n=271): FPTS Spearman .827 -> .838, 9-cat .631 -> .655, error .648 -> .636; production
+  `inseason.project` equals the research spec to 2e-14 (parity.py). **The prior fades, slowly:** share of the estimate that is still
+  the prior at ~50 games played: MIN 18%, PTS/AST 20%, REB/3PM 29%, BLK 38%, STL 55%. Forcing a fast fade (tau 5) was worse at every
+  checkpoint (spec.md). The backtest prior is our model alone; with the expert blend as prior the same K are best (K x1 to x1.5).
+  Re-fit after a season of live games. A first-game call-up has no prior of his own (no line): he sits outside the pool.
+  The old form (per stat `(K x prior + games + R x last 10) / (K + n + R x n10)`, 2026-10-24) is the "live" column above; before it,
+  a "Recent form" default (half season, half last 10, no prior) was 25-59% worse than either.
+- **Rest of season (2026-11-04; `player_stats._availability`, `_rest_of_season`).** `GP_ros` = his share of the team's games left x
+  those games; share = `(15 x projected games / 82 + games played) / (15 + team games so far)` x a factor for his current absence
+  streak (team games missed in a row: 0 .97, 1 .89, 2-3 .85, 4-7 .82, 8-15 .77, 16+ .94). Fit 2016-22, scored 2023-25
+  (`.horizon/unified-projection/verify_avail.py`, per-game line U): Spearman of rest-of-season total FPTS .677 (projected games / 82,
+  what `GP_projected` carries) -> .744 (+.068 [+.054,+.083]); his own games alone (no streak) .736, the streak adds +.009 [+.007,+.011];
+  better at every checkpoint (60 games: .570 -> .688); games MAE 11.0 -> 9.7. In production the projected games are the expert blend's
+  (they run ~10 high; the 15-game shrink takes most of it). Used for the `_projected` auction $ (surplus x share, `_games_share`;
+  `_proj` keeps projected games / 82), never for per-game z. **ROS value** (`ros_value` / `ros_rank` on `/api/fantasy` and
+  `/api/projections/players`, "ROS" column on the desktop player table): ROS minutes = share x (team games left x MPG + the role
+  model's minutes delta over the next 10 team games, rotation.md "Rest of season"); points leagues = FPTS per minute x ROS minutes
+  (total FPTS), category leagues = (summed z of his line scaled by ROS minutes / (games x MPG) - the replacement player's) x GP_ros.
+  His own return date is not in it (the streak factor stands in; ESPN dates are unscored).
 - **Week-1 check (2026-10-25, `.horizon/week1-review/bias.py`, 242 players 2+ games, projected 18+ MPG, 4 days).** League-wide
   scoring ran under the model line: PTS -9%, 3PM -12%, AST -10%, FGA -9%, MIN -5%; TOV +9%, STL +8%, FTA +7%. A level shift
-  hits every roster alike (H2H unaffected); the in-season blend already closes half of it (PTS -5%). Too short to retune K/R:
-  the backtest above still says heavier weight on a few games is worse. Role changes (a teammate's long injury) are what the
+  hits every roster alike (H2H unaffected); the in-season update already closed half of it (PTS -5%); it was too short to
+  retune on. Role changes (a teammate's long injury) are what the
   blend can't see. The optimizer and week plan now move each game's minutes for who is out that night (`role_minutes`,
   rotation.md "Role-aware minutes"; the projection itself is unchanged); a lasting view on one player is still the owner's
   `ProjectionAdjustment` (Projections tab, `production` x).

@@ -111,62 +111,119 @@ def _ratios(stats, n):
     stats[f'EFG%{n}'] = (stats[f'FGM{n}'] + 0.5 * stats[f'FG3M{n}']) / fga if fga else 0
 
 
-def _season_minutes(season):
-    """{NBA player id: (minutes this season, minutes over his last RECENT_GAMES, games)} from the game lines."""
-    from fantasy_database import GameLine
-    from inseason import RECENT_GAMES
+LINE_STATS = ('MIN', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'FG3M', 'TOV', 'FGA', 'FGM', 'FTA', 'FTM', 'PF')
+TOTAL_ONLY = ('BLKA', 'TECH')   # NBA gives these as season totals only (game_lines hold ESPN's): inseason.project spreads them
+# Rest-of-season availability (.claude/docs/projections.md "Rest of season"): share of his team's games left he plays =
+# (AVAIL_K x projected games / 82 + games played) / (AVAIL_K + team games so far) x the factor for his current absence
+# streak (team games missed in a row). Fit 2016-22, scored 2023-25 (.horizon/unified-projection/verify_avail.py).
+AVAIL_K = 15
+AVAIL_STREAK = ((16, 0.94), (8, 0.77), (4, 0.82), (2, 0.85), (1, 0.89), (0, 0.97))   # (streak at least, factor)
+
+
+_cached = {}   # name -> (key, value): _season_lines by the game lines' fingerprint, _team_dates for SCHEDULE_TTL s
+SCHEDULE_TTL = 600
+
+
+def _season_lines(season):
+    """{NBA player id: ({stat: per-game array, oldest first}, [game dates])} of his played games (minutes > 0) this
+    season, every player in one query, re-read only when the lines change (count, latest date, NBA rows: an ESPN-folded
+    game replaced by the NBA's keeps the first two). DD2 / TD3 per game from the line."""
+    import numpy as np
+    from fantasy_database import GameLine as G
+    key = (season,) + tuple(G.select(fn.COUNT(G.player_id), fn.MAX(G.game_date), fn.SUM(G.source == 'nba'))
+                            .where(G.season == season).scalar(as_tuple=True))
+    hit = _cached.get('lines')
+    if hit and hit[0] == key:
+        return hit[1]
+    cols = [G.player_id, G.game_date] + [getattr(G, s.lower()) for s in LINE_STATS]
     rows = {}
-    for r in GameLine.select(GameLine.player_id, GameLine.game_date, GameLine.min).where(
-            (GameLine.season == season) & (GameLine.min > 0)).order_by(GameLine.game_date):
-        rows.setdefault(r.player_id, []).append(r.min)
-    return {pid: (sum(m), sum(m[-RECENT_GAMES:]), len(m)) for pid, m in rows.items()}
+    for r in G.select(*cols).where((G.season == season) & (G.min > 0)).order_by(G.game_date).tuples():
+        rows.setdefault(r[0], []).append(r[1:])
+    out = {}
+    for pid, rs in rows.items():
+        a = np.array([[v or 0 for v in r[1:]] for r in rs], float)
+        games = dict(zip(LINE_STATS, a.T))
+        tens = (a[:, 1:6] >= 10).sum(1)   # PTS REB AST STL BLK in double figures
+        games['DD2'], games['TD3'] = (tens >= 2).astype(float), (tens >= 3).astype(float)
+        out[pid] = (games, [r[0] for r in rs])
+    _cached['lines'] = (key, out)
+    return out
+
+
+def _team_dates(season_start):
+    """{full team name: sorted game dates this season} from the stored schedule (one query, kept SCHEDULE_TTL s)."""
+    import time
+    hit = _cached.get('schedule')
+    if hit and hit[0][0] == season_start and time.time() - hit[0][1] < SCHEDULE_TTL:
+        return hit[1]
+    out = {}
+    for home, away, d in Game.select(Game.team_home, Game.team_away, Game.date).where(Game.date >= season_start).tuples():
+        out.setdefault(home, set()).add(d)
+        out.setdefault(away, set()).add(d)
+    out = {t: sorted(v) for t, v in out.items()}
+    _cached['schedule'] = ((season_start, time.time()), out)
+    return out
+
+
+def _availability(gp_prior, dates, team_dates, today):
+    """(expected games over the rest of the season, share of the team's games left, team games left)."""
+    from bisect import bisect_left, bisect_right
+    so_far = bisect_left(team_dates, today)
+    left = len(team_dates) - so_far
+    mine = [d for d in dates if d < today]
+    streak = so_far - bisect_right(team_dates, mine[-1]) if mine else so_far
+    g0 = min(max((gp_prior or 0) / SEASON_GAMES, 0.05), 1.0)
+    share = (AVAIL_K * g0 + len(mine)) / (AVAIL_K + so_far) * next(f for s, f in AVAIL_STREAK if streak >= s)
+    share = min(max(share, 0.0), 1.0)
+    return share * left, share, left
 
 
 def _add_projections(player_stats, preseason, team_win):
     """The projection frames, for every rostered player who has a blended line (projections.player_lines), rookies included.
     '_proj': the line as it is, the model's view before this season. '_projected': THE projection, the one stats
     choice the app uses: the line moved by his preseason games (preseason.adjust), then updated by his real games this
-    season, per stat (inseason.blend: the prior is worth K games, his last 10 count extra), so early samples don't
-    swing him around and a real role change shows. Players with no line keep the old recent-form numbers
-    (half the season, half the last 10) in '_projected'."""
+    season (inseason.project: minutes and per-minute rates on their own clocks, the prior fading slowly), so early
+    samples don't swing him around and a real role change shows. Players with no line keep the old recent-form numbers
+    (half the season, half the last 10) in '_projected'. Also GP_ros / ROS_SHARE / TEAM_LEFT: his expected games over
+    the rest of the season (_availability)."""
     from projections import player_lines, season_label
     from preseason import adjust, preseason_totals
-    from inseason import RECENT_GAMES, blend
+    from inseason import project
+    from daily_leaders import nba_today
     lines = player_lines(season_label())
     if not lines:
         return
     pre_totals = preseason_totals(season_label())
     first_game = season_first_game()
-    minutes = _season_minutes(season_label()) if first_game is not None and not preseason else {}
+    in_season = first_game is not None and not preseason
+    games = _season_lines(season_label()) if in_season else {}
+    today = nba_today()
+    team_dates = _team_dates(date(today.year if today.month >= 7 else today.year - 1, 7, 1))
     rostered = Player.select().where(Player.id.in_(list(lines)), Player.team.is_null(False), Player.pos.is_null(False))
+    keys = dict(PROJECTED_STATS, MIN='min')
     for player in rostered:
         line = lines[player.id]
         team_name = TEAM_DICT.get(player.team, player.team)
         stats = player_stats.setdefault(player.name, {'TEAM': team_name, 'Pos': player.pos,
                                                       'Positions': nba_positions(player), 'GP': 0})
-        current = (not preseason and first_game is not None and player.api_updated_at is not None
-                   and player.api_updated_at.date() >= first_game)
-        played = (player.gp or 0) if current else 0
-        recent = min(played, RECENT_GAMES)
+        current = (in_season and player.api_updated_at is not None and player.api_updated_at.date() >= first_game)
         pre = pre_totals.get(player.id)
+        mine, dates = games.get(player.id, ({}, []))
         for n, source in (('_proj', line), ('_projected', adjust(line, pre))):
-            for key, attr in PROJECTED_STATS.items():
-                prior = source[attr] or 0.0
-                if n == '_projected' and played:
-                    total = getattr(player, attr, None) or 0
-                    stats[f'{key}{n}'] = blend(key, prior, total, getattr(player, f'{attr}_10', None) or 0, played, recent)
-                else:
-                    stats[f'{key}{n}'] = prior
-            mpg = source['min'] or 0.0
-            if n == '_projected' and played and player.id in minutes:
-                total, last, games = minutes[player.id]
-                mpg = blend('MIN', mpg, total, last, games, min(games, RECENT_GAMES))
-            stats[f'MIN{n}'] = mpg
+            prior = {key: source[attr] or 0.0 for key, attr in keys.items()}
+            if n == '_projected' and mine:
+                totals = {k: getattr(player, k.lower(), None) or 0 for k in TOTAL_ONLY} if current else None
+                prior = project(prior, mine, totals)
+            for key, value in prior.items():
+                stats[f'{key}{n}'] = value
             stats[f'WIN%{n}'] = stats[f'W{n}'] = team_win.get(team_name, 0.5)
             stats[f'PLUS_MINUS{n}'] = 0.0
             _ratios(stats, n)
         stats['PRE_G'], stats['PRE_MIN'] = (pre['g'], pre['min']) if pre else (0, 0)
+        stats['NBA_ID'] = player.id
         stats['GP_proj'] = stats['GP_projected'] = line['gp'] or 0.0   # games are the projection's; real games move rates and minutes
+        if team_name in team_dates:
+            stats['GP_ros'], stats['ROS_SHARE'], stats['TEAM_LEFT'] = _availability(line['gp'], dates, team_dates[team_name], today)
         if line.get('exp') is not None:
             stats['NBA_YEAR'] = line['exp'] + 1   # 3 = entering his third season
 
@@ -797,6 +854,60 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
             for i, p in enumerate(ranked, start=1):
                 player_stats[p][rank_key] = i
                 player_stats[p][score_key] = display[p]
+        if n == '_projected':
+            _rest_of_season(player_stats, league, scales, eligible, drafted)
+
+
+def _rest_of_season(player_stats, league, scales, eligible, drafted):
+    """The rest-of-season value and rank ('ROS_VALUE', 'ROS_RANK'; .claude/docs/projections.md "Rest of season"):
+    his expected games left (GP_ros) x THE projection's per-game line, with the role model's minutes over his team's
+    next few games (role_minutes.ros_cached, built by the poller; none = 0) scaling that line by minutes.
+    ROS_MIN = ROS_SHARE x (TEAM_LEFT x MIN_projected + role minutes). Points leagues: ROS_VALUE = FPTS per minute x
+    ROS_MIN (total FPTS). Category leagues: (summed z of the minutes-scaled line - the replacement player's) x GP_ros."""
+    try:
+        import role_minutes
+        roles = role_minutes.ros_cached()
+    except Exception:
+        roles = {}
+    ranked = sorted((p for p in eligible if 'VALUE_projected' in player_stats[p]),
+                    key=lambda p: player_stats[p]['VALUE_projected'], reverse=True)
+    repl = player_stats[ranked[min(drafted, len(ranked) - 1)]]['VALUE_projected'] if ranked else 0.0
+    have = []
+    for name, stats in player_stats.items():
+        if stats.get('GP_ros') is None or 'MIN_projected' not in stats:
+            continue
+        mpg, share = stats['MIN_projected'] or 0.0, stats['ROS_SHARE']
+        role = roles.get(stats.get('NBA_ID'))
+        role_min = share * role[0] if role and mpg >= 4 else 0.0
+        ros_min = share * stats['TEAM_LEFT'] * mpg + role_min
+        scale = ros_min / (stats['GP_ros'] * mpg) if stats['GP_ros'] and mpg else 1.0
+        if league.is_points:
+            value = (stats.get('FPTS_projected') or 0.0) * stats['GP_ros'] * scale
+            stats['ROS_FPTS'] = value
+        else:
+            per_game = stats['VALUE_projected']
+            if abs(scale - 1) > 1e-6:
+                line = dict(stats)
+                for key in list(PROJECTED_STATS) + ['MIN']:
+                    line[f'{key}_projected'] = (stats.get(f'{key}_projected') or 0.0) * scale
+                _ratios(line, '_projected')
+                per_game = _line_value(line, scales, '_projected')
+            value = (per_game - repl) * stats['GP_ros']
+        stats['ROS_VALUE'], stats['ROS_MIN'], stats['ROS_ROLE_MIN'] = value, ros_min, role_min
+        stats['ROS_WHY'] = role[2] if role and role_min else ''
+        have.append(name)
+    for i, name in enumerate(sorted(have, key=lambda p: player_stats[p]['ROS_VALUE'], reverse=True), start=1):
+        player_stats[name]['ROS_RANK'] = i
+
+def _games_share(stats, value_key):
+    """The share of his games a projection $ counts (auction $ are games-weighted): '_proj' projected games / 82,
+    '_projected' his share of the team's games left (ROS_SHARE, _availability) once that exists; per-game frames 1."""
+    if value_key.endswith('_projected') and stats.get('ROS_SHARE') is not None:
+        return stats['ROS_SHARE']
+    if value_key.endswith(PROJ_FRAMES):
+        return min((stats.get('GP_proj') or 0) / SEASON_GAMES, 1.0)
+    return 1.0
+
 
 def auction_value_at(player_stats, league, name, delta, value_key='VALUE_proj'):
     """The $ `name` would carry with `delta` more value, everyone else unchanged: his surplus over
@@ -809,8 +920,7 @@ def auction_value_at(player_stats, league, name, delta, value_key='VALUE_proj'):
     if len(ranked) <= n or name not in player_stats:
         return 1
     replacement = player_stats[ranked[n]][value_key]
-    weighted = value_key.endswith(PROJ_FRAMES)
-    games = lambda p: min((player_stats[p].get('GP_proj') or 0) / SEASON_GAMES, 1.0) if weighted else 1.0
+    games = lambda p: _games_share(player_stats[p], value_key)
     surplus = lambda p, extra=0.0: (max(player_stats[p][value_key] + extra - replacement, 0.0) * games(p)) ** league.price_exponent
     total = sum(surplus(p) for p in ranked[:n])
     if not total:
@@ -842,10 +952,11 @@ def calculate_auction_values(player_stats, league, price_exponent=None, value_ke
     a per-game line from a handful of games, or a projection under PROJECTION_MIN_GAMES games,
     is not something to bid on, whatever its rank. They show $1.
 
-    On the projection timeframe the surplus is multiplied by projected games / 82: a player out half
-    the season returns half his value over replacement (the spot holds a replacement meanwhile).
-    Backtested on 4 seasons: $ error 9.4 -> 9.1, and players projected under 55 games went from $17
-    overpriced to $10 (.claude/docs/projections.md). Ranks stay per game."""
+    On the projection timeframes the surplus is multiplied by his share of the games (_games_share: projected
+    games / 82 on '_proj', his share of the team's games left on '_projected'): a player out half the season returns
+    half his value over replacement (the spot holds a replacement meanwhile). Backtested on 4 seasons: $ error
+    9.4 -> 9.1, and players projected under 55 games went from $17 overpriced to $10; the rest-of-season share ranks
+    season totals better than projected games / 82 (.claude/docs/projections.md). Ranks stay per game."""
     if price_exponent is None:
         price_exponent = league.price_exponent
     eligible_key = 'ELIGIBLE' + value_key.split('VALUE', 1)[1]
@@ -859,9 +970,8 @@ def calculate_auction_values(player_stats, league, price_exponent=None, value_ke
     undrafted = ranked[len(drafted):]
     replacement = (player_stats[undrafted[0]][value_key] if undrafted
                    else min(player_stats[p][value_key] for p in drafted))
-    games = ((lambda p: min((player_stats[p].get('GP_proj') or 0) / SEASON_GAMES, 1.0))
-             if value_key.endswith(PROJ_FRAMES) else (lambda p: 1.0))
-    surplus = {p: (max(player_stats[p][value_key] - replacement, 0.0) * games(p)) ** price_exponent for p in drafted}
+    surplus = {p: (max(player_stats[p][value_key] - replacement, 0.0) * _games_share(player_stats[p], value_key)) ** price_exponent
+               for p in drafted}
     total_surplus = sum(surplus.values())
     spend = max(league.num_teams * league.budget - len(drafted), 0)
     exact = {p: 1 + (surplus[p] / total_surplus * spend if total_surplus else spend / len(drafted))
