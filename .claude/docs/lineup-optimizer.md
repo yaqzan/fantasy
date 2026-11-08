@@ -115,21 +115,24 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
 
 Every claim is judged on THIS week and on NEXT week's matchup, and the horizon rolls (Monday: "next week" is the week after;
 the owner's idea, replacing a first "last 2 days only" version). Each candidate (add, drop) scores the change in P(win) of this
-week (from today, `Week.team` with the claim's window) + `NEXT_WEIGHT` 0.5 x the change in P(win) of next week (roster minus
+week (from today, `Week.team` with the claim's window) + `NEXT_WEIGHT` 1.0 x the change in P(win) of next week (roster minus
 the drop plus the add, vs next week's scheduled opponent), greedy up to the claims left (first claim: the best `POOL` 200 free
 agents x every drop; later ones the previous step's top 30). A week at 80% earns little, so claims go where the leverage is;
-each claim carries `for` (this week / next week / both) and both unweighted gains.
+each claim carries `for` (this week / next week / both) and both weeks' P(win) before/after. The card shows a grid: now, each
+  claim, all claims, for this week and next week (win % and gain in points). The weight is the owner's call: the owner said "together" (1.0); 0.5 was tried and changes the pick (2026-11-08: Hayes at 0.5, Matkovic at 1.0, Wolf at 0).
 - Rules: the claim lands TODAY, so players still on waivers (`Week.waivers`) are out and so is anyone whose game is under way
   (`can_drop_on`); undroppable honoured; an add uses one of this week's claims, drops are free. A healthy player left in IL
   blocks adds on Yahoo, so the endpoint answers `active: false` then. Yahoo daily points leagues only (`claim_planner.unsupported_reason`).
-- Not wired into the week plan's ILP: the card shows both, labelled (the plan judges this week + a generic keep value, this
-  adds next week's real matchup; they can disagree). No keep value beyond next week, so a streamer can beat a long-term player
-  (only the undroppable flags guard that). Open: mid-week a claim also costs one of the week's 5, which this does not price.
+- Not wired into the week plan's ILP: the card shows both (the plan judges this week + a generic 2-week keep value, this
+  adds next week's real matchup; they can disagree: 2026-11-08 plan Wagler, this Matkovic). No keep value beyond next week, so a streamer can beat a long-term player
+  (only the undroppable flags guard that). Open: mid-week a claim also costs one of the week's 5, which this does not price
+  (a 14-day week 12 days out recommended a claim "for next week" 12 days early); playoff weeks with no opponent score against the league average.
 - **Trap (2026-11-08):** `rank_moves` picks the best claim DAY. Judged for next week it returned "Hayes for Hezonja, Nov 10", a
   Monday-night claim shown as a claim today (+1.9%); made today the same swap is -0.8% next week. This scores only claims whose day is
   today, never `rank_moves`.
-- Checked against `/api/analyze?add=&drop=&day=` for this week (0.8014 -> 0.8459 both ways) and by an independent `Week.team`
-  re-derivation. 1-10 s cold, 60 s cache.
+- Checked against `/api/analyze?add=&drop=&day=` for this week (Matkovic 0.8014 -> 0.8459 both ways) and by an independent `Week.team`
+  re-derivation (two Opus reviews). 1-10 s cold, 60 s cache. The card always describes the calendar's current week + the next,
+  whatever week the page shows.
 
 ## Start tab (start_day.py, 2026-11-04)
 

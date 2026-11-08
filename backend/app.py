@@ -701,8 +701,8 @@ def week_plan():
 
 @fantasy_api.route('/last-days')
 def last_days():
-    """Pre-claims: in a week's last days, the claims worth making today judged on this week and next week's matchup
-    (last_days.py). {supported: false, reason} off Yahoo daily points leagues; {active: false} before the last days."""
+    """Two-week claims: the claims worth making today judged on the rest of this week and next week's matchup
+    (last_days.py). {supported: false, reason} off Yahoo daily points leagues; {active: false, reason} with no next week, no claim left or a healthy player in IL."""
     from last_days import cached_last_days_plan
     league = current_league()
     return jsonify(cached_last_days_plan(league, request.args.get('timeframe') or default_stat_type(league)))

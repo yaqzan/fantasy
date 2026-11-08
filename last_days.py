@@ -13,7 +13,7 @@ rest of this week, this adds next week to the question.
 import time
 import threading
 
-NEXT_WEIGHT = 0.5  # next week counts this much in the ranking (less certain rosters/injuries; claim_planner.KEEP_WEEK_WEIGHTS)
+NEXT_WEIGHT = 1.0  # next week counts this much next to this week in the ranking (owner: "together"; 0.5 was tried, owner's call)
 POOL = 200         # free agents (best Z-VALUE) tried for the first claim
 NEXT_POOL = 30     # later claims retry the best candidates of the claim before (lineup_optimizer.NEXT_CLAIM_POOL)
 MIN_GAIN = 1e-4    # lineup_optimizer's bar for "a claim helps"
@@ -101,6 +101,8 @@ def last_days_plan(lg, timeframe=None):
             break
         best = ranked[0]
         claims.append({'add': best['add'], 'drop': best['drop'],
+                       'cur_before': round(pc, 4), 'cur_after': round(best['p_cur'], 4),
+                       'next_before': round(pn, 4), 'next_after': round(best['p_next'], 4),
                        'gain_cur': round(best['p_cur'] - pc, 4), 'gain_next': round(best['p_next'] - pn, 4)})
         pc, pn, kc, kn = best['p_cur'], best['p_next'], best['k_cur'], best['k_next']
         windows = lo._claim_windows(windows, best['add'], best['drop'], day)
@@ -117,10 +119,11 @@ def last_days_plan(lg, timeframe=None):
                       'now': round(pc0, 4), 'after': round(pc, 4)},
         'next_week': {'start': next_start.isoformat(), 'end': next_end.isoformat(), 'opponent': label_n,
                       'now': round(pn0, 4), 'after': round(pn, 4)},
+        'next_weight': NEXT_WEIGHT,
         'claims': claims,
         'notes': ['Claims are made today: players still on waivers are left out, and so is anyone whose game is under way.',
                   'An add uses one of this week\'s claims (drops are free); the allowance resets Monday.',
-                  f'Next week counts {NEXT_WEIGHT:g} x this week in the ranking; its own claims start from this roster.'],
+                  f'Next week counts {NEXT_WEIGHT:g} x this week when ranking claims; its own claims start from this roster.'],
     }
 
 
