@@ -40,3 +40,4 @@
   the repo now called `fantasy-archive`) and the API rode the dashboard-managed `trading-api`
   tunnel as `fantasy-api.yaqzan.dev`. That tunnel may still list a stale `fantasy-api` ingress
   rule in the dashboard; harmless, DNS points at the `fantasy` tunnel.
+- Backend `.py` changes need a `fantasy` restart (workbench `service` tool, name=fantasy, confirm=fantasy). `claim_planner` is imported lazily, so a stale api process runs the new planner against an old `Week` and fails with `'Week' object has no attribute ...` (2026-11-07).
