@@ -121,7 +121,7 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = tru
                 )}
               </div>
               {!pre.claims.length && <div className="mt-1 text-gray-400">No claim today helps either week.</div>}
-              <div className="mt-1 text-gray-400">Ranked on both weeks (next week counts {pre.next_weight} x). The plan above weighs this week plus a rough 2-week keep value, so the two can differ.</div>
+              <div className="mt-1 text-gray-400">Ranked on both weeks (next week counts {pre.next_weight} x). The plan above is picked on this week and next week's win chance (best of several candidate plans), so the two can differ.</div>
             </div>
           )}
           {plan.warnings.map((w, i) => <p key={i} className="text-xs text-amber-300 mt-1.5">{w}</p>)}

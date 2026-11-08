@@ -215,9 +215,9 @@ def keep_of(fpg, plays, repl):
     return max(fpg - repl, 0.0) * sum(plays)
 
 
-def keep_values(lg, week, suffix, names, notes, weights=KEEP_WEEK_WEIGHTS):
+def keep_values(lg, week, suffix, names, notes):
     """{name: keep}: what holding each of `names` past this week is worth, in the plan's units (FPTS): keep_of over
-    his team's games in the next two fantasy weeks (weighted `weights`, default KEEP_WEEK_WEIGHTS) (league schedule). The chance he plays a game is
+    his team's games in the next two fantasy weeks (weighted KEEP_WEEK_WEIGHTS) (league schedule). The chance he plays a game is
     role_minutes Season.p_out's (ESPN return dates, Yahoo's status, his absence streak; k = team games from today).
     Replacement = the claims_per_week-th best healthy free agent's FPTS per game (the worst of one week's claims).
     No next week in the schedule (the season's last week) = {}: pure streaming."""
@@ -225,7 +225,7 @@ def keep_values(lg, week, suffix, names, notes, weights=KEEP_WEEK_WEIGHTS):
     import daily_leaders
     from fantasy_team_helper import get_next_week_dates, get_available_players
     weeks, ws = [], week.week_start
-    for _ in weights:
+    for _ in KEEP_WEEK_WEIGHTS:
         ws, we = get_next_week_dates(lg, ws)
         if ws is None:
             break
@@ -250,13 +250,13 @@ def keep_values(lg, week, suffix, names, notes, weights=KEEP_WEEK_WEIGHTS):
     def plays(p):
         st = stats[p]
         team = s.abv_of_full.get(st.get('TEAM'))
-        out = [weights[i] * AVG_WEEK_GAMES * (st.get('ROS_SHARE') or 0.0) for i in missing]
+        out = [KEEP_WEEK_WEIGHTS[i] * AVG_WEEK_GAMES * (st.get('ROS_SHARE') or 0.0) for i in missing]
         for k, d in enumerate(s.schedule(team), 1):
             if d > weeks[-1][1]:
                 break
             for i, (a, b) in enumerate(weeks):
                 if a <= d <= b:
-                    out.append(weights[i] * (1.0 - s.p_out(st.get('NBA_ID'), team, d, k, ctx)))
+                    out.append(KEEP_WEEK_WEIGHTS[i] * (1.0 - s.p_out(st.get('NBA_ID'), team, d, k, ctx)))
         return out
 
     per_game = sorted((fpg(p) for p in get_available_players(lg, stats)), reverse=True)
@@ -880,6 +880,7 @@ def _note(inst, m, n_add):
 
 
 MAX_CANDIDATES = 8   # plans judged on both weeks per request (each ~1 s)
+SEARCH_BUDGET = 3 * SOLVE_BUDGET   # wall-clock seconds for the whole candidate search (each solve alone is capped at SOLVE_BUDGET)
 
 
 def _next_week(lg, week, suffix):
@@ -938,23 +939,28 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None,
     # (score_judge) and on next week (Week.team on the roster it ends with); the best P(win this) + P(win next) wins.
     nxt = _next_week(lg, week, suffix)
     start_roster = roster_il or lo._active_roster(lg)
-    candidates, seen, queue = [], set(), [frozenset()]
+    candidates, seen, queue = [], set(), [frozenset(), None]   # None: no pickups at all ("we don't have to use our claims")
+    deadline = time.time() + SEARCH_BUDGET
     while queue and len(candidates) < (MAX_CANDIDATES if nxt else 1):
+        if candidates and time.time() > deadline:
+            break
         banned = queue.pop(0)
         cand = copy.deepcopy(full)
-        for p in banned:
+        for p in banned or ():
             cand.players.pop(p, None)
+        if banned is None:
+            cand.claims_left = 0
         select_pool(cand)
-        cplan = solve(cand)
+        cplan = solve(cand, budget=max(1.0, min(SOLVE_BUDGET, deadline - time.time())))
         sig = frozenset((m['t'], m['type'], m['player']) for m in cplan.moves)
         if sig in seen:
             continue
         seen.add(sig)
         cjudged = score_judge(cand, cplan, week)
         p_next = _p_next(nxt, end_state(*start_roster, cplan.moves)[0], suffix, lg) if nxt else None
-        candidates.append({'banned': sorted(banned), 'p_this': cjudged['p_win'], 'p_next': p_next,
+        candidates.append({'banned': sorted(banned) if banned is not None else ['(no pickups)'], 'p_this': cjudged['p_win'], 'p_next': p_next,
                            'total': cjudged['p_win'] + (p_next or 0.0), 'inst': cand, 'plan': cplan, 'judged': cjudged})
-        queue += [banned | {m['player']} for m in cplan.moves if m['type'] == 'add' and banned | {m['player']} not in queue]
+        queue += [banned | {m['player']} for m in cplan.moves if m['type'] == 'add' and banned is not None and banned | {m['player']} not in queue]
     best = max(candidates, key=lambda c: c['total'])   # max keeps the first (default weight) on a tie
     inst, plan, judged = best['inst'], best['plan'], best['judged']
     none = score_judge(inst, Plan(), week)
