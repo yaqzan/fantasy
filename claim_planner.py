@@ -378,10 +378,10 @@ def build_instance(lg, week, suffix, opp):
                 elig.add(lu[p])
         first_add = None
         if not owned:
-            first = max(start, week.waivers.get(p, start))
+            first = week.first_claim_day(p)
             first_add = next((t for t, d in enumerate(days) if d >= first), None)
         doubt = week.doubtful.get(p, 1.0)
-        nxt = next_game(p, None if owned else max(start, week.waivers.get(p, start))) if doubt < 1 else None
+        nxt = next_game(p, None if owned else week.first_claim_day(p)) if doubt < 1 else None
         game, v = [], []
         mfp = mfac.get(p, {})
         mf = [mfp.get(d, 1.0) for d in days] if mfp else []

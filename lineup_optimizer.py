@@ -114,12 +114,18 @@ class Week:
         """The first day a claim can take effect: today in a week under way, else the week's first day."""
         return max(self.week_start, self.actual.today) if self.actual else self.week_start
 
+    def first_claim_day(self, name):
+        """The first day a claim on him can take effect. A player on waivers (`waivers`: the day the auction ends)
+        processes overnight, so he joins the roster the day AFTER it; a plain free agent can be claimed now."""
+        cleared = self.waivers.get(name)
+        return max(self.start_day, cleared + timedelta(days=1)) if cleared else self.start_day
+
     def add_games(self, name):
         """The days of his team's games a claim could still catch (unplayed, not under way, and not before he
         clears waivers: a claim on him lands on that day), earliest first."""
         team = self.stats[name]['TEAM']
         tipped = self.actual.tipped if self.actual else ()
-        first = max(self.start_day, self.waivers.get(name, self.start_day))
+        first = self.first_claim_day(name)
         return sorted(d for d in self.remaining.get(team, {}) if d >= first and (team, d) not in tipped)
 
     def add_days(self, name):
@@ -128,7 +134,7 @@ class Week:
         games = self.add_games(name)
         if not games:
             return []
-        return sorted({max(self.start_day, self.waivers.get(name, self.start_day)), *games})
+        return sorted({self.first_claim_day(name), *games})
 
     def can_drop_on(self, name, day):
         """A player whose team's game is under way is locked in his slot: no claim can drop him that day."""
@@ -503,8 +509,9 @@ def get_pickup_candidates(league, week_start=None, week_end=None, opponent_abv=N
         p = stats[m.add]
         team = p['TEAM']
         tipped = week.actual.tipped if week.actual else ()
-        # his games from the claim day; a week not yet started shows his whole schedule (the claim day is only a suggestion)
-        days = sorted(d for d in week.remaining.get(team, {}) if (not week.actual or d >= m.day) and (team, d) not in tipped)
+        # his games from the claim day; a week not yet started shows his whole schedule (the claim day is only a suggestion),
+        # but never a game before he clears waivers
+        days = sorted(d for d in week.remaining.get(team, {}) if d >= (m.day if week.actual else week.first_claim_day(m.add)) and (team, d) not in tipped)
         rows.append({
             'name': m.add, 'team': p['TEAM'], 'positions': list(p['Positions']),
             'gp': p.get('GP') or 0, 'small_sample': (p.get('GP') or 0) < floor,
