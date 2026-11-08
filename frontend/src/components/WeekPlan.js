@@ -29,7 +29,7 @@ const TX = {
 // The week plan (claim_planner.py via /api/plan): every add, drop and IL move left this week. Rolling: only today's
 // moves are firm, the rest is re-made each morning. Loads on its own after the page (`ready`), so it never delays
 // it, and hides itself where the planner does not apply (supported: false).
-const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = true }) => {
+const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = true, afterPrevious = false }) => {
   const [plan, setPlan] = useState(null);
   const [pre, setPre] = useState(null);
   const [error, setError] = useState(null);
@@ -40,14 +40,14 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = tru
     if (!ready) return undefined;
     let cancelled = false;
     setLoading(true);
-    getPlan(week, statType)
+    getPlan(week, statType, afterPrevious)
       .then(result => { if (!cancelled) setPlan(result); })
       .catch(err => { if (!cancelled) setError(errorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     // Two-week claims (last_days.py): always for the calendar's current week + the next; a failure just hides the section.
     if (withClaims) getLastDays(statType).then(result => { if (!cancelled) setPre(result); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [week, statType, ready, withClaims]);
+  }, [week, statType, ready, withClaims, afterPrevious]);
 
   if (plan && !plan.supported) return null;
   if (!plan && !loading && !error) return null;
@@ -65,6 +65,7 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = tru
         )}
         {plan && <span className="text-xs text-gray-400">{plan.claims_left}/{plan.claims_per_week} claims</span>}
       </div>
+      {plan && plan.continues_from && <div className="text-xs text-gray-400 mt-1">Starts from the roster the plan above ends with.</div>}
       {loading && !plan && <div className="text-xs text-gray-400 mt-2">Planning the week...</div>}
       {error && <div className="text-xs text-red-300 mt-2">Week plan: {error}</div>}
       {plan && (

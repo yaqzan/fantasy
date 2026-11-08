@@ -265,8 +265,9 @@ def keep_values(lg, week, suffix, names, notes):
     return {p: keep_of(fpg(p), plays(p), repl) for p in names if p in stats}
 
 
-def build_instance(lg, week, suffix, opp):
-    """The live Instance for my team's week, through the repo's own Week (`week`, already loaded)."""
+def build_instance(lg, week, suffix, opp, roster_il=None):
+    """The live Instance for my team's week, through the repo's own Week (`week`, already loaded). `roster_il`: (active, IL)
+    to start from instead of today's (next week's plan continues from this week's end state)."""
     import lineup_optimizer as lo
     from fantasy_team_helper import get_undroppable_players, claims_left
     from leagues import slot_reach
@@ -280,7 +281,7 @@ def build_instance(lg, week, suffix, opp):
         days.append(d)
         d += timedelta(days=1)
     T = len(days)
-    roster, il = lo._active_roster(lg)
+    roster, il = roster_il if roster_il else lo._active_roster(lg)
     owned_all = roster + il
     undroppable = set(get_undroppable_players(lg))
     C = claims_left(lg, week.week_start)
@@ -311,9 +312,11 @@ def build_instance(lg, week, suffix, opp):
         notes.append('no opponent: judged against a copy of my team (repo convention)')
 
     # Yahoo stored lineups per remaining date
-    ylu = yahoo_lineups(lg, days)
+    ylu = None if roster_il else yahoo_lineups(lg, days)   # a continued plan starts from a roster Yahoo does not have yet
     stored_source = 'yahoo'
-    if ylu is None:
+    if roster_il:
+        stored_source = 'continued'
+    elif ylu is None:
         stored_source = 'copied'
         notes.append('Yahoo stored lineups unavailable: today\'s best-fit lineup copied forward (NOT Yahoo\'s)')
     yahoo_name = {}   # norm name -> repo name
@@ -403,7 +406,8 @@ def build_instance(lg, week, suffix, opp):
             players[p] = PlayerData(owned=True, has_stats=p in stats, game=[False] * T, v=[0.0] * T, elig=['UTIL', stored[0][p]])
             notes.append(f'{p}: in Yahoo\'s lineup, not in the DB roster: present with v=0')
     for p in week.free_agents(suffix):
-        players[p] = pdata(p, False)
+        if p not in players:   # a continued plan's pickups are still free agents in the DB
+            players[p] = pdata(p, False)
     for p, k in keep_values(lg, week, suffix, list(players), notes).items():
         players[p].keep = k
     live_const = sum(d.fpts * d.live_share for d in players.values() if d.locked_start)
@@ -874,7 +878,24 @@ def _note(inst, m, n_add):
     return 'activate' if not d.out else 'back to the active roster'
 
 
-def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None):
+def end_state(roster, il, moves):
+    """(active, IL) after a plan's moves, in order (add, drop, IL in/out)."""
+    roster, il = list(roster), list(il)
+    for m in sorted(moves, key=lambda m: m['t']):
+        p, kind = m['player'], m['type']
+        if kind == 'add' and p not in roster:
+            roster.append(p)
+        elif kind == 'drop':
+            roster = [x for x in roster if x != p]
+            il = [x for x in il if x != p]
+        elif kind == 'il_in' and p in roster:
+            roster.remove(p); il.append(p)
+        elif kind == 'il_out' and p in il:
+            il.remove(p); roster.append(p)
+    return roster, il
+
+
+def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None, roster_il=None):
     """The /api/plan payload: the plan's moves per day, today's moves, win chance and points now vs with the plan."""
     reason = unsupported_reason(lg, week_start, week_end)
     if reason:
@@ -884,7 +905,7 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None)
     week, suffix = load_week(lg, week_start, week_end, timeframe)
     if not any(p in week.stats for p in lo._active_roster(lg)[0]):
         return {'supported': False, 'reason': 'No players on your team in this league yet.'}
-    inst, label = build_instance(lg, week, suffix, opponent)
+    inst, label = build_instance(lg, week, suffix, opponent, roster_il)
     if not inst.days:
         return {'supported': False, 'reason': 'No days left in this week.'}
     plan = solve(inst)
@@ -902,7 +923,7 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None)
                        'keep': round(d.keep, 1) if d and m['type'] in ('add', 'drop') else None})
         days.append({'date': day, 'frozen': bool(plan.frozen[t]), 'today': t == 0, 'transactions': tx})
     warnings = []
-    if inst.stored_source != 'yahoo':
+    if inst.stored_source == 'copied':
         warnings.append('Yahoo\'s stored lineups could not be read: frozen days assume today\'s best lineup.')
     if inst.claims_left == 0:
         warnings.append('No claims left this week: only drops and IL moves are possible.')
@@ -910,7 +931,9 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None)
         warnings.append(f'Activation-day search stopped at its {SOLVE_BUDGET:.0f} s budget: the best plan found so far, '
                         'maybe not the best.')
     warnings += [n[0].upper() + n[1:] + '.' for n in inst.notes if 'stale sync' in n or 'IL differs' in n]
+    end_active, end_il = end_state(*(roster_il or lo._active_roster(lg)), plan.moves)
     return {
+        'end_roster': {'roster': end_active, 'il': end_il},
         'supported': True, 'week_start': inst.week_start, 'week_end': inst.week_end, 'today': inst.days[0],
         'timeframe': timeframe, 'opponent': label, 'claims_left': inst.claims_left,
         'claims_per_week': lg.claims_per_week,
@@ -933,17 +956,26 @@ _plans_lock = threading.Lock()
 _key_locks = {}
 
 
-def cached_week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None):
-    """week_plan, cached PLAN_TTL seconds per (league, week, timeframe); concurrent callers for one key wait for the
-    first instead of each building a Week."""
-    key = (lg.id, str(week_start), timeframe)
+def cached_week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None, after=None):
+    """week_plan, cached PLAN_TTL seconds per (league, week, timeframe, after); concurrent callers for one key wait for the
+    first instead of each building a Week. `after`: (start, end, opponent) of the week before: this plan starts from the
+    roster that week's plan ends with (claims reset weekly and nothing carries over, so next week's plan continues from
+    this week's end state), falling back to today's roster when that plan is not available."""
+    key = (lg.id, str(week_start), timeframe, str(after[0]) if after else None)
     with _plans_lock:
         lock = _key_locks.setdefault(key, threading.Lock())
     with lock:
         hit = _plans.get(key)
         if hit and time.time() - hit[0] < PLAN_TTL:
             return hit[1]
-        result = week_plan(lg, timeframe, week_start, week_end, opponent)
+        roster_il = None
+        if after:
+            before = cached_week_plan(lg, timeframe, *after)
+            if before.get('supported'):
+                roster_il = (before['end_roster']['roster'], before['end_roster']['il'])
+        result = week_plan(lg, timeframe, week_start, week_end, opponent, roster_il)
+        if roster_il:
+            result['continues_from'] = after[0].isoformat() if hasattr(after[0], 'isoformat') else str(after[0])
         _plans[key] = (time.time(), result)
         return result
 

@@ -181,8 +181,8 @@ export const getPickups = async (weekStart = null, timeframe = 'projected') => {
 };
 
 // The week plan (claim_planner.py): every add, drop and IL move left this week; {supported: false, reason} off Yahoo daily points leagues.
-export const getPlan = async (weekStart = null, timeframe = 'projected') => {
-  const params = { ...(weekStart && { week_start: weekStart }), timeframe };
+export const getPlan = async (weekStart = null, timeframe = 'projected', afterPrevious = false) => {
+  const params = { ...(weekStart && { week_start: weekStart }), timeframe, ...(afterPrevious && { after: 'previous' }) };
   const response = await api.get('/plan', { params });
   return response.data;
 };

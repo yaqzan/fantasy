@@ -691,9 +691,14 @@ def week_plan():
     from claim_planner import cached_week_plan
     league = current_league()
     week_start, week_end, opponent = _requested_week(league, request.args.get('week_start'))
+    after = None
+    if request.args.get('after') == 'previous':   # continue from the previous week's plan end state
+        sched = sorted(s for s, _ in league.schedule)
+        if week_start.isoformat() in sched and sched.index(week_start.isoformat()) > 0:
+            after = get_week_info_from_schedule(league, sched[sched.index(week_start.isoformat()) - 1])
     try:
         result = cached_week_plan(league, request.args.get('timeframe') or default_stat_type(league),
-                                  week_start, week_end, opponent)
+                                  week_start, week_end, opponent, after)
     except RuntimeError as e:   # no feasible plan: a data gap, not a rule conflict
         return jsonify({'error': str(e)}), 422
     return jsonify(result)
