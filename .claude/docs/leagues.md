@@ -146,7 +146,9 @@ stats) is shared by all leagues.
   Fantrax doesn't show per player (`week_actuals.canon_carried_impl`). `/api/analyze` adds `canon` (Fantrax's own period
   totals vs ours, `diff_*` 0 = agrees; the page shows "so far = Fantrax's lineups" or "differs from Fantrax") and
   `progress.canon` (true; false = Fantrax unreachable, fell back to the guess; null = not a Fantrax league). Checked
-  2026-10-29 (Guillotine week 2): all 9 categories x both teams equal Fantrax's page. Cache: past days 6 h, today and
+  2026-10-29 (Guillotine week 2): all 9 categories x both teams equal Fantrax's page. **Trap (2026-11-08):** a day with no NBA
+  games (Election Day 2026-11-03, Thanksgiving) answers with the PREVIOUS day's lineups, its own date in `displayedSelections.date`;
+  `fantrax_canon._day_or_empty` drops a reply whose date isn't the one asked, else Monday counted twice (app 4-5, Fantrax 5-4). Cache: past days 6 h, today and
   yesterday 90 s. Future days are still our projection (Fantrax's future lineups are whatever is set so far).
   What-ifs pass `owned=` (today's roster): a pickup adds only unplayed games.
   **Yahoo canon (owner 2026-10-30, `yahoo_canon.py`, behind the platform-agnostic `canon.py`):** same idea for Yahoo leagues. Per day, `league/<key>/teams/roster;date=D/players/stats;type=date;date=D`
