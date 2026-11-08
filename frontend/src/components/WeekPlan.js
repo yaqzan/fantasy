@@ -65,11 +65,6 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = tru
         )}
         {plan && <span className="text-xs text-gray-400">{plan.claims_left}/{plan.claims_per_week} claims</span>}
       </div>
-      {plan && plan.two_week && (
-        <div className="text-xs text-gray-400 mt-1" title="The plan is the best of several candidates by this week's win chance plus next week's, with the roster it ends with">
-          Picked for both weeks: next week{plan.two_week.next_week.opponent ? ` v ${plan.two_week.next_week.opponent}` : ''} <span className={`rounded px-1 py-0.5 font-semibold tabular-nums ${chanceClass(plan.two_week.next_week.now)}`}>{pct(plan.two_week.next_week.now)}</span> -&gt; <span className={`rounded px-1 py-0.5 font-bold tabular-nums ${chanceClass(plan.two_week.next_week.after)}`}>{pct(plan.two_week.next_week.after)}</span>
-        </div>
-      )}
       {plan && plan.continues_from && <div className="text-xs text-gray-400 mt-1">Starts from the roster the plan above ends with.</div>}
       {loading && !plan && <div className="text-xs text-gray-400 mt-2">Planning the week...</div>}
       {error && <div className="text-xs text-red-300 mt-2">Week plan: {error}</div>}
@@ -121,7 +116,7 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = tru
                 )}
               </div>
               {!pre.claims.length && <div className="mt-1 text-gray-400">No claim today helps either week.</div>}
-              <div className="mt-1 text-gray-400">Ranked on both weeks (next week counts {pre.next_weight} x). The plan above is picked on this week and next week's win chance (best of several candidate plans), so the two can differ.</div>
+              <div className="mt-1 text-gray-400">Ranked on both weeks (next week counts {pre.next_weight} x). The plan above judges this week plus a rough 2-week keep value, so the two can differ.</div>
             </div>
           )}
           {plan.warnings.map((w, i) => <p key={i} className="text-xs text-amber-300 mt-1.5">{w}</p>)}

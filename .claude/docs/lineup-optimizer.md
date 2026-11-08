@@ -78,18 +78,12 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
   sim said 1/1 by +10, CI 1..20; the review's sim +5, not significant); 0.5/0.25 worse, a third week no better,
   replacement = the best free agent worse. A flat `max(fpg - repl, 0) x 7` keeps 90-96% of the gain (3-11 FPTS behind,
   not significant) but cannot see return dates, which no sim can test.
-- **Picked for both weeks (owner 2026-11-08):** the ILP alone maximises this week's FPTS (+ keep), so it chose Wagler (this week
-  +5.3%, next week -3.2% on Courtside) and next week's plan dropped him on Monday. `week_plan` now builds candidate plans
-  (the ILP's plan, then breadth first the plan with each of its pickups banned, `MAX_CANDIDATES` 8, deduped by moves) and
-  keeps the one with the best P(win this week) (`score_judge`) + P(win next week) (`Week.team` on the roster the plan ends
-  with, vs next week's scheduled opponent, `_p_next`). Equal weights, no invented constant; the last week of the season is
-  the plain ILP. Payload `two_week` {next_week now/after, candidates}. A heuristic: 2026-11-08 it found Hayes (1.309) but
-  not Matkovic (1.311), which the claims card finds. A keep-weight sweep (0/1/2/4) was tried first and gave the same plan
-  every time (keep values are small next to this week's FPTS). The candidates also include "no pickups" (claims_left 0) and the
-  whole search stops at `SEARCH_BUDGET` 24 s. **Known flaw (Opus review):** next week is judged with NO moves, but next week has its
-  own 5 claims and its plan drops this week's pickup on Monday; judged by the continued plan Hayes (1.462) is a hair worse than
-  Wagler (1.465). The faithful judge costs ~3 s per candidate; owner's call. Cold ~8 s (cached 60 s); the next week's plan (`after=previous`)
-  runs the same search for the week after.
+- **Each week is judged on its own (owner 2026-11-08):** claims reset every week with no carry-over, so a week's plan is the plain
+  ILP for that week (+ the keep value) and the page shows it with the NEXT week's plan under it (`after=previous`: continues from
+  this week's end state, its own 5 claims). Tried and removed the same day: candidate plans judged on this week + next week's
+  P(win) with next week measured on the end roster and NO next-week moves; it picked Hayes over Wagler on a figure next week's
+  own plan erases on Monday (judged by the continued plan Wagler 1.465 vs Hayes 1.462). Pick another week in the dropdown and the
+  card shows that week + the one after.
 - **Positions off by default** (`solve(positions=False)`): the repo judge (`player_week_games`) ignores positions when
   availability < 1, so a position-constrained ILP lost to greedy on the judge. Make the judge position-aware first.
 - **Freeze by search over d*:** each healthy IL player's activation day d* in {today..last day, never} (today skipped
@@ -140,8 +134,8 @@ each claim carries `for` (this week / next week / both) and both weeks' P(win) b
   It continues from the roster THIS week's plan ends with (`/api/plan?after=previous`, `claim_planner.end_state`; the stored
   Yahoo lineups are not read then, `stored_source='continued'`, and the DB's free agents never overwrite its pickups). A claim today "for next week" is only worth it when the claim would
   otherwise lapse (a week's last day); the greedy above does not know that yet (open).
-- Not wired into the week plan's ILP: the card shows both (the plan is the best candidate by this week + next week with next week measured on the roster it ends with, no next-week
-  moves; this greedy search can still pick a different claim: 2026-11-08 plan Hayes, this Matkovic). No keep value beyond next week, so a streamer can beat a long-term player
+- Not wired into the week plan's ILP: the card shows both (the plan judges this week + a generic 2-week keep value, this adds next week's real matchup; they can disagree: 2026-11-08 plan
+  Wagler, this Matkovic). No keep value beyond next week, so a streamer can beat a long-term player
   (only the undroppable flags guard that). Open: mid-week a claim also costs one of the week's 5, which this does not price
   (a 14-day week 12 days out recommended a claim "for next week" 12 days early); playoff weeks with no opponent score against the league average.
 - **Trap (2026-11-08):** `rank_moves` picks the best claim DAY. Judged for next week it returned "Hayes for Hezonja, Nov 10", a
