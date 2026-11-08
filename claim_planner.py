@@ -405,7 +405,18 @@ def build_instance(lg, week, suffix, opp, roster_il=None):
         if p not in players:
             players[p] = PlayerData(owned=True, has_stats=p in stats, game=[False] * T, v=[0.0] * T, elig=['UTIL', stored[0][p]])
             notes.append(f'{p}: in Yahoo\'s lineup, not in the DB roster: present with v=0')
-    for p in week.free_agents(suffix):
+    import daily_leaders
+    today_real = daily_leaders.nba_today()
+    on_waivers = {p for p, d in week.waivers.items() if d > today_real}
+    fa = week.free_agents(suffix)
+    # The best player nobody has claimed off the wire is the level this league leaves alone; a waiver player clearly above it
+    # is claimed before he clears (PJ Washington 33.5 vs 26.3 FPTS/g, 2026-11-08), so no plan counts on him. One at or below
+    # it stays plannable from his clearing date (comparable players sit unclaimed for weeks).
+    fpg_of = lambda p: float(stats[p].get(f'FPTS{suffix}') or 0.0) if p in stats else 0.0  # noqa: E731
+    market = max((fpg_of(p) for p in fa if p not in on_waivers), default=0.0)
+    for p in fa:
+        if p in on_waivers and fpg_of(p) > market:
+            continue
         if p not in players:   # a continued plan's pickups are still free agents in the DB
             players[p] = pdata(p, False)
     for p, k in keep_values(lg, week, suffix, list(players), notes).items():

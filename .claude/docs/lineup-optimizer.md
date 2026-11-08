@@ -89,6 +89,12 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
   P(win) with next week measured on the end roster and NO next-week moves; it picked Hayes over Wagler on a figure next week's
   own plan erases on Monday (judged by the continued plan Wagler 1.465 vs Hayes 1.462). Pick another week in the dropdown and the
   card shows that week + the one after.
+- **Waiver players above the market are not planned (owner 2026-11-08):** the clearing date used to make a waiver player addable that
+  day, so the plan said "add PJ Washington Thursday" though another team claims him first. Rule: the market level = the best
+  free agent NOT on waivers (nobody claims below it: 26.3 FPTS/g, Wagler, 2026-11-08); a player still on waivers (date after today)
+  whose FPTS/g is above it (PJ 33.5, Aldama 27.3, Kuzma 26.9) is left out of the plan's pool; one at or below it stays plannable from
+  his clearing date. A blunt "nobody on waivers" rule was tried first and dropped (it also removed players nobody takes). Once he clears
+  he is a free agent and plannable. Pickup rows elsewhere still show him with the sky "W <day>" chip.
 - **Positions off by default** (`solve(positions=False)`): the repo judge (`player_week_games`) ignores positions when
   availability < 1, so a position-constrained ILP lost to greedy on the judge. Make the judge position-aware first.
 - **Freeze by search over d*:** each healthy IL player's activation day d* in {today..last day, never} (today skipped
