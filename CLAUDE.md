@@ -50,6 +50,7 @@ Lineup Optimizer / Pickup Desk (file map, traps; read before touching `lineup_op
 Projections (players, rookies, team wins, sources, backtests) -> `.claude/docs/projections.md`.
 Draft strategy: what the room pays for, price-tier returns, category pairs, anchor builds -> `.claude/docs/draft-strategy.md`.
 Frontend colour schemes (CSS variables behind the Tailwind classes), logo -> `.claude/docs/frontend.md`.
+Trade Finder (x-for-(x-1) trades with the freed spot streamed; Yahoo points; funnel, checks, traps) -> `.claude/docs/trade-finder.md`.
 Rotation / injury-minutes model + the live Opp column (lineups JSON, backtest, `nba_rotation.py`, traps) -> `.claude/docs/rotation.md`.
 Hosting, tunnel, watchdog, cutover history -> `.claude/docs/ops.md`.
 Kanban -> vault `Engineering Wiki/Projects/Fantasy/`.

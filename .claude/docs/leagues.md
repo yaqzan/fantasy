@@ -48,7 +48,7 @@ stats) is shared by all leagues.
   `player_stats.league_player_stats(league)` (the league's position eligibility, then its scoring).
 - **Capabilities.** `LeagueConfig.capabilities()` (in `to_dict()` and `/api/fantasy`'s `config`,
   which adds `draft_plan`): `scoring`, `punts`, `positions` (filter chips; empty = all flex),
-  `auction`, `guillotine`, `faab`, `claims_per_week`, `team_wins`, `long_weeks`, `playoffs`. Tabs,
+  `auction`, `guillotine`, `faab`, `claims_per_week`, `team_wins`, `long_weeks`, `playoffs`, `trade_finder` (Yahoo + daily lineups + points: the Trade Finder tab). Tabs,
   columns and controls switch on these names, never on a platform or league id: $ vs draft round,
   punt boxes, position filter, Team wins projections, FAAB line, playoff cut line, Eliminate,
   Daily Leaders' points vs category columns, the Draft Day tab (`draft_plan`: `draft_day.json` was built for this league).

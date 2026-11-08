@@ -711,6 +711,29 @@ def week_plan():
     return jsonify(result)
 
 
+@fantasy_api.route('/trades')
+def trades():
+    """Trade Finder (trade_finder.py): x-for-(x-1) trades that give up `give` (my players, repeatable) and rent the freed
+    spot to a streamer. No `give` = only my roster. keep (repeatable): players I won't offer. x: players I send out (2 or 3).
+    min_partner: the least a partner's weekly lineup value must rise. sort=me|balance. Yahoo daily points leagues."""
+    from trade_finder import cached_find_trades
+    league = current_league()
+    if not league.capabilities()['trade_finder']:
+        return jsonify({'supported': False, 'reason': 'The trade finder is for Yahoo daily-lineup points leagues.'})
+    try:
+        x = int(request.args.get('x', 2))
+        min_partner = float(request.args.get('min_partner', 5))
+    except ValueError:
+        return jsonify({'error': 'x and min_partner must be numbers'}), 400
+    result = cached_find_trades(league, request.args.getlist('give'), request.args.getlist('keep'), min(max(x, 2), 3),
+                                request.args.getlist('partner') or None, min_partner, 15,
+                                'balance' if request.args.get('sort') == 'balance' else 'me',
+                                request.args.get('timeframe') or default_stat_type(league))
+    if 'error' in result:
+        return jsonify(result), 422
+    return jsonify(result)
+
+
 @fantasy_api.route('/stage-plan')
 def stage_plan():
     """Guillotine: the claims for each remaining week of the current stage (lineup_optimizer.plan_stage)."""

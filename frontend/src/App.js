@@ -11,6 +11,7 @@ import Projections from './components/Projections';
 import LeagueSettings from './components/LeagueSettings';
 import DraftDay from './components/DraftDay';
 import StartDay from './components/StartDay';
+import TradeFinder from './components/TradeFinder';
 import {
   getPlayers, getFantasyTeams, draftPlayer, undraftPlayer,
   getLeagues, activateLeague, getSelectedLeague, setSelectedLeague, errorMessage, getDraftDay, getDefaultTab, getStartDayStatus
@@ -20,7 +21,7 @@ import {
 // league (useLeagueViewState) and follows the league's capabilities, never its platform or id.
 const ALL_TABS = [
   ['start', 'Start', true], ['daily', 'Daily Leaders', true], ['tonight', 'Tonight', true], ['players', 'Player Rankings'], ['lineup', 'Lineup Optimizer', true],
-  ['pickups', 'Weekly Pickups', true], ['projections', 'Projections'], ['standings', 'Team Standings', true],
+  ['pickups', 'Weekly Pickups', true], ['trades', 'Trade Finder', true], ['projections', 'Projections'], ['standings', 'Team Standings', true],
   ['draft', 'Draft Day'], ['teams', 'Teams'],
 ];
 
@@ -122,14 +123,14 @@ function App() {
 
   const [startStatus, startReady] = useStartStatus(leagueId);
   const startToday = Boolean(startStatus?.supported && startStatus.conflict);
-  const TABS = ALL_TABS.filter(([key, , inSeason]) => !(draftMode && inSeason) && (key !== 'draft' || caps.draft_plan) && (key !== 'teams' || isPhone)
+  const TABS = ALL_TABS.filter(([key, , inSeason]) => !(draftMode && inSeason) && (key !== 'draft' || caps.draft_plan) && (key !== 'trades' || caps.trade_finder) && (key !== 'teams' || isPhone)
     && (key !== 'start' || startToday));
   const [navRef, edges] = useScrollEdges(TABS.length);
   useEffect(() => {
     if (activeTab === 'start' && !startReady) return;   // undecided until the league's status answers
     if (!loading && activeTab !== null && !TABS.some(([key]) => key === activeTab)) setActiveTab('players');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftMode, caps.draft_plan, isPhone, loading, activeTab === null, startToday, startReady]);
+  }, [draftMode, caps.draft_plan, caps.trade_finder, isPhone, loading, activeTab === null, startToday, startReady]);
 
   useEffect(() => {
     loadLeagues();
@@ -373,6 +374,7 @@ function App() {
         {activeTab === 'lineup' && <LineupOptimizer config={config} onEditLeague={() => setLeagueModal('edit')} />}
         {activeTab === 'projections' && <Projections config={config} />}
         {activeTab === 'pickups' && <WeeklyPickups config={config} />}
+        {activeTab === 'trades' && caps.trade_finder && <TradeFinder config={config} />}
         {activeTab === 'daily' && <DailyLeaders config={config} />}
         {activeTab === 'tonight' && <TonightPickups players={players} config={config} />}
         {activeTab === 'start' && startToday && <StartDay config={config} status={startStatus} />}

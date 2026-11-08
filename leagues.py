@@ -353,6 +353,8 @@ class LeagueConfig:
             'team_wins': 'WIN%' in self.categories,
             'long_weeks': any(w['days'] > 7 for w in self.weeks()),
             'playoffs': s['playoffs']['teams'] > 0,
+            # the Trade Finder reuses the week plan's model: Yahoo, daily lineups, points (trade_finder.py)
+            'trade_finder': self.platform == 'yahoo' and self.daily_lineups and self.is_points,
         }
 
     def to_dict(self):
