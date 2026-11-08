@@ -503,7 +503,8 @@ def get_pickup_candidates(league, week_start=None, week_end=None, opponent_abv=N
         p = stats[m.add]
         team = p['TEAM']
         tipped = week.actual.tipped if week.actual else ()
-        days = sorted(d for d in week.remaining.get(team, {}) if d >= m.day and (team, d) not in tipped)   # his games from the claim day
+        # his games from the claim day; a week not yet started shows his whole schedule (the claim day is only a suggestion)
+        days = sorted(d for d in week.remaining.get(team, {}) if (not week.actual or d >= m.day) and (team, d) not in tipped)
         rows.append({
             'name': m.add, 'team': p['TEAM'], 'positions': list(p['Positions']),
             'gp': p.get('GP') or 0, 'small_sample': (p.get('GP') or 0) < floor,
