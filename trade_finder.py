@@ -27,8 +27,8 @@ from datetime import date
 import numpy as np
 
 SAMPLE_WEEKS = 3          # normal 7-day weeks after the current one that the value is averaged over
-STAGE_B = 300             # combinations that get the exact no-claims lineup value
-STAGE_C = 36              # combinations that get the ILP
+STAGE_A_KEEP = (1200, 6000)   # combinations (2 for 1, 3 for 2) that get the exact no-claims lineup value
+STAGE_C = (36, 90)        # combinations (2 for 1, 3 for 2) that get the ILP: 3 for 2 has more near-ties
 CTX_TTL = 120             # a league's built weeks, seconds
 
 
@@ -128,9 +128,13 @@ class Ctx:
     def lineup_avg(self, names):
         return sum(self.lineup(w, names) for w in range(len(self.weeks))) / len(self.weeks)
 
-    def with_forced_drop(self, names):
+    def with_forced_drop(self, names, il_used=0):
         """(average lineup value, [dropped players]) of a roster, after cutting the cheapest players if it is over the size.
+        Players who are OUT go to a free IL slot first (`il_used` of the K are taken), so only a full IL costs a cut.
         Players the planner calls undroppable (market rule, can't-cut) stay."""
+        room = max(self.insts[0].K - il_used, 0)
+        out = [p for p in names if self.player(p) and self.player(p).out][:room]
+        names = [p for p in names if p not in out]
         over = len(names) - self.N
         if over <= 0:
             return self.lineup_avg(names), []
@@ -191,7 +195,7 @@ def _proxy(ctx):
     return out
 
 
-def find_trades(lg, give, keep=(), x=2, partners=None, min_partner=0.0, top=15, sort='me', timeframe=None, n_weeks=SAMPLE_WEEKS):
+def find_trades(lg, give, keep=(), x=2, min_partner=0.0, top=15, sort='me', timeframe=None):
     """The trades worth offering. give: my players that must be in the offer; keep: my players that stay. x: players I send
     out (I get x-1 back). min_partner: the least a partner must gain per week (their lineup value, no claims, after cutting
     the extra player). Returns the payload dict of /api/trades."""
@@ -201,7 +205,7 @@ def find_trades(lg, give, keep=(), x=2, partners=None, min_partner=0.0, top=15, 
     if lg.platform != 'yahoo' or not lg.daily_lineups or not lg.is_points:
         return {'supported': False, 'reason': 'The trade finder is for Yahoo daily-lineup points leagues (its category version comes later).'}
     suffix = lo.timeframe_suffix(timeframe or default_stat_type(lg))
-    ctx = context(lg, suffix, n_weeks)
+    ctx = context(lg, suffix)
     if ctx is None:
         return {'supported': False, 'reason': 'No full fantasy week left in the schedule.'}
     me = ctx.rosters.get(lg.my_team)
@@ -210,8 +214,8 @@ def find_trades(lg, give, keep=(), x=2, partners=None, min_partner=0.0, top=15, 
     mine, my_il = me['active'], me['il']
     give = [g for g in give if g in mine]
     first = ctx.insts[0]
-    roster = [{'player': p, 'fpg': round(first.players[p].fpts, 1), 'games': sum(first.players[p].game),
-               'keep_value': round(first.players[p].keep, 1)} for p in mine if p in first.players]
+    roster = [{'player': p, 'fpg': round(first.players[p].fpts, 1), 'games': sum(first.players[p].game)}
+              for p in mine if p in first.players]
     if not give:   # the page's first call: only who can be offered
         return {'supported': True, 'roster': roster, 'trades': [], 'give': [], 'x': x}
     x = max(x, len(give), 2)
@@ -228,7 +232,7 @@ def find_trades(lg, give, keep=(), x=2, partners=None, min_partner=0.0, top=15, 
     cands = []
     # --- stage A: additive proxy over every combination
     for abv, tm in ctx.rosters.items():
-        if abv == lg.my_team or (partners and abv not in partners):
+        if abv == lg.my_team:
             continue
         their = tm['active']
         targets = [p for p in their if ctx.player(p) and ctx.player(p).has_stats and not ctx.player(p).out]
@@ -244,7 +248,8 @@ def find_trades(lg, give, keep=(), x=2, partners=None, min_partner=0.0, top=15, 
     cands = [c for c in cands if c[0] >= min_partner - 6.0]
     # the freed spot is worth the same flat amount to every combination, so rank by what the swap does to my lineup
     cands.sort(key=lambda c: -c[1])
-    cands = cands[:STAGE_B * 4]
+    considered = len(cands)
+    cands = cands[:STAGE_A_KEEP[x - 2]]
 
     # --- stage B: exact lineup value, no claims, both sides
     base_theirs = {abv: ctx.lineup_avg(tm['active']) for abv, tm in ctx.rosters.items()}
@@ -252,7 +257,7 @@ def find_trades(lg, give, keep=(), x=2, partners=None, min_partner=0.0, top=15, 
     for _, _, abv, out, get in cands:
         their = ctx.rosters[abv]['active']
         after_them = [p for p in their if p not in get] + out
-        v_them, cut = ctx.with_forced_drop(after_them)
+        v_them, cut = ctx.with_forced_drop(after_them, len(ctx.rosters[abv]['il']))
         gain_them = v_them - base_theirs[abv]
         if gain_them < min_partner:
             continue
@@ -260,7 +265,7 @@ def find_trades(lg, give, keep=(), x=2, partners=None, min_partner=0.0, top=15, 
         swap = ctx.lineup_avg(after_me) - base_lineup
         scored.append((swap, gain_them, abv, out, list(get), cut))
     scored.sort(key=lambda s: -s[0])
-    scored = scored[:STAGE_C]
+    scored = scored[:STAGE_C[x - 2]]
 
     # --- stage C: the ILP on my side
     def one(s):
@@ -293,9 +298,9 @@ def find_trades(lg, give, keep=(), x=2, partners=None, min_partner=0.0, top=15, 
         r['me']['season'] = round(r['me']['week'] * left)
     return {
         'supported': True, 'weeks': [[a.isoformat(), b.isoformat()] for a, b in ctx.weeks], 'weeks_left': round(left, 1),
-        'give': give, 'x': x, 'claims_per_week': claims,
-        'base': {'stream': round(sum(base_stream) / W, 1), 'lineup': round(base_lineup, 1), 'claims': round(base_claims, 1)},
-        'roster': roster, 'considered': len(cands), 'exact': len(scored), 'trades': rows,
+        'give': give, 'x': x,
+        'base': {'claims': round(base_claims, 1)},
+        'roster': roster, 'considered': considered, 'exact': len(scored), 'trades': rows,
         'seconds': round(time.time() - t0, 1),
     }
 
@@ -305,14 +310,14 @@ _results_lock = threading.Lock()
 RESULT_TTL = 60
 
 
-def cached_find_trades(lg, give, keep=(), x=2, partners=None, min_partner=0.0, top=15, sort='me', timeframe=None):
+def cached_find_trades(lg, give, keep=(), x=2, min_partner=0.0, top=15, sort='me'):
     """find_trades, cached RESULT_TTL seconds per request; one search at a time (the first caller computes, the rest read it)."""
-    key = (lg.id, tuple(sorted(give)), tuple(sorted(keep)), x, tuple(sorted(partners or ())), round(min_partner, 1), top, sort, timeframe)
+    key = (lg.id, tuple(sorted(give)), tuple(sorted(keep)), x, round(min_partner, 1), top, sort)
     with _results_lock:
         hit = _results.get(key)
         if hit and time.time() - hit[0] < RESULT_TTL:
             return hit[1]
-        out = find_trades(lg, give, keep, x, partners, min_partner, top, sort, timeframe)
+        out = find_trades(lg, give, keep, x, min_partner, top, sort)
         _results[key] = (time.time(), out)
         return out
 

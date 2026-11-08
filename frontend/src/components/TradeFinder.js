@@ -133,8 +133,8 @@ const TradeFinder = ({ config }) => {
             {!trades.length && <div className="text-xs text-gray-400">No trade gives you a gain while the partner gains {view.minPartner} FPTS/wk. Lower the partner's minimum.</div>}
           </div>
           <p className="text-[11px] text-gray-500 mt-2">
-            The partner's side counts their lineup only (no claims, they cut their cheapest player), so it is a floor on what they gain if they stream.
-            An injured partner player is never a target. The freed spot assumes the streamers shown stay on the wire.
+            The partner's side counts their lineup only: no claims, and nothing for the roster spot the trade costs them, so a partner who streams would value the offer lower.
+            Injured players (out today) are never targets and count zero for all three weeks. The freed spot assumes the streamers shown stay on the wire.
           </p>
         </div>
       )}

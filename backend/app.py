@@ -726,9 +726,7 @@ def trades():
     except ValueError:
         return jsonify({'error': 'x and min_partner must be numbers'}), 400
     result = cached_find_trades(league, request.args.getlist('give'), request.args.getlist('keep'), min(max(x, 2), 3),
-                                request.args.getlist('partner') or None, min_partner, 15,
-                                'balance' if request.args.get('sort') == 'balance' else 'me',
-                                request.args.get('timeframe') or default_stat_type(league))
+                                min_partner, 15, 'balance' if request.args.get('sort') == 'balance' else 'me')
     if 'error' in result:
         return jsonify(result), 422
     return jsonify(result)
