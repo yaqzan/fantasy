@@ -1,24 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { getPlan, getLastDays, errorMessage } from '../services/api';
+import { getPlan, errorMessage } from '../services/api';
 import { weekdayLetter, shortDate } from '../weeks';
 import { PlayerName } from './PlayerCard';
 
 const pct = (x) => `${Math.round(x * 100)}%`;
 const chanceClass = (x) => x >= 0.55 ? 'bg-green-900/70 text-green-300' : x <= 0.45 ? 'bg-red-900/70 text-red-300' : 'bg-gray-600 text-gray-300';
-// A win chance, or now -> after with the gain in points of chance.
-const WinChance = ({ now, after }) => (
-  <span className="flex items-center gap-1">
-    <span className={`rounded px-1 py-0.5 font-semibold ${chanceClass(now)}`}>{pct(now)}</span>
-    {after !== undefined && (
-      <>
-        <span aria-hidden="true">-&gt;</span>
-        <span className={`rounded px-1 py-0.5 font-bold ${chanceClass(after)}`}>{pct(after)}</span>
-        <span className={after >= now ? 'text-green-300' : 'text-red-300'}>{after >= now ? '+' : ''}{((after - now) * 100).toFixed(1)}</span>
-      </>
-    )}
-  </span>
-);
-
 const TX = {
   add: { label: '+', cls: 'bg-green-900/70 text-green-300' },
   drop: { label: '-', cls: 'bg-red-900/70 text-red-300' },
@@ -29,14 +15,13 @@ const TX = {
 // The week plan (claim_planner.py via /api/plan): every add, drop and IL move left this week. Rolling: only today's
 // moves are firm, the rest is re-made each morning. Loads on its own after the page (`ready`), so it never delays
 // it, and hides itself where the planner does not apply (supported: false).
-const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = true, afterPrevious = false }) => {
+const WeekPlan = ({ week, statType, ready, title = 'Week plan', afterPrevious = false }) => {
   const [plan, setPlan] = useState(null);
-  const [pre, setPre] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setPlan(null); setPre(null); setError(null);
+    setPlan(null); setError(null);
     if (!ready) return undefined;
     let cancelled = false;
     setLoading(true);
@@ -44,10 +29,8 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = tru
       .then(result => { if (!cancelled) setPlan(result); })
       .catch(err => { if (!cancelled) setError(errorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
-    // Two-week claims (last_days.py): always for the calendar's current week + the next; a failure just hides the section.
-    if (withClaims) getLastDays(statType).then(result => { if (!cancelled) setPre(result); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [week, statType, ready, withClaims, afterPrevious]);
+  }, [week, statType, ready, afterPrevious]);
 
   if (plan && !plan.supported) return null;
   if (!plan && !loading && !error) return null;
@@ -88,37 +71,6 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = tru
               </div>
             ))}
           </div>
-          {pre && pre.active && (
-            <div className="mt-2 rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-xs" title={pre.notes.join(' ')}>
-              <div className="font-semibold text-gray-100">Claims for this week + next</div>
-              <div className="mt-1 grid grid-cols-[auto_1fr_1fr] gap-x-2 gap-y-1 items-center text-gray-300 tabular-nums">
-                <span />
-                <span className="text-gray-400" title={`${shortDate(pre.this_week.start)}-${shortDate(pre.this_week.end)}`}>This week{pre.this_week.opponent ? ` v ${pre.this_week.opponent}` : ''}</span>
-                <span className="text-gray-400" title={`${shortDate(pre.next_week.start)}-${shortDate(pre.next_week.end)}`}>Next week{pre.next_week.opponent ? ` v ${pre.next_week.opponent}` : ''}</span>
-                <span className="text-gray-400">Now</span>
-                <WinChance now={pre.this_week.now} />
-                <WinChance now={pre.next_week.now} />
-                {pre.claims.map((c, i) => (
-                  <React.Fragment key={i}>
-                    <span className="rounded px-1.5 py-0.5 bg-gray-700 text-gray-200 break-words min-w-0">
-                      <span className="text-green-300">+</span> <PlayerName name={c.add} /> <span className="text-red-300">-</span> {c.drop ? <PlayerName name={c.drop} /> : 'open spot'}
-                    </span>
-                    <WinChance now={c.cur_before} after={c.cur_after} />
-                    <WinChance now={c.next_before} after={c.next_after} />
-                  </React.Fragment>
-                ))}
-                {pre.claims.length > 0 && (
-                  <>
-                    <span className="text-gray-400">All claims</span>
-                    <WinChance now={pre.this_week.now} after={pre.this_week.after} />
-                    <WinChance now={pre.next_week.now} after={pre.next_week.after} />
-                  </>
-                )}
-              </div>
-              {!pre.claims.length && <div className="mt-1 text-gray-400">No claim today helps either week.</div>}
-              <div className="mt-1 text-gray-400">Ranked on both weeks (next week counts {pre.next_weight} x). The plan above judges this week plus a rough 2-week keep value, so the two can differ.</div>
-            </div>
-          )}
           {plan.warnings.map((w, i) => <p key={i} className="text-xs text-amber-300 mt-1.5">{w}</p>)}
         </>
       )}

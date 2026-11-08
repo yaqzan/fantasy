@@ -457,7 +457,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
           {(() => {   // the week after: its own plan and its own claims (they reset every week, nothing carries over)
             const i = weeks.findIndex(w => w.start === activeWeek);
             return i >= 0 && weeks[i + 1]
-              ? <WeekPlan week={weeks[i + 1].start} statType={view.statType} ready={!!data} title="Next week plan" withClaims={false} afterPrevious />
+              ? <WeekPlan week={weeks[i + 1].start} statType={view.statType} ready={!!data} title="Next week plan" afterPrevious />
               : null;
           })()}
 

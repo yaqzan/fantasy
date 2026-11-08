@@ -911,6 +911,8 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None,
     plan = solve(inst)
     judged = score_judge(inst, plan, week)
     none = score_judge(inst, Plan(), week)
+    import daily_leaders
+    today_iso = daily_leaders.nba_today().isoformat()   # a week not started yet has no "today": its first day is just a day
     days, n_add = [], 0
     for t, day in enumerate(inst.days):
         tx = []
@@ -921,7 +923,7 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None,
             d = inst.players.get(m['player'])
             tx.append({'type': m['type'], 'player': m['player'], 'note': _note(inst, m, n_add),
                        'keep': round(d.keep, 1) if d and m['type'] in ('add', 'drop') else None})
-        days.append({'date': day, 'frozen': bool(plan.frozen[t]), 'today': t == 0, 'transactions': tx})
+        days.append({'date': day, 'frozen': bool(plan.frozen[t]), 'today': t == 0 and day == today_iso, 'transactions': tx})
     warnings = []
     if inst.stored_source == 'copied':
         warnings.append('Yahoo\'s stored lineups could not be read: frozen days assume today\'s best lineup.')

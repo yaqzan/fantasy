@@ -18,7 +18,6 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 | Claims already used this week | `fantasy_team_helper.claims_left` (Yahoo only) |
 | Per-day minutes factor (teammates out / back, ESPN return dates, tonight's sheet) | `role_minutes.factors` via `Week.minutes_factor(suffix)`; model in rotation.md "Role-aware minutes" |
 | Week plan (ILP: adds, drops, IL moves, claim days; Yahoo daily points leagues) | `claim_planner.py` (`week_plan`, `solve`, `score_judge`, `keep_values`), `/api/plan`; card `components/WeekPlan.js` |
-| Two-week claims (claims judged on this week + next week's matchup; same leagues) | `last_days.py` (`last_days_plan`), `/api/last-days`; section in `components/WeekPlan.js` |
 | Page | `frontend/src/components/LineupOptimizer.js`; API client `services/api.js` (`analyze`, `pickups`, `getPlan`); sibling `WeeklyPickups.js` |
 | Crowded day: who to start (the Start tab; daily category leagues, all-UTIL slots) | `start_day.py` (`status`, `lineups`), `/api/start-day[/status]`; `components/StartDay.js`, tab logic in `App.js` |
 | Terminal | `python lineup_optimizer.py <league> proj [moves] [plan]` ; `python claim_planner.py <league>` |
@@ -78,6 +77,12 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
   sim said 1/1 by +10, CI 1..20; the review's sim +5, not significant); 0.5/0.25 worse, a third week no better,
   replacement = the best free agent worse. A flat `max(fpg - repl, 0) x 7` keeps 90-96% of the gain (3-11 FPTS behind,
   not significant) but cannot see return dates, which no sim can test.
+- **Next week plan card (owner 2026-11-08):** the page shows a second `WeekPlan` under the first (`LineupOptimizer.js`, the week after
+  the one selected; `/api/plan?after=previous`): it continues from the roster THIS week's plan ends with (`claim_planner.end_state`;
+  Yahoo's stored lineups are not read then, `stored_source='continued'`; the DB's free agents never overwrite its pickups: they
+  stay free agents in the DB until synced) with its own 5 claims. A future week has no "Do today" (`days[].today` only for the
+  real today). Tried and removed the same day: a "claims for this week + next" box (`last_days.py`, a greedy search judging each
+  claim on both weeks) that duplicated the two plan cards and contradicted the plan.
 - **Each week is judged on its own (owner 2026-11-08):** claims reset every week with no carry-over, so a week's plan is the plain
   ILP for that week (+ the keep value) and the page shows it with the NEXT week's plan under it (`after=previous`: continues from
   this week's end state, its own 5 claims). Tried and removed the same day: candidate plans judged on this week + next week's
@@ -116,34 +121,6 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
 - **Cost:** one Week build + 7 Yahoo `team/.../roster;date=D` GETs (4 threads, cached 30 min in memory, one burst at a
   time) + ~8 MILPs (~0.05 s each; live Courtside 2026-11-02: 1 MILP, 0.07 s, endpoint ~4.5 s cold). Keep values:
   ~0.23 s (the Season role_minutes already built + one `injury_reports` read). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.
-
-## Two-week claims (last_days.py, 2026-11-08, owner)
-
-Every claim is judged on THIS week and on NEXT week's matchup, and the horizon rolls (Monday: "next week" is the week after;
-the owner's idea, replacing a first "last 2 days only" version). Each candidate (add, drop) scores the change in P(win) of this
-week (from today, `Week.team` with the claim's window) + `NEXT_WEIGHT` 1.0 x the change in P(win) of next week (roster minus
-the drop plus the add, vs next week's scheduled opponent), greedy up to the claims left (first claim: the best `POOL` 200 free
-agents x every drop; later ones the previous step's top 30). A week at 80% earns little, so claims go where the leverage is;
-each claim carries `for` (this week / next week / both) and both weeks' P(win) before/after. The card shows a grid: now, each
-  claim, all claims, for this week and next week (win % and gain in points). The weight is the owner's call: the owner said "together" (1.0); 0.5 was tried and changes the pick (2026-11-08: Hayes at 0.5, Matkovic at 1.0, Wolf at 0).
-- Rules: the claim lands TODAY, so players still on waivers (`Week.waivers`) are out and so is anyone whose game is under way
-  (`can_drop_on`); undroppable honoured; an add uses one of this week's claims, drops are free. A healthy player left in IL
-  blocks adds on Yahoo, so the endpoint answers `active: false` then. Yahoo daily points leagues only (`claim_planner.unsupported_reason`).
-- **Next week plan card (owner 2026-11-08):** claims reset weekly with no carry-over, so next week's pickups are made next week:
-  the page shows a second `WeekPlan` (`/api/plan?week_start=<next>`, its own 5 claims, now -> plan win % and gain) under this week's.
-  It continues from the roster THIS week's plan ends with (`/api/plan?after=previous`, `claim_planner.end_state`; the stored
-  Yahoo lineups are not read then, `stored_source='continued'`, and the DB's free agents never overwrite its pickups). A claim today "for next week" is only worth it when the claim would
-  otherwise lapse (a week's last day); the greedy above does not know that yet (open).
-- Not wired into the week plan's ILP: the card shows both (the plan judges this week + a generic 2-week keep value, this adds next week's real matchup; they can disagree: 2026-11-08 plan
-  Wagler, this Matkovic). No keep value beyond next week, so a streamer can beat a long-term player
-  (only the undroppable flags guard that). Open: mid-week a claim also costs one of the week's 5, which this does not price
-  (a 14-day week 12 days out recommended a claim "for next week" 12 days early); playoff weeks with no opponent score against the league average.
-- **Trap (2026-11-08):** `rank_moves` picks the best claim DAY. Judged for next week it returned "Hayes for Hezonja, Nov 10", a
-  Monday-night claim shown as a claim today (+1.9%); made today the same swap is -0.8% next week. This scores only claims whose day is
-  today, never `rank_moves`.
-- Checked against `/api/analyze?add=&drop=&day=` for this week (Matkovic 0.8014 -> 0.8459 both ways) and by an independent `Week.team`
-  re-derivation (two Opus reviews). 1-10 s cold, 60 s cache. The card always describes the calendar's current week + the next,
-  whatever week the page shows.
 
 ## Start tab (start_day.py, 2026-11-04)
 

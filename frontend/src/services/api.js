@@ -187,9 +187,6 @@ export const getPlan = async (weekStart = null, timeframe = 'projected', afterPr
   return response.data;
 };
 
-// Pre-claims (last_days.py): in a week's last days, the claims worth making today for this week AND next week's matchup.
-export const getLastDays = async (timeframe = 'projected') => (await api.get('/last-days', { params: { timeframe } })).data;
-
 // The tab the app opens on ('daily' around game nights, else 'players').
 export const getDefaultTab = async () => (await api.get('/default-tab')).data.tab;
 
