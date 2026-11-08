@@ -8,6 +8,8 @@ import OwnerChip from './OwnerChip';
 // usual (base), the change against what his projection carries (opp), and in points leagues the expected FPTS if he
 // plays (fpts) and the gain over his projection (gain), plus a one-line reason (why: "Duren out (back ~Nov 9): +8 min").
 // `surge` (role_minutes.surges, any player): last 3 games' minutes vs his earlier games, the cause and how much usually holds.
+// Surge players whose team plays tonight but whose lineup sheet is not out (a bench player before the full sheet posts)
+// get a second list below, "Lineup not posted yet": no minutes or FPTS yet, ranked by the size of the jump.
 // Ranked by expected FPTS x chance to play (points) or by the minutes change (categories). A * = lineup not confirmed.
 const checkboxClass = 'h-4 w-4 text-nba-orange focus:ring-nba-orange border-gray-600 rounded bg-gray-700';
 const LIMIT = 60;
@@ -22,8 +24,12 @@ const TonightPickups = ({ players, config }) => {
   const key = (p) => (view.sort === 'minutes' || !points ? p.rotation.opp
     : view.sort === 'gain' ? p.rotation.gain
       : p.rotation.fpts * p.rotation.p);
+  const free = (p) => !view.freeOnly || (!p.drafted && p.fantasy_team?.abbreviation !== mineAbv);
+  const waiting = players
+    .filter(p => !p.rotation && p.surge && p.plays_today && !p.is_injured && free(p))
+    .sort((a, b) => b.surge.min - a.surge.min);
   const shown = rows
-    .filter(p => !view.freeOnly || (!p.drafted && p.fantasy_team?.abbreviation !== mineAbv))
+    .filter(free)
     .filter(p => !view.likely || p.rotation.p >= 0.8)
     .filter(p => key(p) != null)
     .sort((a, b) => key(b) - key(a))
@@ -91,7 +97,28 @@ const TonightPickups = ({ players, config }) => {
             </div>
           );
         })}
-        {rows.length > 0 && !shown.length && <div className="px-3 py-4 text-sm text-gray-400">Nobody matches these filters.</div>}
+        {waiting.length > 0 && (
+          <>
+            <div className="px-3 py-2 text-[11px] text-gray-500">Lineup not posted yet, but his minutes are up lately</div>
+            {waiting.map(p => {
+              const mine = p.fantasy_team?.abbreviation === mineAbv;
+              const taken = p.fantasy_team?.abbreviation && !mine;
+              return (
+                <div key={p.name} className={`px-3 py-2 ${mine ? 'bg-row-mine' : ''} ${taken ? 'opacity-50' : ''}`}>
+                  <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                    <PlayerName id={p.id} name={p.name} className={`font-medium ${mine ? 'text-mine' : 'text-white'}`} />
+                    <span className="text-[11px] text-gray-400">{p.positions?.length ? p.positions.join('/') : p.position} · {p.team_abv}</span>
+                    {taken && <OwnerChip person={p.fantasy_team.owner_name} team={p.fantasy_team.name} />}
+                  </div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">
+                    <span className={p.surge.kind === 'back' ? 'text-gray-300' : 'text-green-400'}>Minutes up {sign(p.surge.min)} last 3 ({p.surge.recent} vs {p.surge.before})</span>: {p.surge.why}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+        {rows.length > 0 && !shown.length && !waiting.length && <div className="px-3 py-4 text-sm text-gray-400">Nobody matches these filters.</div>}
       </div>
     </div>
   );

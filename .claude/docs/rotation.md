@@ -93,7 +93,7 @@ Owner: "isolate who's given new opportunities" and whether it lasts ("a missing 
   Reviewed by an Opus agent (`.horizon/minutes-surge/review/`): rule matches the backtest; the bucketing, stale skip and name clash are its fixes.
 - Payload `/api/fantasy` `surge` {min, recent, before, kind, hold, causes [{name, p, back}], why}; 5-min cache, ~0.4 s cold on the
   cached Season. UI: Player Rankings "+Nm" after the team (green; grey when the cause is back; tooltip = why) and filter
-  "Minutes up"; Tonight cards a line under the name. Checked 2026-11-08: Walter Clayton Jr. +11.2 (22.5 vs 11.3), none, ~68% (Aldama
+  "Minutes up"; Tonight cards a line under the name; surge players whose team plays tonight but who have no sheet entry yet (bench before the full sheet posts) get a "Lineup not posted yet" list under the cards (`plays_today`, no minutes/FPTS). Checked 2026-11-08: Walter Clayton Jr. +11.2 (22.5 vs 11.3), none, ~68% (Aldama
   out in every game, back 11-06, Clayton still 22.9); Danny Wolf +5.7 (20.7 vs 15.0), out (Demin back ~Nov 11, Saraf, Powell).
   Many "out" kinds have no ESPN return date on a cause (29 "out" surges 2026-11-08: 12 with no dated cause at all, 13 more with at least one undated cause, all Yahoo status None), so "until he returns" is often a streak-table guess. Live `kind` uses predicted p_out >= .5, the backtest the actual next-game absence, so the live "out" hold is a bit optimistic when that guess is wrong.
 - Not done: feeding the hold rate into U or the factor (needs a walk-forward test against U + the role delta, `.horizon/review-U/walk_u.py`).
