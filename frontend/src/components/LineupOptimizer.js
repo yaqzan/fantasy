@@ -454,6 +454,12 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
           {/* Week plan (claim_planner.py): its own fetch once the matchup is in; hidden where the planner does not apply */}
           <IlStrip data={data} />
           <WeekPlan week={activeWeek} statType={view.statType} ready={!!data} />
+          {(() => {   // the week after: its own plan and its own claims (they reset every week, nothing carries over)
+            const i = weeks.findIndex(w => w.start === activeWeek);
+            return i >= 0 && weeks[i + 1]
+              ? <WeekPlan week={weeks[i + 1].start} statType={view.statType} ready={!!data} title="Next week plan" withClaims={false} />
+              : null;
+          })()}
 
           {/* Do not drop: click a player to lock him; no pickup ranking will suggest dropping him */}
           <details className="bg-gray-700 rounded-lg border border-gray-600 p-2 sm:p-3 mb-4">

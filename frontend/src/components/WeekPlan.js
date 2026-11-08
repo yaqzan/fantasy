@@ -29,7 +29,7 @@ const TX = {
 // The week plan (claim_planner.py via /api/plan): every add, drop and IL move left this week. Rolling: only today's
 // moves are firm, the rest is re-made each morning. Loads on its own after the page (`ready`), so it never delays
 // it, and hides itself where the planner does not apply (supported: false).
-const WeekPlan = ({ week, statType, ready }) => {
+const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = true }) => {
   const [plan, setPlan] = useState(null);
   const [pre, setPre] = useState(null);
   const [error, setError] = useState(null);
@@ -45,20 +45,21 @@ const WeekPlan = ({ week, statType, ready }) => {
       .catch(err => { if (!cancelled) setError(errorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     // Two-week claims (last_days.py): always for the calendar's current week + the next; a failure just hides the section.
-    getLastDays(statType).then(result => { if (!cancelled) setPre(result); }).catch(() => {});
+    if (withClaims) getLastDays(statType).then(result => { if (!cancelled) setPre(result); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [week, statType, ready]);
+  }, [week, statType, ready, withClaims]);
 
   if (plan && !plan.supported) return null;
   if (!plan && !loading && !error) return null;
   return (
     <div className="bg-gray-700 rounded-lg border border-gray-600 p-2 sm:p-3 mb-4 min-w-0">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-        <span className="font-semibold text-gray-100">Week plan</span>
+        <span className="font-semibold text-gray-100">{title}{plan && plan.opponent ? <span className="font-normal text-gray-400"> {shortDate(plan.week_start)}-{shortDate(plan.week_end)} v {plan.opponent}</span> : null}</span>
         {plan && (
           <span className="flex items-center gap-1 text-xs text-gray-300">
             Win chance now <span className={`rounded px-1 py-0.5 font-semibold tabular-nums ${chanceClass(plan.now.win_chance)}`}>{pct(plan.now.win_chance)}</span>
             <span aria-hidden="true">-&gt;</span> plan <span className={`rounded px-1 py-0.5 font-bold tabular-nums ${chanceClass(plan.plan.win_chance)}`}>{pct(plan.plan.win_chance)}</span>
+            <span className={plan.plan.win_chance >= plan.now.win_chance ? 'text-green-300' : 'text-red-300'}>{plan.plan.win_chance >= plan.now.win_chance ? '+' : ''}{((plan.plan.win_chance - plan.now.win_chance) * 100).toFixed(1)}</span>
             <span className="text-gray-400 tabular-nums" title="Expected points: now, with the plan (opponent's week)">{plan.now.points.toFixed(0)} -&gt; {plan.plan.points.toFixed(0)} v {plan.opponent_points.toFixed(0)}</span>
           </span>
         )}

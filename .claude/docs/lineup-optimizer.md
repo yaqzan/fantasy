@@ -123,6 +123,10 @@ each claim carries `for` (this week / next week / both) and both weeks' P(win) b
 - Rules: the claim lands TODAY, so players still on waivers (`Week.waivers`) are out and so is anyone whose game is under way
   (`can_drop_on`); undroppable honoured; an add uses one of this week's claims, drops are free. A healthy player left in IL
   blocks adds on Yahoo, so the endpoint answers `active: false` then. Yahoo daily points leagues only (`claim_planner.unsupported_reason`).
+- **Next week plan card (owner 2026-11-08):** claims reset weekly with no carry-over, so next week's pickups are made next week:
+  the page shows a second `WeekPlan` (`/api/plan?week_start=<next>`, its own 5 claims, now -> plan win % and gain) under this week's.
+  It starts from today's roster, not this week's plan's result. A claim today "for next week" is only worth it when the claim would
+  otherwise lapse (a week's last day); the greedy above does not know that yet (open).
 - Not wired into the week plan's ILP: the card shows both (the plan judges this week + a generic 2-week keep value, this
   adds next week's real matchup; they can disagree: 2026-11-08 plan Wagler, this Matkovic). No keep value beyond next week, so a streamer can beat a long-term player
   (only the undroppable flags guard that). Open: mid-week a claim also costs one of the week's 5, which this does not price
