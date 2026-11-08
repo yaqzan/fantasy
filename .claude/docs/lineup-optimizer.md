@@ -90,16 +90,14 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
   own plan erases on Monday (judged by the continued plan Wagler 1.465 vs Hayes 1.462). Pick another week in the dropdown and the
   card shows that week + the one after.
 - **Market rule (owner 2026-11-08):** market = the best free agent NOT on waivers by FPTS/g (Wagler 26.3, 2026-11-08), band = market
-  minus the `claims_per_week`-th best (2.4-3.0). Cutoff = market + band. (1) A player still on waivers (date after today) above the
-  cutoff (PJ Washington 33.5, Porzingis) is left out of the plan's pool: another team claims him before he clears and the plan used
-  to say "add PJ Thursday"; one inside or just above it (Aldama 27.3, Kuzma 26.9) stays plannable from his clearing date. (2) My own
-  players above the cutoff are undroppable in the plan (Paul Reed 30.5 was being dropped): nothing on the wire comes close. Two cruder
-  **Waiver watch:** the contested players are not hidden: `waiver_watch` in the `/api/plan` payload (a card under the plan) lists each with what
-  winning him is worth (`rank_moves` best drop, change in P(win)): 2026-11-08 next week, PJ Washington +4.4% for Wagler. A claim on him is
-  a bid (Courtside has FAAB, budget 100, not tracked), not a plan. Two cruder
-  versions were tried and dropped the same day: "nobody on waivers" (removed players nobody takes) and "nothing at or above the
-  market is dropped" (left only Hezonja droppable, next week's plan did nothing). Pickup rows elsewhere still show waiver players with
-  the sky "W <day>" chip and the manual undroppable flags are separate.
+  minus the `claims_per_week`-th best (2.4-3.0), cutoff = market + band. (1) A player on waivers above the cutoff (PJ Washington 33.5)
+  is wanted by other teams: the plan still adds him (from his clearing date) but the transaction carries `bid: true` and the card shows
+  a sky "bid" chip: in a FAAB league (Courtside, budget 100) the owner claims him with a bid, and a lost bid just means the next
+  re-plan. The app does NOT track the FAAB balance or other teams' bids, so it suggests no amount (open). An earlier version excluded such
+  players from the plan ("someone scoops him") and then listed them in a "waiver watch" box; the owner pointed out a bid can win, so
+  both were removed. (2) My own players above the cutoff are undroppable in the plan (Paul Reed 30.5 was being dropped). Cruder
+  versions tried and dropped the same day: "nobody on waivers is planned" and "nothing at or above the market is dropped" (only
+  Hezonja droppable, next week's plan did nothing). Pickup rows elsewhere show waiver players with the sky "W <day>" chip.
 - **Positions off by default** (`solve(positions=False)`): the repo judge (`player_week_games`) ignores positions when
   availability < 1, so a position-constrained ILP lost to greedy on the judge. Make the judge position-aware first.
 - **Freeze by search over d*:** each healthy IL player's activation day d* in {today..last day, never} (today skipped
