@@ -88,6 +88,7 @@ class Instance:
     opp_mean: float = 0.0
     opp_var: float = 0.0
     notes: list = field(default_factory=list)
+    contested: list = field(default_factory=list)   # waiver players too far above the market to plan on (build_instance)
 
     @property
     def T(self):
@@ -418,8 +419,10 @@ def build_instance(lg, week, suffix, opp, roster_il=None):
     open_fpg = sorted((fpg_of(p) for p in fa if p not in on_waivers), reverse=True)
     market = open_fpg[0] if open_fpg else 0.0
     band = market - open_fpg[min(lg.claims_per_week or 5, len(open_fpg)) - 1] if open_fpg else 0.0
+    contested = []
     for p in fa:
         if p in on_waivers and fpg_of(p) > market + band:
+            contested.append(p)
             continue
         if p not in players:   # a continued plan's pickups are still free agents in the DB
             players[p] = pdata(p, False)
@@ -435,7 +438,7 @@ def build_instance(lg, week, suffix, opp, roster_il=None):
                     stored_source=stored_source,
                     healthy_in_il=sorted(p for p in il if p in players and not players[p].out),
                     claims_left=C, N=lg.roster_size, K=3, avail=AVAILABILITY, my_carried=carried, live_const=live_const,
-                    opp_mean=theirs['FPTS'][0], opp_var=theirs['FPTS'][1], notes=notes)
+                    opp_mean=theirs['FPTS'][0], opp_var=theirs['FPTS'][1], notes=notes, contested=contested)
     select_pool(inst)
     return inst, label
 
@@ -896,6 +899,23 @@ def _note(inst, m, n_add):
     return 'activate' if not d.out else 'back to the active roster'
 
 
+def waiver_watch(lg, week, suffix, inst, opponent, roster):
+    """[{player, fpg, clears, drop, day, gain}]: the contested waiver players kept out of the plan, each with what winning him is
+    worth (the best single drop, change in P(win) of the week; lineup_optimizer.rank_moves). A claim on him is a bid, not a
+    plan: nobody can promise he is still there."""
+    import lineup_optimizer as lo
+    if not inst.contested:
+        return []
+    _, theirs = week.opponent(opponent, suffix)
+    if theirs is None:
+        return []
+    keep = {p for p, d in inst.players.items() if d.owned and d.undroppable}
+    moves, _ = lo.rank_moves(week, list(roster), theirs, suffix, inst.contested, keep, list(roster))
+    return [{'player': m.add, 'fpg': round(float(week.stats[m.add].get(f'FPTS{suffix}') or 0.0), 1),
+             'clears': week.waivers[m.add].isoformat(), 'drop': m.drop, 'day': m.day.isoformat(), 'gain': round(m.gain, 4)}
+            for m in moves if m.gain > 0]
+
+
 def end_state(roster, il, moves):
     """(active, IL) after a plan's moves, in order (add, drop, IL in/out)."""
     roster, il = list(roster), list(il)
@@ -963,6 +983,7 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None,
                  # next-2-weeks value of the week-end roster minus today's (keep_values; negative = the plan sells future value)
                  'keep_total': round(plan.meta['keep_end'] - sum(d.keep for d in inst.players.values() if d.owned), 1)},
         'opponent_points': round(inst.opp_mean, 1),
+        'waiver_watch': waiver_watch(lg, week, suffix, inst, opponent, (roster_il or lo._active_roster(lg))[0]),
         'days': days, 'do_today': days[0]['transactions'],
         'warnings': warnings, 'assumptions': ASSUMPTIONS,
         'solver': {'solves': plan.meta['solves'], 'solve_s': plan.meta['total_s'], 'dstar': plan.meta['dstar'],

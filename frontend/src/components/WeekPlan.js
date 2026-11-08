@@ -71,6 +71,17 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', afterPrevious = 
               </div>
             ))}
           </div>
+          {plan.waiver_watch && plan.waiver_watch.length > 0 && (
+            <div className="mt-2 rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-xs text-gray-300"
+                 title="Too good to be left on waivers: another team will likely claim him, so the plan does not count on him. A claim is a bid, not a plan.">
+              <span className="font-semibold text-sky-300">Waiver watch</span> (not in the plan, contested)
+              {plan.waiver_watch.map(w => (
+                <div key={w.player} className="mt-0.5">
+                  <PlayerName name={w.player} /> <span className="text-gray-400">{w.fpg}/g, clears {shortDate(w.clears)}</span>: <span className="text-green-300 tabular-nums">+{(w.gain * 100).toFixed(1)}</span> win chance if you get him{w.drop ? <> for <PlayerName name={w.drop} /></> : ''}
+                </div>
+              ))}
+            </div>
+          )}
           {plan.warnings.map((w, i) => <p key={i} className="text-xs text-amber-300 mt-1.5">{w}</p>)}
         </>
       )}

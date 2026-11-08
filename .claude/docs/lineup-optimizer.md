@@ -94,6 +94,9 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
   cutoff (PJ Washington 33.5, Porzingis) is left out of the plan's pool: another team claims him before he clears and the plan used
   to say "add PJ Thursday"; one inside or just above it (Aldama 27.3, Kuzma 26.9) stays plannable from his clearing date. (2) My own
   players above the cutoff are undroppable in the plan (Paul Reed 30.5 was being dropped): nothing on the wire comes close. Two cruder
+  **Waiver watch:** the contested players are not hidden: `waiver_watch` in the `/api/plan` payload (a card under the plan) lists each with what
+  winning him is worth (`rank_moves` best drop, change in P(win)): 2026-11-08 next week, PJ Washington +4.4% for Wagler. A claim on him is
+  a bid (Courtside has FAAB, budget 100, not tracked), not a plan. Two cruder
   versions were tried and dropped the same day: "nobody on waivers" (removed players nobody takes) and "nothing at or above the
   market is dropped" (left only Hezonja droppable, next week's plan did nothing). Pickup rows elsewhere still show waiver players with
   the sky "W <day>" chip and the manual undroppable flags are separate.
