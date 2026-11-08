@@ -57,8 +57,17 @@ def _parse(reply, norm_name):
     return out
 
 
+def _day_or_empty(reply, data, norm_name):
+    """A day with no NBA games (Election Day 2026-11-03) answers with the PREVIOUS scoring day's lineups, its own date
+    in `displayedSelections.date`; counting that again doubled Monday's lines (2026-11-08: 4-5 in the app, 5-4 on Fantrax)."""
+    served = reply.get('displayedSelections', {}).get('date')
+    if data.get('viewType') == '1' and served and served != data['date']:
+        return {}
+    return _parse(reply, norm_name)
+
+
 def _fetch(league_id, key, max_age, norm_name, **data):
-    return canon.cached((PLATFORM, league_id, *key), max_age, lambda: _parse(_call(league_id, **data), norm_name))
+    return canon.cached((PLATFORM, league_id, *key), max_age, lambda: _day_or_empty(_call(league_id, **data), data, norm_name))
 
 
 def fetch_day(league, day, today, norm_name):
