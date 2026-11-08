@@ -51,6 +51,9 @@ const rotTip = (player, points) => {
 const rosTip = (p, points) => p.ros_rank == null ? undefined :
   `Rest of season #${p.ros_rank}: ${points && p.ros_fpts != null ? `${p.ros_fpts} FPTS` : `${p.ros_value} (z over the pool edge x games)`}. ` +
   `${p.ros_games} games, ${p.ros_min} min expected`;
+// Minutes surge (role_minutes.surges): last 3 games' minutes vs his earlier games this season, >= +4 only, with the
+// teammates behind it and how much of such a jump usually holds next game. Display only.
+const surgeTip = (s) => s && `Minutes up ${s.min > 0 ? '+' : ''}${s.min}: last 3 games ${s.recent} min vs ${s.before} before. ${s.why}`;
 const PLAYER_W ='w-[10.375rem] min-w-[10.375rem] max-w-[10.375rem] sm:w-60 sm:min-w-[15rem] sm:max-w-[15rem]';
 
 const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, priceExponent = null, config, statType = 'projected', punts: puntCategories = [], onPuntsChange }) => {
@@ -333,6 +336,11 @@ const PlayerTable = ({ players, fantasyTeams, onDraftPlayer, onUndraftPlayer, pr
                       </div>
                       <div className="text-[11px] text-gray-400 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                         <span>{player.positions?.length ? player.positions.join('/') : player.position} · {player.team_abv || 'N/A'}</span>
+                        {player.surge && (
+                          <span className={`font-semibold ${player.surge.kind === 'back' ? 'text-gray-300' : 'text-green-400'}`} title={surgeTip(player.surge)}>
+                            · +{Math.round(player.surge.min)}m
+                          </span>
+                        )}
                         {weeks.length > 0 && (
                           <span className="text-gray-300" title={weeks.map(w => `${w.n} games ${w.range}`).join(' · ')}>
                             · {weeks.map(w => w.n).join(' + ')} GP

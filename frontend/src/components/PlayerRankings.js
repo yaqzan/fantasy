@@ -21,7 +21,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
   const chips = caps.positions?.length ? caps.positions : ['G', 'F', 'C'];
   const [view, setView] = useLeagueViewState(config.league?.id, 'players', {
     statType: config.default_stat_type || 'projected', positions: chips, available: true, healthy: true,
-    priceExponent: null, punts: [], tonight: false, tomorrow: false, opp: false, likely: false,
+    priceExponent: null, punts: [], tonight: false, tomorrow: false, opp: false, likely: false, surge: false,
   }, (picked) => ({
     ...validStat(config)(picked),
     ...(picked.punts && { punts: picked.punts.filter(c => categoryKeys.includes(c)) }),
@@ -46,11 +46,12 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
       && (!view.healthy || !player.is_injured)
       && (!view.tonight || player.plays_today)
       && (!view.tomorrow || player.plays_tomorrow)
+      && (!view.surge || player.surge)
       && (!rotationOn || !view.opp || (player.rotation && !player.rotation.inactive && player.rotation.opp >= 2))
       && (!rotationOn || !view.likely || (player.rotation && player.rotation.p >= 0.8));
   });
   const changed = [view.statType !== (config.default_stat_type || 'projected'), showPositionFilter && view.positions.length !== chips.length,
-    caps.auction && view.priceExponent != null, !view.available, !view.healthy, view.tonight, view.tomorrow, rotationOn && view.opp, rotationOn && view.likely].filter(Boolean).length;
+    caps.auction && view.priceExponent != null, !view.available, !view.healthy, view.tonight, view.tomorrow, view.surge, rotationOn && view.opp, rotationOn && view.likely].filter(Boolean).length;
   const lever = filtersOpen ? 'flex' : 'hidden sm:flex';
   const togglePosition = (chip) => setView(v => ({
     positions: v.positions.includes(chip) ? v.positions.filter(p => p !== chip) : [...v.positions, chip],
@@ -134,6 +135,10 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
             <label className="flex items-center" title="Only players whose team plays on this Eastern date">
               <input type="checkbox" checked={view.tomorrow} onChange={(e) => setView({ tomorrow: e.target.checked })} className={checkboxClass} />
               <span className="ml-2 text-sm text-gray-300">Tomorrow ({dayLabel(1)})</span>
+            </label>
+            <label className="flex items-center" title="Last 3 games average at least 4 more minutes than his earlier games this season (hover the +Nm next to his team for why and whether it holds)">
+              <input type="checkbox" checked={view.surge} onChange={(e) => setView({ surge: e.target.checked })} className={checkboxClass} />
+              <span className="ml-2 text-sm text-gray-300">Minutes up</span>
             </label>
             {rotationOn && <>
               <label className="flex items-center" title="Teammates who are out give him at least 2 extra minutes tonight (NBA lineup sheet; only teams with a posted lineup)">

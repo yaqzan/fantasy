@@ -7,6 +7,7 @@ import OwnerChip from './OwnerChip';
 // `rotation` payload (nba_rotation.py + role_minutes.py): his chance to play (p), minutes if he plays (mif) against his
 // usual (base), the change against what his projection carries (opp), and in points leagues the expected FPTS if he
 // plays (fpts) and the gain over his projection (gain), plus a one-line reason (why: "Duren out (back ~Nov 9): +8 min").
+// `surge` (role_minutes.surges, any player): last 3 games' minutes vs his earlier games, the cause and how much usually holds.
 // Ranked by expected FPTS x chance to play (points) or by the minutes change (categories). A * = lineup not confirmed.
 const checkboxClass = 'h-4 w-4 text-nba-orange focus:ring-nba-orange border-gray-600 rounded bg-gray-700';
 const LIMIT = 60;
@@ -69,6 +70,11 @@ const TonightPickups = ({ players, config }) => {
                   {taken && <OwnerChip person={p.fantasy_team.owner_name} team={p.fantasy_team.name} />}
                 </div>
                 {r.why && r.opp >= 0.5 && <div className="text-xs text-emerald-400/90 mt-0.5">{r.why}</div>}
+                {p.surge && (
+                  <div className="text-[11px] text-gray-400 mt-0.5">
+                    <span className={p.surge.kind === 'back' ? 'text-gray-300' : 'text-green-400'}>Minutes up {sign(p.surge.min)} last 3 ({p.surge.recent} vs {p.surge.before})</span>: {p.surge.why}
+                  </div>
+                )}
                 <div className="text-[11px] text-gray-500 mt-0.5">{r.mif} min if he plays (usual {r.base}){r.confirmed ? '' : ' *'}</div>
               </div>
               <div className="text-right shrink-0 tabular-nums">

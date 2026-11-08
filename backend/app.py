@@ -22,6 +22,7 @@ from leagues import (POINT_STATS, get_league, list_leagues, create_league, updat
                      generate_weeks, category_meta, CATEGORY_CATALOG, DEFAULT_SETTINGS, NotFound)
 from datetime import date, datetime, timedelta
 import nba_rotation as rotation
+import role_minutes
 from daily_leaders import NBA_TZ
 
 app = Flask(__name__, static_folder=None)  # /static/* belongs to the React build (serve_frontend)
@@ -268,6 +269,11 @@ def get_fantasy_players():
     rot = rotation.get_state()   # built by a background thread, never here
     rot_players = rotation.current(today)
     points_league = league.categories == ['FPTS']
+    try:   # recent minutes jumps with their cause (display only; role_minutes.surges, rotation.md "Minutes surge")
+        surge = role_minutes.surges(today)
+    except Exception as e:
+        print(f'surges: {e}')
+        surge = {}
     for player_name, stats in top:
         player = players_by_name.get(player_name)
         team_name = player.team if player and player.team else "Unknown"
@@ -332,6 +338,7 @@ def get_fantasy_players():
             'injured_games': ((player.injured_games_to_miss or None) if out else None),
             'nba_year': stats.get('NBA_YEAR'),
             'rotation': _rotation_json(rot_players.get(player.id) if player else None, stats, points_league),
+            'surge': surge.get(player.id) if player else None,
             **_ros_json(stats, league),
             'what_if': _what_if_json(stats_all, league, player_name),
             'is_undroppable': player_name in undroppable,

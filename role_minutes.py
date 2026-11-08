@@ -211,6 +211,7 @@ class Season:
         self.psw = defaultdict(float)     # (team, i) -> decayed games (pair weights)
         self.streak = defaultdict(int)    # (team, p) -> team games missed in a row
         self.last_team = {}
+        self.absent = {}                  # (team, date) -> {member who did not play: his H then} (surges())
         mem = self._members()
         self.members_last = {t: mem[(t, d[-1])] for t, d in self.seqs.items() if d}
         for t, d in sorted(((t, d) for (t, d) in self.lines), key=lambda k: (k[1], k[0])):
@@ -222,12 +223,14 @@ class Season:
             HA = np.array([self.H(p) if self.H(p) is not None else 8.0 for p in A])
             X = np.zeros((len(A), 2)); outsets = [set() for _ in A]
             top5 = set(np.array(A)[np.argsort(-HA)[:5]])
+            absent = self.absent[(t, d)] = {}
             for j in M:
                 if j in g:
                     continue
                 h = self.H(j)
                 if h is None or h < self.out_min:
                     continue
+                absent[j] = h
                 a1, a2 = self._alloc(A, HA, np.ones(len(A)), j, t)
                 X[:, 0] += h * a1; X[:, 1] += h * a2
                 for i in np.nonzero(h * a1 >= self.m['walk']['pair_min_alloc'])[0]:
@@ -585,11 +588,109 @@ def reason_text(r, reports, s):
     pid = next((k for k, v in s.names.items() if v == name), None)
     rep = reports.get(pid) if pid is not None else None
     back = rep.get('return_date') if rep else None
-    parts = [w for w in (name or '?').split(' ') if w.rstrip('.').lower() not in ('jr', 'sr', 'ii', 'iii', 'iv')]
-    last = f'{parts[0][0]}. {parts[-1]}' if len(parts) > 1 else (parts[-1] if parts else name)   # initial + surname: two Williams on one team
     when = f' (back ~{back:%b} {back.day})' if back else ''
     sure = '' if p >= 0.95 else f' ({round(p * 100)}% out)'
-    return f'{last} out{when}{sure}: +{mins:.0f} min', back.isoformat() if back else None
+    return f'{_short(name)} out{when}{sure}: +{mins:.0f} min', back.isoformat() if back else None
+
+
+def _short(name):
+    """'J. Williams': initial + surname (two Williams on one team), suffixes dropped."""
+    parts = [w for w in (name or '?').split(' ') if w.rstrip('.').lower() not in ('jr', 'sr', 'ii', 'iii', 'iv')]
+    return f'{parts[0][0]}. {parts[-1]}' if len(parts) > 1 else (parts[-1] if parts else name)
+
+
+# ---------------------------------------------------------------- minutes surge (diagnostic, not in any projection)
+# A recent jump in minutes: mean of his last SURGE_GAMES games for his current team minus his earlier games there.
+# Cause = a teammate (H >= CAUSE_H then) absent in >= 2 of those games and in at most a third of the earlier ones.
+# HOLD = share of the jump he kept the next game he played, by whether the causes were out that game and by how many
+# earlier games "before" rests on (few = a noisy, low level, so more of the jump holds); 2013-14..2025-26 game logs,
+# surge >= 4, n = 68,176 (.horizon/minutes-surge/backtest.py, review/bt_ne.py; rotation.md "Minutes surge").
+SURGE_GAMES, SURGE_MIN, CAUSE_H = 3, 4.0, 12.0
+STALE_GAMES = 2          # he missed the team's last this many games or more: no surge shown (it is history, not a role)
+HOLD = {2: {'out': 1.05, 'back': 0.69, 'mixed': 0.87, 'none': 0.88},       # earlier games <= key
+        5: {'out': 0.95, 'back': 0.56, 'mixed': 0.74, 'none': 0.68},
+        10: {'out': 0.85, 'back': 0.43, 'mixed': 0.72, 'none': 0.70},
+        None: {'out': 0.78, 'back': 0.37, 'mixed': 0.61, 'none': 0.58}}
+
+
+def hold_rates(n_early):
+    """HOLD row for a 'before' level resting on n_early games."""
+    return next(HOLD[k] for k in (2, 5, 10, None) if k is None or n_early <= k)
+_surge_cache = {}
+
+
+def surges(today=None):
+    """{pid: {'min', 'recent', 'before', 'kind', 'hold', 'causes': [{'name', 'p', 'back'}], 'why'}} for players whose
+    last SURGE_GAMES games average >= SURGE_MIN minutes more than their earlier games this season. kind: 'out' (every
+    cause likely out next game, p >= .5: tonight's sheet, ESPN date, Yahoo status, streak), 'back' (none is), 'mixed',
+    'none' (no absence behind it: a role change). Cached 5 min. {} if the model can't be built. Display only: the
+    projection and the optimizer factor never read it."""
+    from daily_leaders import nba_today
+    today = today or nba_today()
+    s = season(today)
+    if s is None:
+        return {}
+    hit = _surge_cache.get(today)
+    if hit and hit[0] is s and time.time() - hit[1] < 300:
+        return hit[2]
+    ctx = context(today, tonight_sheet(today))
+    out = {}
+    for p, hist in s.hist.items():
+        team = s.roster.get(p)
+        games = [x[1] for x in hist if x[0] == team]
+        if team is None or len(games) <= SURGE_GAMES:
+            continue
+        seq = s.seqs.get(team, [])
+        if seq and len(seq) - 1 - seq.index(games[-1]) >= STALE_GAMES:
+            continue
+        mins = [s.lines[(team, d)][p][0] for d in games]
+        recent, before = float(np.mean(mins[-SURGE_GAMES:])), float(np.mean(mins[:-SURGE_GAMES]))
+        if recent - before < SURGE_MIN:
+            continue
+        sets = [{j for j, h in s.absent.get((team, d), {}).items() if h >= CAUSE_H} for d in games]
+        early, late = sets[:-SURGE_GAMES], sets[-SURGE_GAMES:]
+        cands = set().union(*late)
+        causes = sorted((j for j in cands if sum(j in x for x in late) >= 2 and sum(j in x for x in early) <= len(early) / 3),
+                        key=lambda j: -(s.H(j) or 0))
+        nxt = (s.schedule(team) or [None])[0]
+        cs = []
+        for j in causes:
+            rep = ctx['reports'].get(j) or {}
+            back = rep.get('return_date')
+            pj = s.p_out(j, team, nxt, 1, ctx) if nxt else 1.0
+            full = s.names.get(j, str(j))
+            nm = _short(full)
+            clash = any(_short(s.names.get(q, '')) == nm for q in s.members_now(team) | {p} if q != j)
+            cs.append({'name': full if clash else nm,   # OKC: Jalen and Jaylin Williams are both "J. Williams"
+                       'p': round(pj, 2), 'back': back.isoformat() if back else None})
+        still = [c['p'] >= 0.5 for c in cs]
+        kind = 'none' if not cs else 'out' if all(still) else 'back' if not any(still) else 'mixed'
+        rates = hold_rates(len(games) - SURGE_GAMES)
+        out[p] = {'min': round(recent - before, 1), 'recent': round(recent, 1), 'before': round(before, 1), 'kind': kind,
+                  'hold': min(rates[kind], 1.0), 'causes': cs, 'why': _surge_why(kind, cs, rates)}
+    _surge_cache.clear()
+    _surge_cache[today] = (s, time.time(), out)
+    return out
+
+
+def _surge_why(kind, cs, rates):
+    """One line: who is behind the jump and how much of it such jumps keep next game (a HOLD row)."""
+    def pct(k):
+        return 'all' if rates[k] >= 1.0 else f'~{rates[k]:.0%}'
+
+    def named(c):
+        b = date.fromisoformat(c['back']) if c['back'] else None
+        return c['name'] + (f' (back ~{b:%b} {b.day})' if b and c['p'] >= 0.5 else '')
+    out_now = [named(c) for c in cs if c['p'] >= 0.5][:3]
+    back_now = [c['name'] for c in cs if c['p'] < 0.5][:3]
+    if kind == 'none':
+        return f"No teammate absence behind it: a role change. Such jumps keep {pct('none')} next game"
+    if kind == 'out':
+        return (f"{', '.join(out_now)} out. Such jumps keep {pct('out')} while the absence lasts, "
+                f"{pct('back')} once back")
+    if kind == 'back':
+        return f"{', '.join(back_now)} back. Such jumps keep {pct('back')} next game"
+    return f"{', '.join(out_now)} still out, {', '.join(back_now)} back. Such jumps keep {pct('mixed')} next game"
 
 
 if __name__ == '__main__':

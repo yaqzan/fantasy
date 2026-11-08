@@ -75,6 +75,29 @@ Data: game logs 2013-14..2025-26 (`.horizon/preseason-2026/data/rs_*.csv`; MySQL
   nothing, and it carried the worst outliers); ROS = U x availability (projections.md "Rest of season").
 - **Not done**: a player's OWN return date in the optimizer or the ROS games (O/INJ = out all week still; the factor only moves his teammates).
 
+## Minutes surge (2026-11-08): `role_minutes.surges`
+Owner: "isolate who's given new opportunities" and whether it lasts ("a missing starter ... apply based on when he returns").
+**Display only**: the projection (U already weights his last ~5 games heavily) and the optimizer factor never read it
+(the raw-freed-minutes trap above). Research `.horizon/minutes-surge/` (backtest.py, backtest2.py, live.py).
+- **Surge** = mean of his last 3 games (normalised minutes, current team) minus his earlier games there this season (>= 1); shown at >= +4.
+  **Cause** = a teammate with H >= 12 at the time, absent in >= 2 of the 3 and in at most a third of the earlier games
+  (`Season.absent`, filled in the walk). Kind from each cause's chance to sit the NEXT game (`Season.p_out`: sheet, ESPN date,
+  Yahoo, streak; >= .5 = out): out / back / mixed / none (no absence: a role change). A player who missed the team's last 2+
+  games shows none (`STALE_GAMES`: Mogbo fell out of the rotation, Capela was hurt, both still showed +12).
+  A clashing short name on the team gets the full name (OKC's Jalen and Jaylin Williams).
+- **Hold** (share of the jump kept the next game he plays; 2013-14..2025-26 logs, surge >= 4, n = 68,176, 90% player-season bootstrap):
+  pooled: causes still out .81 [.80,.82], all back .42 [.39,.43], mixed .64, no cause .64 [.63,.66]; over the next 3 games
+  .73 / .45 / .60 / .62. **Served by how many earlier games "before" rests on** (`HOLD`; few = a noisy low level, more holds):
+  <= 2: out 1.05 / back .69 / mixed .87 / none .88; 3-5: .95 / .56 / .74 / .68; 6-10: .85 / .43 / .72 / .70; 11+: .78 / .37 / .61 / .58
+  (shown capped at "all"). Bigger jumps (>= 8) hold a bit more. Last season's mpg blended into "before" (3/5/10 games) did not help.
+  Reviewed by an Opus agent (`.horizon/minutes-surge/review/`): rule matches the backtest; the bucketing, stale skip and name clash are its fixes.
+- Payload `/api/fantasy` `surge` {min, recent, before, kind, hold, causes [{name, p, back}], why}; 5-min cache, ~0.4 s cold on the
+  cached Season. UI: Player Rankings "+Nm" after the team (green; grey when the cause is back; tooltip = why) and filter
+  "Minutes up"; Tonight cards a line under the name. Checked 2026-11-08: Walter Clayton Jr. +11.2 (22.5 vs 11.3), none, ~68% (Aldama
+  out in every game, back 11-06, Clayton still 22.9); Danny Wolf +5.7 (20.7 vs 15.0), out (Demin back ~Nov 11, Saraf, Powell).
+  Of the 31 "out" kinds that day 23 rest on the streak table alone (no ESPN date), so "until he returns" is often a guess.
+- Not done: feeding the hold rate into U or the factor (needs a walk-forward test against U + the role delta, `.horizon/review-U/walk_u.py`).
+
 ## Next
 1. Refit monthly (`python rotation_fit.py --write`); add 2026-27 to the training set once it has ~500 team-games. Role minutes: rerun `.horizon/role-minutes` build.py -> walk2.py -> hazard.py -> evaluate.py -> future.py -> export.py after a season (game logs needed: the preseason-2026 CSVs + `game_lines`).
 2. Score ESPN return dates (`python injury_score.py`) after ~3 weeks; replace SLIP.
