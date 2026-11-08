@@ -1,11 +1,10 @@
-"""The last days of a fantasy week: claims judged on this week AND next week's matchup.
+"""Two-week claims: every claim judged on the rest of THIS week and on NEXT week's matchup.
 
-Claims reset every week, so the ones left when the week is nearly over are free capacity for the week ahead. In the
-last `LAST_DAYS` days each candidate claim (add, drop) is scored by the change in P(win) of the CURRENT week (from today
-on, through `Week.team` with the claim's window) plus the change in P(win) of the NEXT week (the roster without the
-drop and with the add, against next week's scheduled opponent), greedily up to the claims left. A win is a win, so
-the two are added as they are: a week already at 80% has little left to gain and the claims go where the leverage is,
-no separate "mode" to choose. Each claim says which week it pays for.
+Each candidate claim (add, drop) is scored by the change in P(win) of the CURRENT week (from today on, through
+`Week.team` with the claim's window) plus `NEXT_WEIGHT` x the change in P(win) of the NEXT week (the roster without
+the drop and with the add, against next week's scheduled opponent), greedily up to the claims left. The horizon rolls:
+on Monday "next week" is the week after. A week already at 80% has little left to gain, so the claims go where the
+leverage is, no separate "mode" to choose; each claim says which week it pays for.
 
 Claims land today (the ones that can't: a player still on waivers is skipped), drops are players whose game has not
 tipped. Yahoo daily points leagues, like the week plan (claim_planner.py), which this does not replace: it re-plans the
@@ -14,7 +13,7 @@ rest of this week, this adds next week to the question.
 import time
 import threading
 
-LAST_DAYS = 2      # the week's last N days (today included) are the pre-claim window
+NEXT_WEIGHT = 0.5  # next week counts this much in the ranking (less certain rosters/injuries; claim_planner.KEEP_WEEK_WEIGHTS)
 POOL = 200         # free agents (best Z-VALUE) tried for the first claim
 NEXT_POOL = 30     # later claims retry the best candidates of the claim before (lineup_optimizer.NEXT_CLAIM_POOL)
 MIN_GAIN = 1e-4    # lineup_optimizer's bar for "a claim helps"
@@ -29,22 +28,19 @@ def _inactive(reason):
 
 
 def last_days_plan(lg, timeframe=None):
-    """{supported, active, ...}: the claims worth making today for this week and next. `active` is False outside the
-    week's last LAST_DAYS days (with the reason)."""
+    """{supported, active, ...}: the claims worth making today for this week and next. `active` is False (with the
+    reason) when there is no next week, no claim left, or a healthy player in IL blocks adds."""
     import daily_leaders
     import lineup_optimizer as lo
     from claim_planner import unsupported_reason
     from fantasy_team_helper import (claims_left, get_current_fantasy_week_dates, get_next_week_dates,
                                      get_week_info_from_schedule, get_undroppable_players)
     from player_stats import default_stat_type
-    started = time.time()
     week_start, week_end, opponent = get_current_fantasy_week_dates(lg)
     reason = unsupported_reason(lg, week_start, week_end)
     if reason:
         return {'supported': False, 'reason': reason}
     today = daily_leaders.nba_today()
-    if (week_end - today).days >= LAST_DAYS:
-        return _inactive(f'Pre-claims open {LAST_DAYS} days before the week ends.')
     next_start, next_end = get_next_week_dates(lg, week_start)
     if not next_start:
         return _inactive('No week after this one.')
@@ -57,6 +53,8 @@ def last_days_plan(lg, timeframe=None):
     cur, nxt = lo.Week(lg, week_start, week_end), lo.Week(lg, next_start, next_end)
     roster, il = lo._active_roster(lg)
     owned = roster + il
+    if any(p not in cur.injured for p in il):   # Yahoo: a healthy player left in IL blocks every add (claim_planner's freeze)
+        return _inactive('A healthy player is still in IL, which blocks adds on Yahoo: activate him first.')
     if not any(p in cur.stats for p in roster):
         return {'supported': False, 'reason': 'No players on your team in this league yet.'}
     label_c, theirs_c = cur.opponent(opponent, suffix)
@@ -93,7 +91,7 @@ def last_days_plan(lg, timeframe=None):
                                 lo._claim_windows(windows, add, drop, day), ghosts + ([drop] if drop else []))
                 ec, kc1, _ = lo._value(c.totals, theirs_c, lg)
                 en, kn1, _ = lo._value(n.totals, theirs_n, lg)
-                m = {'add': add, 'drop': drop, 'key': (kc1 - kc) + (kn1 - kn), 'p_cur': ec, 'p_next': en, 'k_cur': kc1, 'k_next': kn1}
+                m = {'add': add, 'drop': drop, 'key': (kc1 - kc) + NEXT_WEIGHT * (kn1 - kn), 'p_cur': ec, 'p_next': en, 'k_cur': kc1, 'k_next': kn1}
                 if top is None or m['key'] > top['key']:
                     top = m
             if top:
@@ -103,9 +101,7 @@ def last_days_plan(lg, timeframe=None):
             break
         best = ranked[0]
         claims.append({'add': best['add'], 'drop': best['drop'],
-                       'gain_cur': round(best['p_cur'] - pc, 4), 'gain_next': round(best['p_next'] - pn, 4),
-                       'games_cur': len(cur.remaining.get(cur.stats[best['add']]['TEAM'], {})) if best['add'] in cur.stats else 0,
-                       'games_next': len(nxt.schedule.get(nxt.stats[best['add']]['TEAM'], {})) if best['add'] in nxt.stats else 0})
+                       'gain_cur': round(best['p_cur'] - pc, 4), 'gain_next': round(best['p_next'] - pn, 4)})
         pc, pn, kc, kn = best['p_cur'], best['p_next'], best['k_cur'], best['k_next']
         windows = lo._claim_windows(windows, best['add'], best['drop'], day)
         ghosts += [best['drop']] if best['drop'] else []
@@ -123,9 +119,8 @@ def last_days_plan(lg, timeframe=None):
                       'now': round(pn0, 4), 'after': round(pn, 4)},
         'claims': claims,
         'notes': ['Claims are made today: players still on waivers are left out, and so is anyone whose game is under way.',
-                  'Drops are free and a claim uses this week\'s allowance, which resets Monday.',
-                  'Next week\'s own claims and plan start from this roster.'],
-        'seconds': round(time.time() - started, 2),
+                  'An add uses one of this week\'s claims (drops are free); the allowance resets Monday.',
+                  f'Next week counts {NEXT_WEIGHT:g} x this week in the ranking; its own claims start from this roster.'],
     }
 
 

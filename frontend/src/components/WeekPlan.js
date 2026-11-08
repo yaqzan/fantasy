@@ -75,7 +75,7 @@ const WeekPlan = ({ week, statType, ready }) => {
           {pre && pre.active && (
             <div className="mt-2 rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-xs" title={pre.notes.join(' ')}>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-gray-300">
-                <span className="font-semibold text-gray-100">Claim today for next week too</span>
+                <span className="font-semibold text-gray-100">Claims for this week + next</span>
                 <span className="tabular-nums">This week <span className={`rounded px-1 py-0.5 font-semibold ${chanceClass(pre.this_week.now)}`}>{pct(pre.this_week.now)}</span> -&gt; <span className={`rounded px-1 py-0.5 font-semibold ${chanceClass(pre.this_week.after)}`}>{pct(pre.this_week.after)}</span></span>
                 <span className="tabular-nums">Next{pre.next_week.opponent ? ` v ${pre.next_week.opponent}` : ''} <span className={`rounded px-1 py-0.5 font-semibold ${chanceClass(pre.next_week.now)}`}>{pct(pre.next_week.now)}</span> -&gt; <span className={`rounded px-1 py-0.5 font-semibold ${chanceClass(pre.next_week.after)}`}>{pct(pre.next_week.after)}</span></span>
               </div>
@@ -89,6 +89,7 @@ const WeekPlan = ({ week, statType, ready }) => {
                 ))}
                 {!pre.claims.length && <span className="text-gray-400">No claim today helps either week.</span>}
               </div>
+              <div className="mt-1 text-gray-400">Weighs next week's matchup too (the plan above judges this week only).</div>
             </div>
           )}
           {plan.warnings.map((w, i) => <p key={i} className="text-xs text-amber-300 mt-1.5">{w}</p>)}
