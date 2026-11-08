@@ -148,6 +148,14 @@ def set_league_flags(league, player_id, **fields):
         LeaguePlayerFlag.create(league=league.id, player=player_id, **fields)
 
 
+def get_waiver_ids(league):
+    """{player id: the day he clears waivers} for this league's players still on waivers (get_waiver_dates, by id)."""
+    rows = (LeaguePlayerFlag.select(LeaguePlayerFlag.player, LeaguePlayerFlag.waiver_until)
+            .where((LeaguePlayerFlag.league == league.id) & LeaguePlayerFlag.waiver_until.is_null(False)
+                   & (LeaguePlayerFlag.waiver_until >= date.today())))
+    return {r.player_id: r.waiver_until for r in rows}
+
+
 def get_waiver_dates(league):
     """{player name: the day he clears waivers} for this league's players still on waivers."""
     rows = (LeaguePlayerFlag.select(Player.name, LeaguePlayerFlag.waiver_until).join(Player)

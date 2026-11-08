@@ -261,6 +261,7 @@ function PlayerCard({ target, open, onClose }) {
     : orderColumns(card.categories)) : [];
   const ownerChip = card && (card.owner === 'mine' ? <Chip className="border-mine text-mine">My team</Chip>
     : card.owner === 'taken' ? <Chip>{card.owner_name}</Chip>
+    : card.waiver_until ? <Chip className="border-yellow-500 text-yellow-300">{`Waivers: clears ${new Date(`${card.waiver_until}T12:00`).toLocaleDateString('en-US', { weekday: 'short' })}`}</Chip>
     : <Chip className="border-green-500 text-green-400">Free agent</Chip>);
 
   return (

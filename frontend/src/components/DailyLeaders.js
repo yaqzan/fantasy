@@ -3,6 +3,7 @@ import { getDailyLeaders, errorMessage } from '../services/api';
 import useLeagueViewState from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
 import OwnerChip from './OwnerChip';
+import WaiverChip from './WaiverChip';
 import { BOX_COLUMNS, OWNER_FILTERS, orderColumns, paceMark, valueClass, fptsClass, paceDeltaClass, inGame, cellText, zAura, keepRow, isMine, ownerKey, orderGames, ownerKeys, toggleOwner, sortRows, defaultSort, paceRanks, worstDrag } from '../dailyLeaders';
 
 // Every stat line of a day, live, ranked by the selected league's scoring (points leagues: their
@@ -411,6 +412,7 @@ const DailyLeaders = ({ config }) => {
                         <div className="w-5 shrink-0 flex flex-col items-center gap-0.5">
                           <span className="text-gray-500 tabular-nums text-[11px] leading-none">{p.dnp ? '–' : ranks ? ranks[p.espn_id] : p.rank}</span>
                           {p.owner === 'taken' && <OwnerChip person={p.owner_person} team={p.owner_name} />}
+                          {p.owner === 'free' && p.waiver_until && <WaiverChip day={p.waiver_until} />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 min-w-0">

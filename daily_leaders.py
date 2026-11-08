@@ -619,6 +619,8 @@ def daily_leaders(league, day=None, force=False):
     from player_stats import is_preseason, season_first_game, season_window
     scale = None if league.is_points else league_scale(league)
     names, owned, bases = _name_index(), owners(league), _by_name(league)
+    from fantasy_team_helper import get_waiver_ids
+    waivers = get_waiver_ids(league)   # a free row on waivers is yellow, not green
     mine_any = my_players_everywhere()
     streaks_on = not is_preseason()
     states = {t['abbr']: g for g in s['scoreboard'] for t in g['teams']}
@@ -635,6 +637,7 @@ def daily_leaders(league, day=None, force=False):
                 'owner': ('mine' if team[0] == league.my_team else 'taken') if team else 'free',
                 'owner_abv': team[0] if team else None, 'owner_name': team[1] if team else None,
                 'owner_person': team[2] if team else None,
+                'waiver_until': waivers[pid].isoformat() if not team and pid in waivers else None,
                 'vs_me': bool(team and versus and team[0] == versus),
                 'game_state': game['state'] if game else None,
                 'game_period': game['period'] if game else None, 'game_clock': game['clock'] if game else None,
@@ -668,6 +671,7 @@ def daily_leaders(league, day=None, force=False):
                 'mine_any': pid in mine_any,
                 'owner': 'free' if team[0] is None else 'mine' if team[0] == league.my_team else 'taken',
                 'owner_abv': team[0], 'owner_name': team[1], 'owner_person': team[2], 'vs_me': bool(versus and team[0] == versus),
+                'waiver_until': waivers[pid].isoformat() if team[0] is None and pid in waivers else None,
                 'game_state': 'post', 'game_period': g.get('period'), 'game_clock': g.get('clock'),
                 'game_result': _result(g, d['team']), 'on_court': None, 'preseason': bool(g.get('preseason')),
             })

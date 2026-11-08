@@ -63,7 +63,7 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', afterPrevious = 
                   {day.transactions.map((tx, i) => (
                     <span key={i} className={`rounded px-1.5 py-0.5 break-words min-w-0 ${TX[tx.type].cls}`} title={tx.note}>
                       {TX[tx.type].label} <PlayerName name={tx.player} />
-                      {tx.bid && <span className="ml-1 rounded px-1 bg-sky-900/70 text-sky-300" title="On waivers and wanted by other teams: this is a FAAB bid. If you lose it the plan is re-made.">bid</span>}
+                      {tx.bid && <span className="ml-1 rounded px-1 border border-yellow-500/60 bg-yellow-500/15 text-yellow-300" title="On waivers and wanted by other teams: this is a FAAB bid. If you lose it the plan is re-made.">bid</span>}
                     </span>
                   ))}
                   {!day.transactions.length && !day.frozen && !day.today && <span className="text-gray-500 py-0.5">-</span>}

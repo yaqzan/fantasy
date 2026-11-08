@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 from daily_leaders import _ratio, game_value, league_scale, league_stats, nba_today, owners, score_line, slate
 from fantasy_database import Game, GameLine, Player, PlayerSeason, PreseasonLine, Team
-from fantasy_team_helper import OUT_STATUSES, get_current_fantasy_week_dates
+from fantasy_team_helper import OUT_STATUSES, get_current_fantasy_week_dates, get_waiver_ids
 from game_log import season_label
 from leagues import CATEGORY_CATALOG, category_meta, fantasy_points
 
@@ -264,6 +264,7 @@ def card(league, player_id=None, name=None):
         'rank': stats.get('Z-RANK_projected') or None, 'rank_season': stats.get('Z-RANK') if n else None,
         'owner': ('mine' if team[0] == league.my_team else 'taken') if team else 'free',
         'owner_name': team[1] if team else None, 'next_game': nxt,
+        'waiver_until': (get_waiver_ids(league).get(player.id).isoformat() if get_waiver_ids(league).get(player.id) else None) if not team else None,
         'scoring': 'points' if points else 'categories', 'season': season,
         'categories': meta, 'averages': rows,
         'delta_base': 'season' if n >= DELTA_SEASON_GAMES else ('adj' if any(r['key'] == 'adj' for r in rows) else None),

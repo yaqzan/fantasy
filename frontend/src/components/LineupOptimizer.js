@@ -5,6 +5,7 @@ import { PlayerName } from './PlayerCard';
 import { WeekSelect, defaultWeekStart, validWeek, selectClass, shortDate, weekdayLetter, weekDays } from '../weeks';
 import { orderColumns } from '../dailyLeaders';
 import WeekPlan from './WeekPlan';
+import WaiverChip from './WaiverChip';
 
 const pct = (x) => `${Math.round(x * 100)}%`;
 const signed = (x, digits = 2) => `${x > 0 ? '+' : x < 0 ? '-' : ''}${Math.abs(x).toFixed(digits)}`;
@@ -529,7 +530,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                         <span className="whitespace-nowrap">{plays(c.plays)}/{c.games} games</span>
                         <span className="truncate">
                           {c.day > (progress.today || data.week_start) && <span className="text-nba-orange" title="The best day to claim him: he replaces the drop from then">from {dayName(c.day)}</span>}
-                          {c.waiver_from && <span className="ml-2 px-1 rounded bg-sky-500/20 text-sky-300" title={`On waivers (FAAB auction): a claim lands from ${dayName(c.waiver_from)}`}>W {dayName(c.waiver_from)}</span>}
+                          {c.waiver_from && <WaiverChip day={c.waiver_from} className="ml-2" />}
                           {c.small_sample && <span className="ml-2 text-amber-400" title="Small sample: his numbers come from only a few games">{c.gp} GP</span>}
                         </span>
                         <DayDots days={days} played={c.days} />
