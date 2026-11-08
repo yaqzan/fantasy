@@ -115,10 +115,11 @@ class Week:
         return max(self.week_start, self.actual.today) if self.actual else self.week_start
 
     def first_claim_day(self, name):
-        """The first day a claim on him can take effect. A player on waivers (`waivers`: the day the auction ends)
-        processes overnight, so he joins the roster the day AFTER it; a plain free agent can be claimed now."""
+        """The first day a claim on him can take effect. A player on waivers (`waivers`: the date Yahoo shows him
+        clearing, `waiver_date`) is claimable from that day (owner saw PJ Washington listed Nov 10, 2026); a plain
+        free agent can be claimed now."""
         cleared = self.waivers.get(name)
-        return max(self.start_day, cleared + timedelta(days=1)) if cleared else self.start_day
+        return max(self.start_day, cleared) if cleared else self.start_day
 
     def add_games(self, name):
         """The days of his team's games a claim could still catch (unplayed, not under way, and not before he

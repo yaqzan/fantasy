@@ -523,7 +523,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                         <span className="whitespace-nowrap">{plays(c.plays)}/{c.games} games</span>
                         <span className="truncate">
                           {c.day > (progress.today || data.week_start) && <span className="text-nba-orange" title="The best day to claim him: he replaces the drop from then">from {dayName(c.day)}</span>}
-                          {c.waiver_from && <span className="ml-2 px-1 rounded bg-sky-500/20 text-sky-300" title={`On waivers (FAAB auction): a claim only lands from ${dayName(c.waiver_from)}`}>W {dayName(c.waiver_from)}</span>}
+                          {c.waiver_from && <span className="ml-2 px-1 rounded bg-sky-500/20 text-sky-300" title={`On waivers (FAAB auction): a claim lands from ${dayName(c.waiver_from)}`}>W {dayName(c.waiver_from)}</span>}
                           {c.small_sample && <span className="ml-2 text-amber-400" title="Small sample: his numbers come from only a few games">{c.gp} GP</span>}
                         </span>
                         <DayDots days={days} played={c.days} />
