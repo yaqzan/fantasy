@@ -18,6 +18,7 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 | Claims already used this week | `fantasy_team_helper.claims_left` (Yahoo only) |
 | Per-day minutes factor (teammates out / back, ESPN return dates, tonight's sheet) | `role_minutes.factors` via `Week.minutes_factor(suffix)`; model in rotation.md "Role-aware minutes" |
 | Week plan (ILP: adds, drops, IL moves, claim days; Yahoo daily points leagues) | `claim_planner.py` (`week_plan`, `solve`, `score_judge`, `keep_values`), `/api/plan`; card `components/WeekPlan.js` |
+| Pre-claims (last 2 days of a week: claims judged on this week + next week's matchup; same leagues) | `last_days.py` (`last_days_plan`), `/api/last-days`; section in `components/WeekPlan.js` |
 | Page | `frontend/src/components/LineupOptimizer.js`; API client `services/api.js` (`analyze`, `pickups`, `getPlan`); sibling `WeeklyPickups.js` |
 | Crowded day: who to start (the Start tab; daily category leagues, all-UTIL slots) | `start_day.py` (`status`, `lineups`), `/api/start-day[/status]`; `components/StartDay.js`, tab logic in `App.js` |
 | Terminal | `python lineup_optimizer.py <league> proj [moves] [plan]` ; `python claim_planner.py <league>` |
@@ -109,6 +110,23 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
 - **Cost:** one Week build + 7 Yahoo `team/.../roster;date=D` GETs (4 threads, cached 30 min in memory, one burst at a
   time) + ~8 MILPs (~0.05 s each; live Courtside 2026-11-02: 1 MILP, 0.07 s, endpoint ~4.5 s cold). Keep values:
   ~0.23 s (the Season role_minutes already built + one `injury_reports` read). The card fetches only after `/api/analyze` is in, so the Week's canon is warm.
+
+## Pre-claims (last_days.py, 2026-11-08, owner)
+
+`claims_per_week` resets Monday, so claims left in the week's last `LAST_DAYS` (2) days are free capacity for next week.
+Each candidate claim (add, drop) is scored by the change in P(win) of THIS week (from today, `Week.team` with the claim's
+window) plus the change in P(win) of NEXT week (roster minus the drop plus the add, vs next week's scheduled opponent),
+greedy up to the claims left (first claim tries the best `POOL` 200 free agents x every drop, later ones the previous
+step's top 30). A win is a win: the two are summed as they are, so a week at 80% earns little and the claims go where the
+leverage is; each claim carries `for` (this week / next week / both) and both gains. No claim helps = none shown.
+- Rules: the claim lands TODAY, so players still on waivers (`Week.waivers`) are out and so is anyone whose game is under way
+  (`can_drop_on`); undroppable honoured; drops cost this week's allowance. Yahoo daily points leagues only (`claim_planner.unsupported_reason`).
+  Not a replacement for the week plan: that re-plans the rest of this week with a generic keep value, this adds next week's real matchup.
+- **Trap (found 2026-11-08):** `rank_moves` picks the best claim DAY. Judged for next week it returned "Hayes for Hezonja, Nov 10",
+  a Monday-night claim presented as a claim today (+1.9%); the same swap made today is -0.8%. Pre-claims therefore score
+  only claims whose day is today (`day` fixed), never `rank_moves`.
+- Checked 2026-11-08 against `/api/analyze?add=&drop=&day=` for this week (0.8014 -> 0.8459 both ways). Courtside that
+  night: one claim (Matkovic for Hezonja, +4.5% this week, -0.1% next); nothing today helps next week. ~1-10 s cold, 60 s cache.
 
 ## Start tab (start_day.py, 2026-11-04)
 

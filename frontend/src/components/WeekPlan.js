@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getPlan, errorMessage } from '../services/api';
+import { getPlan, getLastDays, errorMessage } from '../services/api';
 import { weekdayLetter, shortDate } from '../weeks';
 import { PlayerName } from './PlayerCard';
 
@@ -17,11 +17,12 @@ const TX = {
 // it, and hides itself where the planner does not apply (supported: false).
 const WeekPlan = ({ week, statType, ready }) => {
   const [plan, setPlan] = useState(null);
+  const [pre, setPre] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setPlan(null); setError(null);
+    setPlan(null); setPre(null); setError(null);
     if (!ready) return undefined;
     let cancelled = false;
     setLoading(true);
@@ -29,6 +30,8 @@ const WeekPlan = ({ week, statType, ready }) => {
       .then(result => { if (!cancelled) setPlan(result); })
       .catch(err => { if (!cancelled) setError(errorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
+    // Pre-claims: only in the week's last days (active); a failure just hides the section.
+    getLastDays(statType).then(result => { if (!cancelled) setPre(result); }).catch(() => {});
     return () => { cancelled = true; };
   }, [week, statType, ready]);
 
@@ -69,6 +72,25 @@ const WeekPlan = ({ week, statType, ready }) => {
               </div>
             ))}
           </div>
+          {pre && pre.active && (
+            <div className="mt-2 rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-xs" title={pre.notes.join(' ')}>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-gray-300">
+                <span className="font-semibold text-gray-100">Claim today for next week too</span>
+                <span className="tabular-nums">This week <span className={`rounded px-1 py-0.5 font-semibold ${chanceClass(pre.this_week.now)}`}>{pct(pre.this_week.now)}</span> -&gt; <span className={`rounded px-1 py-0.5 font-semibold ${chanceClass(pre.this_week.after)}`}>{pct(pre.this_week.after)}</span></span>
+                <span className="tabular-nums">Next{pre.next_week.opponent ? ` v ${pre.next_week.opponent}` : ''} <span className={`rounded px-1 py-0.5 font-semibold ${chanceClass(pre.next_week.now)}`}>{pct(pre.next_week.now)}</span> -&gt; <span className={`rounded px-1 py-0.5 font-semibold ${chanceClass(pre.next_week.after)}`}>{pct(pre.next_week.after)}</span></span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {pre.claims.map((c, i) => (
+                  <span key={i} className="rounded px-1.5 py-0.5 bg-gray-700 text-gray-200 break-words min-w-0"
+                        title={`This week ${c.gain_cur >= 0 ? '+' : ''}${(c.gain_cur * 100).toFixed(1)}%, next week ${c.gain_next >= 0 ? '+' : ''}${(c.gain_next * 100).toFixed(1)}%`}>
+                    <span className="text-green-300">+</span> <PlayerName name={c.add} /> <span className="text-red-300">-</span> {c.drop ? <PlayerName name={c.drop} /> : 'open spot'}
+                    <span className="ml-1 text-gray-400">for {c.for}</span>
+                  </span>
+                ))}
+                {!pre.claims.length && <span className="text-gray-400">No claim today helps either week.</span>}
+              </div>
+            </div>
+          )}
           {plan.warnings.map((w, i) => <p key={i} className="text-xs text-amber-300 mt-1.5">{w}</p>)}
         </>
       )}

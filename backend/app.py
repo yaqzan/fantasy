@@ -699,6 +699,15 @@ def week_plan():
     return jsonify(result)
 
 
+@fantasy_api.route('/last-days')
+def last_days():
+    """Pre-claims: in a week's last days, the claims worth making today judged on this week and next week's matchup
+    (last_days.py). {supported: false, reason} off Yahoo daily points leagues; {active: false} before the last days."""
+    from last_days import cached_last_days_plan
+    league = current_league()
+    return jsonify(cached_last_days_plan(league, request.args.get('timeframe') or default_stat_type(league)))
+
+
 @fantasy_api.route('/stage-plan')
 def stage_plan():
     """Guillotine: the claims for each remaining week of the current stage (lineup_optimizer.plan_stage)."""
