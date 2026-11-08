@@ -515,6 +515,7 @@ def get_pickup_candidates(league, week_start=None, week_end=None, opponent_abv=N
         rows.append({
             'name': m.add, 'team': p['TEAM'], 'positions': list(p['Positions']),
             'gp': p.get('GP') or 0, 'small_sample': (p.get('GP') or 0) < floor,
+            'waiver_from': week.first_claim_day(m.add).isoformat() if m.add in week.waivers else None,   # on waivers: the first day a claim lands
             'games': len(days), 'days': [d.isoformat() for d in days], 'day': m.day.isoformat(),
             'day_options': [d.isoformat() for d in week.add_days(m.add)] if league.daily_lineups else [],   # a weekly lineup is set once
             'plays': round(m.side.games.get(m.add, 0), 1), 'expected_wins': round(m.side.wins.get(m.add, 0.0), 2),
