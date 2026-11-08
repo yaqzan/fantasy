@@ -409,16 +409,23 @@ def build_instance(lg, week, suffix, opp, roster_il=None):
     today_real = daily_leaders.nba_today()
     on_waivers = {p for p, d in week.waivers.items() if d > today_real}
     fa = week.free_agents(suffix)
-    # The best player nobody has claimed off the wire is the level this league leaves alone; a waiver player clearly above it
-    # is claimed before he clears (PJ Washington 33.5 vs 26.3 FPTS/g, 2026-11-08), so no plan counts on him. One at or below
-    # it stays plannable from his clearing date (comparable players sit unclaimed for weeks).
     fpg_of = lambda p: float(stats[p].get(f'FPTS{suffix}') or 0.0) if p in stats else 0.0  # noqa: E731
-    market = max((fpg_of(p) for p in fa if p not in on_waivers), default=0.0)
+    # The market: the best player nobody has claimed off the wire, and the spread down to the claims_per_week-th best (the
+    # band the league leaves alone: Wagler 26.3 down to 23.9, 2026-11-08). A player on waivers more than one band ABOVE the
+    # market (PJ Washington 33.5 > 26.3 + 2.4) is claimed before he clears, so no plan counts on him; one inside or just above it
+    # (Aldama 27.3, Kuzma 26.9) stays plannable from his clearing date. The same cutoff protects my own stars: nobody on my
+    # roster above market + band is dropped, nothing on the wire comes close (owner: "too good to drop").
+    open_fpg = sorted((fpg_of(p) for p in fa if p not in on_waivers), reverse=True)
+    market = open_fpg[0] if open_fpg else 0.0
+    band = market - open_fpg[min(lg.claims_per_week or 5, len(open_fpg)) - 1] if open_fpg else 0.0
     for p in fa:
-        if p in on_waivers and fpg_of(p) > market:
+        if p in on_waivers and fpg_of(p) > market + band:
             continue
         if p not in players:   # a continued plan's pickups are still free agents in the DB
             players[p] = pdata(p, False)
+    for p, d in players.items():
+        if d.owned and market > 0 and fpg_of(p) > market + band:
+            d.undroppable = True
     for p, k in keep_values(lg, week, suffix, list(players), notes).items():
         players[p].keep = k
     live_const = sum(d.fpts * d.live_share for d in players.values() if d.locked_start)
