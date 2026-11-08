@@ -349,9 +349,10 @@ def _side_json(week, side, theirs, suffix, theirs_now=None):
         'players': sorted(({'name': p, 'positions': list(stats[p]['Positions']), 'plays': round(side.games.get(p, 0), 1),
                             'games': len(week.schedule.get(stats[p]['TEAM'], {})), 'injured': p in week.injured,
                             'days': sorted(d.isoformat() for d in week.schedule.get(stats[p]['TEAM'], {})),
-                            # the games a claim could still catch: unplayed and not under way
+                            # the games a claim could still catch: unplayed, not under way, not before he clears waivers
                             'open_days': sorted(d.isoformat() for d in week.remaining.get(stats[p]['TEAM'], {})
-                                                if not (week.actual and (stats[p]['TEAM'], d) in week.actual.tipped)),
+                                                if (p not in week.waivers or d >= week.first_claim_day(p))
+                                                and not (week.actual and (stats[p]['TEAM'], d) in week.actual.tipped)),
                             'score': round(stats[p].get(f'Z-SCORE{suffix}', 0), 1)}
                            for p in side.games), key=lambda r: (-r['plays'], -r['score'])),
     }
@@ -462,7 +463,7 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
             windows = {}
             if league.daily_lineups:
                 for p in added:
-                    windows[p] = (start, None)
+                    windows[p] = (max(start, week.first_claim_day(p)), None)   # never before he clears waivers
                 for p in drops:
                     windows[p] = (None, start - timedelta(days=1))
             players = what_if + ([p for p in drops if p in roster] if windows else [])
