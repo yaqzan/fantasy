@@ -215,9 +215,9 @@ def keep_of(fpg, plays, repl):
     return max(fpg - repl, 0.0) * sum(plays)
 
 
-def keep_values(lg, week, suffix, names, notes):
+def keep_values(lg, week, suffix, names, notes, weights=KEEP_WEEK_WEIGHTS):
     """{name: keep}: what holding each of `names` past this week is worth, in the plan's units (FPTS): keep_of over
-    his team's games in the next two fantasy weeks (weighted KEEP_WEEK_WEIGHTS) (league schedule). The chance he plays a game is
+    his team's games in the next two fantasy weeks (weighted `weights`, default KEEP_WEEK_WEIGHTS) (league schedule). The chance he plays a game is
     role_minutes Season.p_out's (ESPN return dates, Yahoo's status, his absence streak; k = team games from today).
     Replacement = the claims_per_week-th best healthy free agent's FPTS per game (the worst of one week's claims).
     No next week in the schedule (the season's last week) = {}: pure streaming."""
@@ -225,7 +225,7 @@ def keep_values(lg, week, suffix, names, notes):
     import daily_leaders
     from fantasy_team_helper import get_next_week_dates, get_available_players
     weeks, ws = [], week.week_start
-    for _ in KEEP_WEEK_WEIGHTS:
+    for _ in weights:
         ws, we = get_next_week_dates(lg, ws)
         if ws is None:
             break
@@ -250,13 +250,13 @@ def keep_values(lg, week, suffix, names, notes):
     def plays(p):
         st = stats[p]
         team = s.abv_of_full.get(st.get('TEAM'))
-        out = [KEEP_WEEK_WEIGHTS[i] * AVG_WEEK_GAMES * (st.get('ROS_SHARE') or 0.0) for i in missing]
+        out = [weights[i] * AVG_WEEK_GAMES * (st.get('ROS_SHARE') or 0.0) for i in missing]
         for k, d in enumerate(s.schedule(team), 1):
             if d > weeks[-1][1]:
                 break
             for i, (a, b) in enumerate(weeks):
                 if a <= d <= b:
-                    out.append(KEEP_WEEK_WEIGHTS[i] * (1.0 - s.p_out(st.get('NBA_ID'), team, d, k, ctx)))
+                    out.append(weights[i] * (1.0 - s.p_out(st.get('NBA_ID'), team, d, k, ctx)))
         return out
 
     per_game = sorted((fpg(p) for p in get_available_players(lg, stats)), reverse=True)
@@ -265,7 +265,7 @@ def keep_values(lg, week, suffix, names, notes):
     return {p: keep_of(fpg(p), plays(p), repl) for p in names if p in stats}
 
 
-def build_instance(lg, week, suffix, opp, roster_il=None):
+def build_instance(lg, week, suffix, opp, roster_il=None, prune=True):
     """The live Instance for my team's week, through the repo's own Week (`week`, already loaded). `roster_il`: (active, IL)
     to start from instead of today's (next week's plan continues from this week's end state)."""
     import lineup_optimizer as lo
@@ -418,7 +418,8 @@ def build_instance(lg, week, suffix, opp, roster_il=None):
                     healthy_in_il=sorted(p for p in il if p in players and not players[p].out),
                     claims_left=C, N=lg.roster_size, K=3, avail=AVAILABILITY, my_carried=carried, live_const=live_const,
                     opp_mean=theirs['FPTS'][0], opp_var=theirs['FPTS'][1], notes=notes)
-    select_pool(inst)
+    if prune:
+        select_pool(inst)
     return inst, label
 
 
@@ -878,6 +879,29 @@ def _note(inst, m, n_add):
     return 'activate' if not d.out else 'back to the active roster'
 
 
+MAX_CANDIDATES = 8   # plans judged on both weeks per request (each ~1 s)
+
+
+def _next_week(lg, week, suffix):
+    """(Week, opponent totals, label) of the fantasy week after `week`, or None (the season's last week)."""
+    import lineup_optimizer as lo
+    from fantasy_team_helper import get_next_week_dates, get_week_info_from_schedule
+    start, end = get_next_week_dates(lg, week.week_start)
+    if start is None:
+        return None
+    nxt = lo.Week(lg, start, end)
+    label, theirs = nxt.opponent(get_week_info_from_schedule(lg, start.isoformat())[2], suffix)
+    return nxt, theirs, label
+
+
+def _p_next(nxt, roster, suffix, lg):
+    """P(win) of next week for the roster the plan ends with (no moves next week; its own claims come later)."""
+    import lineup_optimizer as lo
+    week, theirs, _ = nxt
+    mine = week.team(roster, suffix).totals
+    return lo._value(mine, theirs or mine, lg)[0]
+
+
 def end_state(roster, il, moves):
     """(active, IL) after a plan's moves, in order (add, drop, IL in/out)."""
     roster, il = list(roster), list(il)
@@ -905,11 +929,34 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None,
     week, suffix = load_week(lg, week_start, week_end, timeframe)
     if not any(p in week.stats for p in lo._active_roster(lg)[0]):
         return {'supported': False, 'reason': 'No players on your team in this league yet.'}
-    inst, label = build_instance(lg, week, suffix, opponent, roster_il)
-    if not inst.days:
+    full, label = build_instance(lg, week, suffix, opponent, roster_il, prune=False)
+    if not full.days:
         return {'supported': False, 'reason': 'No days left in this week.'}
-    plan = solve(inst)
-    judged = score_judge(inst, plan, week)
+    # This week's plan is picked for BOTH weeks (owner 2026-11-08). The ILP alone maximises this week's points (+ a keep
+    # value), which can pick a pickup that costs next week (Wagler: +5.3% now, -3.2% next). So: candidate plans = the ILP's
+    # plan, then the plans with each of its pickups banned (breadth first, MAX_CANDIDATES), each judged exactly on this week
+    # (score_judge) and on next week (Week.team on the roster it ends with); the best P(win this) + P(win next) wins.
+    nxt = _next_week(lg, week, suffix)
+    start_roster = roster_il or lo._active_roster(lg)
+    candidates, seen, queue = [], set(), [frozenset()]
+    while queue and len(candidates) < (MAX_CANDIDATES if nxt else 1):
+        banned = queue.pop(0)
+        cand = copy.deepcopy(full)
+        for p in banned:
+            cand.players.pop(p, None)
+        select_pool(cand)
+        cplan = solve(cand)
+        sig = frozenset((m['t'], m['type'], m['player']) for m in cplan.moves)
+        if sig in seen:
+            continue
+        seen.add(sig)
+        cjudged = score_judge(cand, cplan, week)
+        p_next = _p_next(nxt, end_state(*start_roster, cplan.moves)[0], suffix, lg) if nxt else None
+        candidates.append({'banned': sorted(banned), 'p_this': cjudged['p_win'], 'p_next': p_next,
+                           'total': cjudged['p_win'] + (p_next or 0.0), 'inst': cand, 'plan': cplan, 'judged': cjudged})
+        queue += [banned | {m['player']} for m in cplan.moves if m['type'] == 'add' and banned | {m['player']} not in queue]
+    best = max(candidates, key=lambda c: c['total'])   # max keeps the first (default weight) on a tie
+    inst, plan, judged = best['inst'], best['plan'], best['judged']
     none = score_judge(inst, Plan(), week)
     days, n_add = [], 0
     for t, day in enumerate(inst.days):
@@ -943,6 +990,11 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None,
                  # next-2-weeks value of the week-end roster minus today's (keep_values; negative = the plan sells future value)
                  'keep_total': round(plan.meta['keep_end'] - sum(d.keep for d in inst.players.values() if d.owned), 1)},
         'opponent_points': round(inst.opp_mean, 1),
+        'two_week': None if not nxt else {
+            'next_week': {'opponent': nxt[2], 'start': nxt[0].week_start.isoformat(), 'end': nxt[0].week_end.isoformat(),
+                          'now': round(_p_next(nxt, start_roster[0], suffix, lg), 4), 'after': round(best['p_next'], 4)},
+            'candidates': [{'banned': c['banned'], 'chosen': c is best, 'this_week': round(c['p_this'], 4),
+                            'next_week': round(c['p_next'], 4), 'total': round(c['total'], 4)} for c in candidates]},
         'days': days, 'do_today': days[0]['transactions'],
         'warnings': warnings, 'assumptions': ASSUMPTIONS,
         'solver': {'solves': plan.meta['solves'], 'solve_s': plan.meta['total_s'], 'dstar': plan.meta['dstar'],

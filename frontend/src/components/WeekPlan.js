@@ -65,6 +65,11 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', withClaims = tru
         )}
         {plan && <span className="text-xs text-gray-400">{plan.claims_left}/{plan.claims_per_week} claims</span>}
       </div>
+      {plan && plan.two_week && (
+        <div className="text-xs text-gray-400 mt-1" title="The plan is the best of several candidates by this week's win chance plus next week's, with the roster it ends with">
+          Picked for both weeks: next week{plan.two_week.next_week.opponent ? ` v ${plan.two_week.next_week.opponent}` : ''} <span className={`rounded px-1 py-0.5 font-semibold tabular-nums ${chanceClass(plan.two_week.next_week.now)}`}>{pct(plan.two_week.next_week.now)}</span> -&gt; <span className={`rounded px-1 py-0.5 font-bold tabular-nums ${chanceClass(plan.two_week.next_week.after)}`}>{pct(plan.two_week.next_week.after)}</span>
+        </div>
+      )}
       {plan && plan.continues_from && <div className="text-xs text-gray-400 mt-1">Starts from the roster the plan above ends with.</div>}
       {loading && !plan && <div className="text-xs text-gray-400 mt-2">Planning the week...</div>}
       {error && <div className="text-xs text-red-300 mt-2">Week plan: {error}</div>}
