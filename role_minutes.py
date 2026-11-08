@@ -604,7 +604,7 @@ def _short(name):
 # Cause = a teammate (H >= CAUSE_H then) absent in >= 2 of those games and in at most a third of the earlier ones.
 # HOLD = share of the jump he kept the next game he played, by whether the causes were out that game and by how many
 # earlier games "before" rests on (few = a noisy, low level, so more of the jump holds); 2013-14..2025-26 game logs,
-# surge >= 4, n = 68,176 (.horizon/minutes-surge/backtest.py, review/bt_ne.py; rotation.md "Minutes surge").
+# surge >= 4, n = 68,176 (.horizon/minutes-surge/review/bt_ne.py 12 1, bucketed by earlier games; rotation.md "Minutes surge").
 SURGE_GAMES, SURGE_MIN, CAUSE_H = 3, 4.0, 12.0
 STALE_GAMES = 2          # he missed the team's last this many games or more: no surge shown (it is history, not a role)
 HOLD = {2: {'out': 1.05, 'back': 0.69, 'mixed': 0.87, 'none': 0.88},       # earlier games <= key

@@ -78,7 +78,7 @@ Data: game logs 2013-14..2025-26 (`.horizon/preseason-2026/data/rs_*.csv`; MySQL
 ## Minutes surge (2026-11-08): `role_minutes.surges`
 Owner: "isolate who's given new opportunities" and whether it lasts ("a missing starter ... apply based on when he returns").
 **Display only**: the projection (U already weights his last ~5 games heavily) and the optimizer factor never read it
-(the raw-freed-minutes trap above). Research `.horizon/minutes-surge/` (backtest.py, backtest2.py, live.py).
+(the raw-freed-minutes trap above). Research `.horizon/minutes-surge/` (`review/bt_ne.py 12 1` gives the hold numbers below; `backtest.py` with its default MIN_EARLY=3 gives n=64,183, out .80 / back .40 / mixed .63 / none .61; the by-earlier-games `HOLD` table is a groupby of bt_ne's rows into <=2 / 3-5 / 6-10 / 11+; also backtest2.py, live.py).
 - **Surge** = mean of his last 3 games (normalised minutes, current team) minus his earlier games there this season (>= 1); shown at >= +4.
   **Cause** = a teammate with H >= 12 at the time, absent in >= 2 of the 3 and in at most a third of the earlier games
   (`Season.absent`, filled in the walk). Kind from each cause's chance to sit the NEXT game (`Season.p_out`: sheet, ESPN date,
@@ -95,7 +95,7 @@ Owner: "isolate who's given new opportunities" and whether it lasts ("a missing 
   cached Season. UI: Player Rankings "+Nm" after the team (green; grey when the cause is back; tooltip = why) and filter
   "Minutes up"; Tonight cards a line under the name. Checked 2026-11-08: Walter Clayton Jr. +11.2 (22.5 vs 11.3), none, ~68% (Aldama
   out in every game, back 11-06, Clayton still 22.9); Danny Wolf +5.7 (20.7 vs 15.0), out (Demin back ~Nov 11, Saraf, Powell).
-  Of the 31 "out" kinds that day 23 rest on the streak table alone (no ESPN date), so "until he returns" is often a guess.
+  Many "out" kinds have no ESPN return date on a cause (29 "out" surges 2026-11-08: 12 with no dated cause at all, 13 more with at least one undated cause, all Yahoo status None), so "until he returns" is often a streak-table guess. Live `kind` uses predicted p_out >= .5, the backtest the actual next-game absence, so the live "out" hold is a bit optimistic when that guess is wrong.
 - Not done: feeding the hold rate into U or the factor (needs a walk-forward test against U + the role delta, `.horizon/review-U/walk_u.py`).
 
 ## Next
