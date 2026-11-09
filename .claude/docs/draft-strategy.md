@@ -373,6 +373,10 @@ Scripts and the bid sheet: `.horizon/guillotine-2026/` (`s2_sim.py`, `s2_value.p
   (`getTeamRosterInfo` teamHeadingInfo.owners). How much of the budget a manager puts into one player is stable: 48-53%
   in all three drafts for one manager, 21-24% for another. None of the room's leagues ever used blind bids, so the
   FAAB-per-auction-$ scale is a guess. The best bid didn't change across scales 1.5-8x (`room_model2.py`).
+- **A player whose numbers grew while a co-star is out: split his games by that teammate before bidding.** Blowout
+  minutes distort a small split. One case: 4 with vs 7 without, two blowouts, same minutes in close games. The
+  co-star's return moved points to assists, and the value barely changed (-4%). Taking the raw split cost 37%
+  (`lamelo_edwards.py`).
 - **Category fit beats the name in H2H.** A big-heavy roster gained 0.21-0.28 cats/week from the dump's best-priced
   bigs and 0.24-0.46 from guards (assists, threes), cheap ones included. Value each add vs the field
   (`s2_value.py`), not by rank.
