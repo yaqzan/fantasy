@@ -363,8 +363,10 @@ Scripts and the bid sheet: `.horizon/guillotine-2026/` (`s2_sim.py`, `s2_value.p
 - **Fantrax rules (getLeagueRules):** waivers run Mondays 3 pm ET, first-price blind bids (no Vickrey), ties to the
   lower-ranked team, 1 claim a week (FA and waiver share it), unclaimed players turn free agents first come first served.
   League rule on top: 2 FAAB adds a stage. Fantrax never resets records: the stage standings are the commissioner's.
-- **Fantrax keeps cut teams on the schedule with empty rosters.** If those games count, a team drawn against them gets
-  free wins: our stage 2 had two (sim: 0% cut vs 11.9% with the 12 re-paired). Check the commissioner's ruling first.
+- **Re-read the schedule after a cut.** Fantrax left the cut teams on the schedule (empty rosters) for a few hours, then
+  the commissioner re-paired it: the cut teams play each other. Model from a fresh `getMatchups` and run
+  `pull_fantrax.py schedule --apply`. The app's stored opponents were stale until then. The real draw matters: stage-2 cut
+  risk was 2.8% against three weak teams vs 11.9% against random pairings.
 - **The room barely uses FAAB:** $34 of $14,000 spent in stage 1 (two preseason bids). Its bids follow names (auction
   price, OUT tags), not category fit.
 - **Category fit beats the name in H2H.** A big-heavy roster gained 0.21-0.28 cats/week from the dump's best-priced
@@ -374,8 +376,10 @@ Scripts and the bid sheet: `.horizon/guillotine-2026/` (`s2_sim.py`, `s2_value.p
   Scored sheets: spending ~$60-140 beat ~$270 at every $/cat-week tried ($50-120). The mid tier wins at $10-50.
 - **Money is worth most at the dump that frees a superstar with many bidders left** (10 teams, each still holding about
   $1,000). Late dumps have more players than adds to fill (4 teams x 2 adds vs 20 freed), so prices fall: don't hoard for them.
-- **No IL:** an injured star costs a bench slot. Keeping him for a 2-3 week absence cost 2-4 points of stage cut risk
-  (re-paired schedule) against ~2 cat-weeks later. Drop the 10th man, not the star.
+- **No IL:** an injured star costs a bench slot, but dropping him barely helps. With the real schedule, dropping him
+  over the 10th man lowered stage cut risk only if he missed the whole stage (2.0% -> 0.9%), and it threw away ~2
+  cat-weeks later. Decide after the waiver results and his re-evaluation, and use the stage's second claim on the
+  10th man first (`s2_sim2.py`).
 
 ## Snake draft, points league (Courtside Tamasha 2026-27, Yahoo, 2026-10-16)
 Scripts and player lists: `.horizon/courtside-2026/` (`prep.py`, `sim.py`, `plan.py`, `data/draft_2025.txt`).
