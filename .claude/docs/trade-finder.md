@@ -19,9 +19,16 @@ matchups are skipped). Streamers (and their waiver clearing dates, the market ru
   Rank 103 + a mid player. Now `market_values`: 100 x exp(-(rank-1)/tau), tau 35 (UI Steep 20 / Normal 35 / Flat 60), rank = mean of
   Yahoo's pre-draft rank (`.cache/yahoo_adp_<league>.json`) and today's FPTS/g rank among rostered + pool. A partner needs
   `market = value(what they get) - value(what they give) - value(the player they cut)` >= `min_market` (default 0 = fair). Not fitted
-  to any trade data (none exists): at tau 20-35 the top offers are identical; at 60 star-for-two trades come back (SGA, Tatum for
-  a star + CMB). Their lineup gain (no claims, forced cut, OUT players to a free IL slot first) is shown, not required. They are
-  assumed NOT to stream; with streaming and 5 claims the old top partners lost 11-58 FPTS/wk (review), so lineup gain reads as a ceiling.
+  to any trade data (none exists): at tau 20-35 the top offers are identical; at 60 star-for-two trades come back. A trade must
+  ALSO raise their own lineup (no claims, forced cut, OUT players to a free IL slot first) by `min_lineup` (default 0).
+- **How a 2-for-1 improves a partner's roster (owner asked 2026-11-08; numbers for the first, lineup-only version's Wemby-for-CMB-and-
+  a-guard offer):** only through volume. Their lineup has empty slots on light days (3 players with a game on 3 days of a week), so
+  two bodies play games one star would not: star 62 FPTS/g x 4 = 248/wk vs two players 266/wk, +31 / +6 / -15 over three weeks. If the
+  partner streams, the spot I free is a spot they lose (-49 / -60 / -84 there): the slot value is close to zero-sum between two
+  streamers, so a 2-for-1 is a real win-win only against a partner who does NOT use their claims, or when the swap itself is fair.
+  Each row shows `partner_games` (extra active-slot games a week), `partner_stream` (their change if they stream, same ILP, 5
+  claims; a healthy player in their IL is left out of that valuation) and `partner_adds` (claims they used this week, from the
+  sync: 0 = not a streamer; one week is a weak signal).
 - **Closed form**: no-claims lineup value = sum over days of sum_k c_k x (top-k sum of the day's v), c_k = `claim_planner.layer_coefs`
   (the planner's own objective). Equal to the ILP with 0 claims: 1484.69 vs 1484.69, 1286.50, 1215.51 (3 weeks, 2026-11-08).
 
@@ -32,9 +39,9 @@ matchups are skipped). Streamers (and their waiver clearing dates, the market ru
 player is simply absent: not owned, not addable). Cached 120 s. Funnel:
 1. (A) every combination of partner x my fillers x their players that the room accepts (market >= `min_market` - 1), ranked by my
    additive swap proxy (FPTS/week, no crowding), top 1200 (6000 for 3 for 2).
-2. (B) exact no-claims lineup value of my roster, the real forced cut and the exact market test; top 36 (90 for 3 for 2) by my swap (the freed spot is worth about
+2. (B) exact no-claims lineup value of both rosters, the real forced cut, the exact market test and `min_lineup`; top 36 (90 for 3 for 2) by my swap (the freed spot is worth about
    the same to every combination, 82-95 FPTS/wk, so ranking by swap is ranking by the total).
-3. (C) the ILP on my side (3 weeks x 36, 4 threads). 2 for 1: ~5 s warm, 8 s cold; 3 for 2: ~15 s; result cache 60 s.
+3. (C) the ILP on my side (3 weeks x 36, 4 threads), then on the shown rows' partners (what they do if they stream). 2 for 1: ~10 s; 3 for 2: ~20 s; result cache 60 s.
 
 ## Checked (2026-11-08, Courtside, anchor = one player, x=2)
 

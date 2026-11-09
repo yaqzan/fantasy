@@ -79,6 +79,13 @@ def team_rosters(lg):
     return out
 
 
+def team_adds_used(lg):
+    """{abv: claims used in the current week} from the last Yahoo sync: who streams (None = unknown)."""
+    from fantasy_database import FantasyTeam
+    from fantasy_team_helper import league_team_ids
+    return {t.abv: t.adds_used for t in FantasyTeam.select().where(FantasyTeam.id.in_(league_team_ids(lg))) if t.abv}
+
+
 # ---------------------------------------------------------------- context: one planner instance per sample week, everyone owned
 
 class Ctx:
@@ -106,6 +113,7 @@ class Ctx:
         for k, ck in cp.layer_coefs(inst.n_slots[0], self.N, self.avail).items():
             self.c[k - 1] = ck
         self.me = lg.my_team
+        self.adds_used = team_adds_used(lg)
 
     def player(self, name, w=0):
         return self.insts[w].players.get(name)
@@ -125,6 +133,16 @@ class Ctx:
         if cum.shape[0] < self.N:
             cum = np.vstack([cum, np.repeat(cum[-1:], self.N - cum.shape[0], axis=0)])
         return float((self.c[:, None] * cum[:self.N]).sum())
+
+    def lineup_games(self, names):
+        """Average games per week that fill an active slot (players with a game each day, capped at the slots)."""
+        n = self.insts[0].n_slots[0]
+        tot = 0.0
+        for w in range(len(self.weeks)):
+            rows = [self.v[w][p] > 0 for p in names if p in self.v[w]]
+            if rows:
+                tot += float(np.minimum(np.vstack(rows).sum(axis=0), n).sum())
+        return tot / len(self.weeks)
 
     def lineup_avg(self, names):
         return sum(self.lineup(w, names) for w in range(len(self.weeks))) / len(self.weeks)
@@ -149,9 +167,13 @@ class Ctx:
         return best
 
     # -- my roster with the claims (the ILP)
-    def plan(self, w, active, il, claims):
+    def plan(self, w, active, il, claims, partner=False):
+        """The planner on a hypothetical roster. partner=True: a healthy player parked in a partner's IL is left out (no freeze-day
+        search: it multiplied the solves 4x and a partner's stored lineup is not modelled anyway)."""
         import claim_planner as cp
         inst = self.insts[w]
+        if partner:
+            il = [p for p in il if inst.players.get(p) and inst.players[p].out]
         players = {}
         for p in list(active) + list(il):
             d = inst.players.get(p)
@@ -225,11 +247,11 @@ def _proxy(ctx):
     return out
 
 
-def find_trades(lg, give, keep=(), x=2, min_market=0.0, tau=MARKET_TAU, top=15, timeframe=None):
+def find_trades(lg, give, keep=(), x=2, min_market=0.0, min_lineup=0.0, tau=MARKET_TAU, top=15, timeframe=None):
     """The trades worth offering. give: my players that must be in the offer; keep: my players that stay. x: players I send
     out (I get x-1 back). A partner takes a trade only if the ROOM's value (`market_values`, steep in rank) of what they get,
-    less the player they cut, beats what they give by `min_market` (0-100 points; a rank-100 player is ~6): their lineup
-    gain is shown, not required. Returns the payload dict of /api/trades."""
+    less the player they cut, beats what they give by `min_market` (0-100 points; a rank-100 player is ~6) AND their lineup
+    (no claims) gains `min_lineup` FPTS a week: a trade must make them better, not only look it. What it does if they stream is shown. Returns the payload dict of /api/trades."""
     from player_stats import default_stat_type
     import lineup_optimizer as lo
     t0 = time.time()
@@ -285,6 +307,7 @@ def find_trades(lg, give, keep=(), x=2, min_market=0.0, tau=MARKET_TAU, top=15, 
 
     # --- stage B: exact lineup value, no claims, both sides
     base_theirs = {abv: ctx.lineup_avg(tm['active']) for abv, tm in ctx.rosters.items()}
+    base_games = {abv: ctx.lineup_games(tm['active']) for abv, tm in ctx.rosters.items()}
     scored = []
     for _, _, abv, out, get in cands:
         their = ctx.rosters[abv]['active']
@@ -292,17 +315,18 @@ def find_trades(lg, give, keep=(), x=2, min_market=0.0, tau=MARKET_TAU, top=15, 
         v_them, cut = ctx.with_forced_drop(after_them, len(ctx.rosters[abv]['il']))
         gain_them = v_them - base_theirs[abv]
         market = sum(mv.get(p, 0.0) for p in out) - sum(mv.get(p, 0.0) for p in get) - sum(mv.get(p, 0.0) for p in cut)
-        if market < min_market:
+        if market < min_market or gain_them < min_lineup:
             continue
         after_me = [p for p in mine if p not in out] + list(get)
         swap = ctx.lineup_avg(after_me) - base_lineup
-        scored.append((swap, gain_them, abv, out, list(get), cut, market))
+        scored.append((swap, gain_them, abv, out, list(get), cut, market,
+                       ctx.lineup_games([p for p in after_them if p not in cut]) - base_games[abv]))
     scored.sort(key=lambda s: -s[0])
     scored = scored[:STAGE_C[x - 2]]
 
-    # --- stage C: the ILP on my side
+    # --- stage C: the ILP on my side; the partner's streaming value only for the rows that are shown
     def one(s):
-        swap, gain_them, abv, out, get, cut, market = s
+        swap, gain_them, abv, out, get, cut, market, games = s
         after_me = [p for p in mine if p not in out] + get
         plans = [ctx.plan(w, after_me, my_il, claims) for w in range(W)]
         stream = [p.model_fpts for p in plans]
@@ -316,7 +340,8 @@ def find_trades(lg, give, keep=(), x=2, min_market=0.0, tau=MARKET_TAU, top=15, 
             'partner': abv, 'partner_name': ctx.rosters[abv]['name'], 'give': out, 'get': get, 'cut': cut,
             'me': {'week': round(d_me, 1), 'swap': round(swap, 1), 'slot': round(slot, 1),
                    'by_week': [round(a - b, 1) for a, b in zip(stream, base_stream)]},
-            'partner_week': round(gain_them, 1), 'streamers': adds,
+            'partner_week': round(gain_them, 1), 'partner_games': round(games, 1), 'partner_adds': ctx.adds_used.get(abv),
+            'streamers': adds,
             'market': {'they': round(market, 1), 'give': round(sum(mv.get(p, 0.0) for p in out), 1),
                        'get': round(sum(mv.get(p, 0.0) for p in get), 1)},
         }
@@ -325,6 +350,17 @@ def find_trades(lg, give, keep=(), x=2, min_market=0.0, tau=MARKET_TAU, top=15, 
         rows = list(pool.map(one, scored))
     rows.sort(key=lambda r: -r['me']['week'])
     rows = [r for r in rows if r['me']['week'] > 0][:top]
+    # the partner if they used their claims like I do: the spot I free is a spot they lose (a cut player stays cut)
+    keys = [(a, w) for a in {r['partner'] for r in rows} for w in range(W)]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        base = dict(zip(keys, pool.map(lambda k: ctx.plan(k[1], ctx.rosters[k[0]]['active'], ctx.rosters[k[0]]['il'], claims, True).model_fpts, keys)))
+
+        def theirs(r):
+            tm = ctx.rosters[r['partner']]
+            after = [p for p in tm['active'] if p not in r['get'] and p not in r['cut']] + r['give']
+            return round(sum(ctx.plan(w, after, tm['il'], claims, True).model_fpts - base[(r['partner'], w)] for w in range(W)) / W, 1)
+        for r, v in zip(rows, pool.map(theirs, rows)):
+            r['partner_stream'] = v
     left = weeks_left(lg, ctx.weeks[0][0])
     for r in rows:
         r['me']['season'] = round(r['me']['week'] * left)
@@ -342,14 +378,14 @@ _results_lock = threading.Lock()
 RESULT_TTL = 60
 
 
-def cached_find_trades(lg, give, keep=(), x=2, min_market=0.0, tau=MARKET_TAU, top=15):
+def cached_find_trades(lg, give, keep=(), x=2, min_market=0.0, min_lineup=0.0, tau=MARKET_TAU, top=15):
     """find_trades, cached RESULT_TTL seconds per request; one search at a time (the first caller computes, the rest read it)."""
-    key = (lg.id, tuple(sorted(give)), tuple(sorted(keep)), x, round(min_market, 1), round(tau, 1), top)
+    key = (lg.id, tuple(sorted(give)), tuple(sorted(keep)), x, round(min_market, 1), round(min_lineup, 1), round(tau, 1), top)
     with _results_lock:
         hit = _results.get(key)
         if hit and time.time() - hit[0] < RESULT_TTL:
             return hit[1]
-        out = find_trades(lg, give, keep, x, min_market, tau, top)
+        out = find_trades(lg, give, keep, x, min_market, min_lineup, tau, top)
         _results[key] = (time.time(), out)
         return out
 
