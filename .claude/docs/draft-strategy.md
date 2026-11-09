@@ -369,6 +369,10 @@ Scripts and the bid sheet: `.horizon/guillotine-2026/` (`s2_sim.py`, `s2_value.p
   risk was 2.8% against three weak teams vs 11.9% against random pairings.
 - **The room barely uses FAAB:** $34 of $14,000 spent in stage 1 (two preseason bids). Its bids follow names (auction
   price, OUT tags), not category fit.
+- **Past auctions show who bids big, not how much in FAAB.** Owners match across leagues by Fantrax username
+  (`getTeamRosterInfo` teamHeadingInfo.owners). How much of the budget a manager puts into one player is stable: 48-53%
+  in all three drafts for one manager, 21-24% for another. None of the room's leagues ever used blind bids, so the
+  FAAB-per-auction-$ scale is a guess. The best bid didn't change across scales 1.5-8x (`room_model2.py`).
 - **Category fit beats the name in H2H.** A big-heavy roster gained 0.21-0.28 cats/week from the dump's best-priced
   bigs and 0.24-0.46 from guards (assists, threes), cheap ones included. Value each add vs the field
   (`s2_value.py`), not by rank.
