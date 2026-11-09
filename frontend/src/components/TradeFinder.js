@@ -31,8 +31,9 @@ const TradeRow = ({ t, weeksLeft }) => (
     <div className="mt-1.5 flex flex-wrap items-center gap-1">
       <Chip cls={`bg-gray-900 ${tone(t.me.swap)}`} title="What the swap alone does to my lineup, with no claims">lineup {signed(t.me.swap)}</Chip>
       <Chip cls={`bg-sky-900/60 ${tone(t.me.slot)}`} title="What the freed roster spot earns once it is rented to streamers (the claims are worth more to a roster with an open spot)">freed spot {signed(t.me.slot)}</Chip>
-      <Chip cls={`bg-gray-900 ${tone(t.partner_week)}`} title="The partner's expected FPTS per week after the trade and after cutting their cheapest player">they {signed(t.partner_week)}/wk</Chip>
-      {t.cut.length > 0 && <Chip title="The partner has one player too many and cuts the one that costs their lineup least">they cut {t.cut.join(', ')}</Chip>}
+      <Chip cls={`bg-gray-900 ${tone(t.market.they)}`} title={`What the room thinks the partner gains (0-100 scale, steep in rank): they get ${t.market.give.toFixed(0)}, give ${t.market.get.toFixed(0)}, less the player they cut`}>room: they {signed(t.market.they)} ({t.market.give.toFixed(0)} for {t.market.get.toFixed(0)})</Chip>
+      <Chip cls={`bg-gray-900 ${tone(t.partner_week)}`} title="The partner's expected FPTS per week after the trade (lineup only, no claims). Shown, not required.">their lineup {signed(t.partner_week)}/wk</Chip>
+      {t.cut.length > 0 && <Chip title="The partner has one player too many and has no free IL slot: they cut one">they cut {t.cut.join(', ')}</Chip>}
       <Chip title="My gain in each of the weeks that were averaged">{t.me.by_week.map(v => signed(v)).join(' / ')}</Chip>
       {weeksLeft > 0 && <Chip title="Per week x the weeks left in the schedule, if the free-agent market and the lineups hold">~{signed(t.me.season)} to the end</Chip>}
     </div>
@@ -43,7 +44,7 @@ const TradeRow = ({ t, weeksLeft }) => (
 );
 
 const TradeFinder = ({ config }) => {
-  const [view, setView] = useLeagueViewState(config?.league?.id, 'trades', { give: [], keep: [], x: 2, minPartner: 5, sort: 'me' });
+  const [view, setView] = useLeagueViewState(config?.league?.id, 'trades', { give: [], keep: [], x: 2, minMarket: 0, tau: 35 });
   const [roster, setRoster] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +71,7 @@ const TradeFinder = ({ config }) => {
 
   const run = () => {
     setLoading(true); setError(null);
-    getTrades({ give, keep, x: Math.max(view.x, give.length, 2), minPartner: view.minPartner, sort: view.sort })
+    getTrades({ give, keep, x: Math.max(view.x, give.length, 2), minMarket: view.minMarket, tau: view.tau })
       .then(setResult)
       .catch(e => { setResult(null); setError(errorMessage(e)); })
       .finally(() => setLoading(false));
@@ -84,7 +85,7 @@ const TradeFinder = ({ config }) => {
       <div className="text-sm font-semibold text-gray-100">Trade finder</div>
       <p className="text-xs text-gray-400 mt-1">
         Send {x} players, get {x - 1} back: the roster spot you free is rented to a streamer, which is worth more than the extra player you give up.
-        Every figure is expected FPTS per week from the week plan's model, averaged over the next three full weeks.
+        My gain is expected FPTS per week from the week plan's model, averaged over the next three full weeks. The partner has to see a win by the room's values.
       </p>
 
       <div className="mt-2 text-[11px] uppercase text-gray-500">Your players: Trade = must be in the offer, Keep = not offered</div>
@@ -106,14 +107,14 @@ const TradeFinder = ({ config }) => {
             <button key={n} onClick={() => setView({ x: n })} className={`px-2 py-0.5 rounded border ${x === n ? 'border-nba-orange text-nba-orange' : 'border-gray-600 text-gray-400'}`}>{n} for {n - 1}</button>
           ))}
         </span>
-        <label className="flex items-center gap-1" title="The least the partner's weekly lineup value must rise. Higher = an offer they are more likely to take.">
-          Partner gains at least
-          <input type="number" min="0" step="1" value={view.minPartner} onChange={e => setView({ minPartner: Number(e.target.value) || 0 })}
-            className="w-14 rounded bg-gray-800 border border-gray-600 px-1 py-0.5 text-gray-100" /> FPTS/wk
+        <label className="flex items-center gap-1" title="The partner only sees a win when what they get is worth more to the room than what they give. 0 = fair, higher = a sweeter offer. A rank-100 player is worth about 6, a top-5 player about 90.">
+          Room value they gain at least
+          <input type="number" min="0" step="5" value={view.minMarket} onChange={e => setView({ minMarket: Number(e.target.value) || 0 })}
+            className="w-14 rounded bg-gray-800 border border-gray-600 px-1 py-0.5 text-gray-100" />
         </label>
-        <span className="flex items-center gap-1">Order by
-          {[['me', 'my gain'], ['balance', 'both gain']].map(([k, label]) => (
-            <button key={k} onClick={() => setView({ sort: k })} className={`px-2 py-0.5 rounded border ${view.sort === k ? 'border-nba-orange text-nba-orange' : 'border-gray-600 text-gray-400'}`}>{label}</button>
+        <span className="flex items-center gap-1" title="How steeply managers price rank. Steep: stars are worth far more than two role players. Flat: closer to the FPTS lineup math (less realistic).">Stars worth
+          {[['Steep', 20], ['Normal', 35], ['Flat', 60]].map(([label, v]) => (
+            <button key={label} onClick={() => setView({ tau: v })} className={`px-2 py-0.5 rounded border ${view.tau === v ? 'border-nba-orange text-nba-orange' : 'border-gray-600 text-gray-400'}`}>{label}</button>
           ))}
         </span>
         <button onClick={run} disabled={!give.length || loading}
@@ -130,10 +131,10 @@ const TradeFinder = ({ config }) => {
           </div>
           <div className="mt-1.5 space-y-1.5">
             {trades.map((t, i) => <TradeRow key={i} t={t} weeksLeft={result.weeks_left} />)}
-            {!trades.length && <div className="text-xs text-gray-400">No trade gives you a gain while the partner gains {view.minPartner} FPTS/wk. Lower the partner's minimum.</div>}
+            {!trades.length && <div className="text-xs text-gray-400">No trade gives you a gain while the room sees the partner gaining {view.minMarket}. Lower that, or give a bigger piece.</div>}
           </div>
           <p className="text-[11px] text-gray-500 mt-2">
-            The partner's side counts their lineup only: no claims, and nothing for the roster spot the trade costs them, so a partner who streams would value the offer lower.
+            Whether a partner says yes is judged by the room's value of the players (Yahoo's pre-draft rank averaged with today's FPTS rank, steep in rank), not by lineup math: nobody gives a top-5 player for two role players.
             Injured players (out today) are never targets and count zero for all three weeks. The freed spot assumes the streamers shown stay on the wire.
           </p>
         </div>

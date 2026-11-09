@@ -26,6 +26,7 @@ from datetime import date
 
 import numpy as np
 
+MARKET_TAU = 35.0         # how steeply managers price rank: value = 100 x exp(-(rank - 1) / tau); smaller = more star-hungry
 SAMPLE_WEEKS = 3          # normal 7-day weeks after the current one that the value is averaged over
 STAGE_A_KEEP = (1200, 6000)   # combinations (2 for 1, 3 for 2) that get the exact no-claims lineup value
 STAGE_C = (36, 90)        # combinations (2 for 1, 3 for 2) that get the ILP: 3 for 2 has more near-ties
@@ -184,6 +185,35 @@ def context(lg, suffix, n=SAMPLE_WEEKS):
         return ctx
 
 
+# ---------------------------------------------------------------- what the room thinks a player is worth
+
+def market_values(ctx, tau=MARKET_TAU):
+    """{player: 0-100 trade value}: 100 x exp(-(rank - 1) / tau). Rank = the mean of Yahoo's pre-draft rank (the room's anchor;
+    `.cache/yahoo_adp_<league>.json`, `pull_yahoo.py adp`) and today's rank by projected FPTS per game among everyone rostered
+    plus the pool (current form, injuries, role); either one alone when the other is missing. A judgement, not a fit: nobody
+    traded a star for two role players, so the curve must be steeper than the FPTS lineup math (Wembanyama rank 2 = 98, a rank-100
+    player = 6 at tau 35)."""
+    import json
+    import os
+    from projections import norm_name
+    inst = ctx.insts[0]
+    ranked = sorted(inst.players, key=lambda p: -inst.players[p].fpts)
+    now = {p: i + 1 for i, p in enumerate(ranked)}
+    adp = {}
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cache', f'yahoo_adp_{ctx.lg.settings.get("platform_league_id")}.json')
+    try:
+        with open(path, encoding='utf-8-sig') as f:
+            adp = {norm_name(r['name']): r['rank'] for r in json.load(f)['players']}
+    except (OSError, ValueError, KeyError):
+        pass
+    out = {}
+    for p, r in now.items():
+        a = adp.get(norm_name(p))
+        rank = (r + a) / 2.0 if a else float(r)
+        out[p] = 100.0 * float(np.exp(-(rank - 1.0) / tau))
+    return out
+
+
 # ---------------------------------------------------------------- the search
 
 def _proxy(ctx):
@@ -195,10 +225,11 @@ def _proxy(ctx):
     return out
 
 
-def find_trades(lg, give, keep=(), x=2, min_partner=0.0, top=15, sort='me', timeframe=None):
+def find_trades(lg, give, keep=(), x=2, min_market=0.0, tau=MARKET_TAU, top=15, timeframe=None):
     """The trades worth offering. give: my players that must be in the offer; keep: my players that stay. x: players I send
-    out (I get x-1 back). min_partner: the least a partner must gain per week (their lineup value, no claims, after cutting
-    the extra player). Returns the payload dict of /api/trades."""
+    out (I get x-1 back). A partner takes a trade only if the ROOM's value (`market_values`, steep in rank) of what they get,
+    less the player they cut, beats what they give by `min_market` (0-100 points; a rank-100 player is ~6): their lineup
+    gain is shown, not required. Returns the payload dict of /api/trades."""
     from player_stats import default_stat_type
     import lineup_optimizer as lo
     t0 = time.time()
@@ -221,6 +252,7 @@ def find_trades(lg, give, keep=(), x=2, min_partner=0.0, top=15, sort='me', time
     x = max(x, len(give), 2)
     claims = lg.claims_per_week or 5
     proxy = _proxy(ctx)
+    mv = market_values(ctx, tau)
     W = len(ctx.weeks)
 
     # --- my baseline: today's roster with and without claims
@@ -236,16 +268,16 @@ def find_trades(lg, give, keep=(), x=2, min_partner=0.0, top=15, sort='me', time
             continue
         their = tm['active']
         targets = [p for p in their if ctx.player(p) and ctx.player(p).has_stats and not ctx.player(p).out]
-        t_active_proxy = sorted(proxy.get(p, 0.0) for p in their if ctx.droppable(p))
-        # k in, k-1 out: one player over the size if they are full; they cut their cheapest
-        cut = t_active_proxy[0] if len(their) + 1 > ctx.N and t_active_proxy else 0.0
+        # k in, k-1 out: one player over the size if they are full; they cut the one the room values least
+        cut = min((mv.get(p, 0.0) for p in their if ctx.droppable(p)), default=0.0) if len(their) + 1 > ctx.N else 0.0
         for fill in itertools.combinations(fillers_pool, x - len(give)):
             out = list(give) + list(fill)
-            out_p = sum(proxy.get(p, 0.0) for p in out)
+            out_p, out_m = sum(proxy.get(p, 0.0) for p in out), sum(mv.get(p, 0.0) for p in out)
             for get in itertools.combinations(targets, x - 1):
+                if out_m - sum(mv.get(p, 0.0) for p in get) - cut < min_market - 1.0:   # the room says they lose
+                    continue
                 get_p = sum(proxy.get(p, 0.0) for p in get)
-                cands.append((out_p - get_p - cut, get_p - out_p, abv, out, list(get)))   # (their proxy gain, my swap proxy, ...)
-    cands = [c for c in cands if c[0] >= min_partner - 6.0]
+                cands.append((None, get_p - out_p, abv, out, list(get)))   # (-, my swap proxy, ...)
     # the freed spot is worth the same flat amount to every combination, so rank by what the swap does to my lineup
     cands.sort(key=lambda c: -c[1])
     considered = len(cands)
@@ -259,17 +291,18 @@ def find_trades(lg, give, keep=(), x=2, min_partner=0.0, top=15, sort='me', time
         after_them = [p for p in their if p not in get] + out
         v_them, cut = ctx.with_forced_drop(after_them, len(ctx.rosters[abv]['il']))
         gain_them = v_them - base_theirs[abv]
-        if gain_them < min_partner:
+        market = sum(mv.get(p, 0.0) for p in out) - sum(mv.get(p, 0.0) for p in get) - sum(mv.get(p, 0.0) for p in cut)
+        if market < min_market:
             continue
         after_me = [p for p in mine if p not in out] + list(get)
         swap = ctx.lineup_avg(after_me) - base_lineup
-        scored.append((swap, gain_them, abv, out, list(get), cut))
+        scored.append((swap, gain_them, abv, out, list(get), cut, market))
     scored.sort(key=lambda s: -s[0])
     scored = scored[:STAGE_C[x - 2]]
 
     # --- stage C: the ILP on my side
     def one(s):
-        swap, gain_them, abv, out, get, cut = s
+        swap, gain_them, abv, out, get, cut, market = s
         after_me = [p for p in mine if p not in out] + get
         plans = [ctx.plan(w, after_me, my_il, claims) for w in range(W)]
         stream = [p.model_fpts for p in plans]
@@ -284,21 +317,20 @@ def find_trades(lg, give, keep=(), x=2, min_partner=0.0, top=15, sort='me', time
             'me': {'week': round(d_me, 1), 'swap': round(swap, 1), 'slot': round(slot, 1),
                    'by_week': [round(a - b, 1) for a, b in zip(stream, base_stream)]},
             'partner_week': round(gain_them, 1), 'streamers': adds,
+            'market': {'they': round(market, 1), 'give': round(sum(mv.get(p, 0.0) for p in out), 1),
+                       'get': round(sum(mv.get(p, 0.0) for p in get), 1)},
         }
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         rows = list(pool.map(one, scored))
-    if sort == 'balance':
-        rows.sort(key=lambda r: -min(r['me']['week'], r['partner_week']))
-    else:
-        rows.sort(key=lambda r: -r['me']['week'])
+    rows.sort(key=lambda r: -r['me']['week'])
     rows = [r for r in rows if r['me']['week'] > 0][:top]
     left = weeks_left(lg, ctx.weeks[0][0])
     for r in rows:
         r['me']['season'] = round(r['me']['week'] * left)
     return {
         'supported': True, 'weeks': [[a.isoformat(), b.isoformat()] for a, b in ctx.weeks], 'weeks_left': round(left, 1),
-        'give': give, 'x': x,
+        'give': give, 'x': x, 'tau': tau,
         'base': {'claims': round(base_claims, 1)},
         'roster': roster, 'considered': considered, 'exact': len(scored), 'trades': rows,
         'seconds': round(time.time() - t0, 1),
@@ -310,14 +342,14 @@ _results_lock = threading.Lock()
 RESULT_TTL = 60
 
 
-def cached_find_trades(lg, give, keep=(), x=2, min_partner=0.0, top=15, sort='me'):
+def cached_find_trades(lg, give, keep=(), x=2, min_market=0.0, tau=MARKET_TAU, top=15):
     """find_trades, cached RESULT_TTL seconds per request; one search at a time (the first caller computes, the rest read it)."""
-    key = (lg.id, tuple(sorted(give)), tuple(sorted(keep)), x, round(min_partner, 1), top, sort)
+    key = (lg.id, tuple(sorted(give)), tuple(sorted(keep)), x, round(min_market, 1), round(tau, 1), top)
     with _results_lock:
         hit = _results.get(key)
         if hit and time.time() - hit[0] < RESULT_TTL:
             return hit[1]
-        out = find_trades(lg, give, keep, x, min_partner, top, sort)
+        out = find_trades(lg, give, keep, x, min_market, tau, top)
         _results[key] = (time.time(), out)
         return out
 
@@ -325,7 +357,7 @@ def cached_find_trades(lg, give, keep=(), x=2, min_partner=0.0, top=15, sort='me
 def main(league=None, *give):
     from leagues import get_league
     lg = get_league(league)
-    out = find_trades(lg, list(give), x=2, min_partner=5.0)
+    out = find_trades(lg, list(give), x=2)
     if not out.get('supported'):
         print(out.get('reason') or out.get('error'))
         return
@@ -334,7 +366,7 @@ def main(league=None, *give):
     for t in out['trades']:
         m = t['me']
         print(f"{t['partner']:5} give {' + '.join(t['give'])} -> get {' + '.join(t['get'])}  me {m['week']:+.0f}/wk "
-              f"(swap {m['swap']:+.0f}, spot {m['slot']:+.0f})  them {t['partner_week']:+.0f}/wk  cut {', '.join(t['cut']) or '-'}")
+              f"(swap {m['swap']:+.0f}, spot {m['slot']:+.0f})  room: they {t['market']['they']:+.0f} (give {t['market']['give']:.0f} get {t['market']['get']:.0f})  lineup {t['partner_week']:+.0f}/wk")
 
 
 if __name__ == '__main__':

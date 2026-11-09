@@ -188,11 +188,11 @@ export const getPlan = async (weekStart = null, timeframe = 'projected', afterPr
 };
 
 // Trade Finder (trade_finder.py): x-for-(x-1) trades that give up `give` and rent the freed spot to a streamer; no `give` = only my roster.
-export const getTrades = async ({ give = [], keep = [], x = 2, minPartner = 5, sort = 'me' } = {}) => {
+export const getTrades = async ({ give = [], keep = [], x = 2, minMarket = 0, tau = 35 } = {}) => {
   const params = new URLSearchParams();
   give.forEach(p => params.append('give', p));
   keep.forEach(p => params.append('keep', p));
-  params.set('x', x); params.set('min_partner', minPartner); params.set('sort', sort);
+  params.set('x', x); params.set('min_market', minMarket); params.set('tau', tau);
   return (await api.get('/trades', { params })).data;
 };
 

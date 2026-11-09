@@ -715,18 +715,20 @@ def week_plan():
 def trades():
     """Trade Finder (trade_finder.py): x-for-(x-1) trades that give up `give` (my players, repeatable) and rent the freed
     spot to a streamer. No `give` = only my roster. keep (repeatable): players I won't offer. x: players I send out (2 or 3).
-    min_partner: the least a partner's weekly lineup value must rise. sort=me|balance. Yahoo daily points leagues."""
+    min_market: the least the ROOM's value (0-100, steep in rank) must rise for the partner; tau: how steep (smaller = more
+    star-hungry). Yahoo daily points leagues."""
     from trade_finder import cached_find_trades
     league = current_league()
     if not league.capabilities()['trade_finder']:
         return jsonify({'supported': False, 'reason': 'The trade finder is for Yahoo daily-lineup points leagues.'})
     try:
         x = int(request.args.get('x', 2))
-        min_partner = float(request.args.get('min_partner', 5))
+        min_market = float(request.args.get('min_market', 0))
+        tau = min(max(float(request.args.get('tau', 35)), 5.0), 200.0)
     except ValueError:
-        return jsonify({'error': 'x and min_partner must be numbers'}), 400
+        return jsonify({'error': 'x, min_market and tau must be numbers'}), 400
     result = cached_find_trades(league, request.args.getlist('give'), request.args.getlist('keep'), min(max(x, 2), 3),
-                                min_partner, 15, 'balance' if request.args.get('sort') == 'balance' else 'me')
+                                min_market, tau, 15)
     if 'error' in result:
         return jsonify(result), 422
     return jsonify(result)
