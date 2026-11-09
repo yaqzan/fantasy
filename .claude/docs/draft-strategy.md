@@ -358,6 +358,25 @@ Scripts and player-level numbers: `.horizon/guillotine-2026/` (`prep.py`, `gsim.
 - Caveat: everyone is bought at the likely price (no bargains, no winner's curse); WSOP's draft_sim found the no-star
   roster gains 0.2-0.3 categories a week when bargains exist, so the star edge is overstated by some amount.
 
+### Guillotine waivers (stage-1 cut, 2026-11-08)
+Scripts and the bid sheet: `.horizon/guillotine-2026/` (`s2_sim.py`, `s2_value.py`, `s2_worth.py`, `bid_opt.py`, `bid_sheets.py`, `out/s2_bids.md`).
+- **Fantrax rules (getLeagueRules):** waivers run Mondays 3 pm ET, first-price blind bids (no Vickrey), ties to the
+  lower-ranked team, 1 claim a week (FA and waiver share it), unclaimed players turn free agents first come first served.
+  League rule on top: 2 FAAB adds a stage. Fantrax never resets records: the stage standings are the commissioner's.
+- **Fantrax keeps cut teams on the schedule with empty rosters.** If those games count, a team drawn against them gets
+  free wins: our stage 2 had two (sim: 0% cut vs 11.9% with the 12 re-paired). Check the commissioner's ruling first.
+- **The room barely uses FAAB:** $34 of $14,000 spent in stage 1 (two preseason bids). Its bids follow names (auction
+  price, OUT tags), not category fit.
+- **Category fit beats the name in H2H.** A big-heavy roster gained 0.21-0.28 cats/week from the dump's best-priced
+  bigs and 0.24-0.46 from guards (assists, threes), cheap ones included. Value each add vs the field
+  (`s2_value.py`), not by rank.
+- **First-price + a free-agent fallback → shade hard.** Losing every bid still leaves the best leftover as a free agent.
+  Scored sheets: spending ~$60-140 beat ~$270 at every $/cat-week tried ($50-120). The mid tier wins at $10-50.
+- **Money is worth most at the dump that frees a superstar with many bidders left** (10 teams, each still holding about
+  $1,000). Late dumps have more players than adds to fill (4 teams x 2 adds vs 20 freed), so prices fall: don't hoard for them.
+- **No IL:** an injured star costs a bench slot. Keeping him for a 2-3 week absence cost 2-4 points of stage cut risk
+  (re-paired schedule) against ~2 cat-weeks later. Drop the 10th man, not the star.
+
 ## Snake draft, points league (Courtside Tamasha 2026-27, Yahoo, 2026-10-16)
 Scripts and player lists: `.horizon/courtside-2026/` (`prep.py`, `sim.py`, `plan.py`, `data/draft_2025.txt`).
 - **Season value is the draft order.** Daily lineups, 9 slots, 13 spots, 5 adds a week: 13 players x ~3.4 games is
