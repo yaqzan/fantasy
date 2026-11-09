@@ -377,6 +377,9 @@ Scripts and the bid sheet: `.horizon/guillotine-2026/` (`s2_sim.py`, `s2_value.p
   minutes distort a small split. One case: 4 with vs 7 without, two blowouts, same minutes in close games. The
   co-star's return moved points to assists, and the value barely changed (-4%). Taking the raw split cost 37%
   (`lamelo_edwards.py`).
+- **What the room paid (first dump, 2026-11-09).** Big names went for 1.2-2.3x their auction share of the budget
+  ($200-399 of $1,000). The injured top-10 player drew nothing above our $89. The steady second tier went at 0.3x or
+  wasn't claimed. A cut team's owner still won a claim: Fantrax lets eliminated teams bid.
 - **Category fit beats the name in H2H.** A big-heavy roster gained 0.21-0.28 cats/week from the dump's best-priced
   bigs and 0.24-0.46 from guards (assists, threes), cheap ones included. Value each add vs the field
   (`s2_value.py`), not by rank.
