@@ -79,7 +79,7 @@ def _status(league, day=None):
     d = day
     while d <= week_end:
         free, locked = _candidates(week, roster, d)
-        if len(free) > slots - len(locked):
+        if 0 < slots - len(locked) < len(free):   # no open spot (tipped games fill the slots): nothing to choose
             out['conflict_days'].append(d.isoformat())
         if d == day:
             out['conflict'] = d.isoformat() in out['conflict_days']
@@ -112,6 +112,8 @@ def _lineups(league, day):
     slots = len(league.slots)
     open_slots = slots - len(locked)
     base = {'supported': True, 'day': day.isoformat(), 'slots': slots, 'locked': locked, 'candidates': len(free)}
+    if open_slots <= 0:   # tipped games already fill every slot
+        return {**base, 'conflict': False, 'start': [], 'bench': free}
     if len(free) <= open_slots:
         return {**base, 'conflict': False, 'start': free, 'bench': []}
     combos = len(list(itertools.islice(itertools.combinations(range(len(free)), open_slots), MAX_LINEUPS + 1)))
