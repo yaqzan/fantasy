@@ -25,7 +25,7 @@ import nba_rotation
 from fantasy_team_helper import (get_all_my_team_players, my_il_players, claims_left, get_available_players, get_waiver_dates, get_current_fantasy_week_dates,
                                  get_undroppable_players, get_injured_players, get_day_to_day_players, get_team_by_abv)
 
-Side = namedtuple('Side', 'totals games wins carried')  # a roster's week: team_week_totals, games, wins per player, the played part (week_actuals)
+Side = namedtuple('Side', 'totals games wins carried scheduled')  # a roster's week: team_week_totals, games, wins per player, the played part (week_actuals), games still to play if everyone plays (the platform's total)
 # One pickup (add) for one drop (None = open spot), made on `day`: the add plays from that day, the drop until
 # the day before (a mid-week claim; player_week_games `windows`). gain: change in expected categories won;
 # key: what moves are ranked by (gain, then the margin tie-break, see _value).
@@ -177,7 +177,10 @@ class Week:
                                                   windows=windows, doubtful=self.doubtful, minutes_factor=mf, effective=eff, sit=sit)
         totals = team_week_totals(players, self.stats, eff if mf else games, wins, league.categories, suffix, game_var, carried,
                                   games_played=games if mf else None)
-        return Side(totals, games, wins, carried)
+        # what Yahoo's "games played x/y" total counts: every scheduled game that fits the slots, no availability or injury discount
+        scheduled = player_week_games(players, self.stats, self.remaining, league, suffix, (), day_weights=self.day_weights,
+                                      tipped=self.actual.tipped if self.actual else (), locked=locked, taken=taken, windows=windows, sit=sit)[0]
+        return Side(totals, games, wins, carried, round(sum(scheduled.values())))
 
     def so_far(self, carried):
         """{category: total so far} for a played part (week_actuals carried), or None before the first game."""
@@ -342,6 +345,7 @@ def _side_json(week, side, theirs, suffix, theirs_now=None):
     return {
         'expected': round(sum(chances.values()), 2) if theirs else None,
         'games_played': int(side.carried.get('GP', 0)) if side.carried else 0,
+        'games_total': (int(side.carried.get('GP', 0)) if side.carried else 0) + side.scheduled,
         'leading': _leading(mine_now, theirs_now, league) if mine_now and theirs_now else None,
         'categories': {c: {'mine': side.totals[c][0], 'theirs': theirs[c][0] if theirs else None,
                            'chance': round(chances[c], 3) if theirs else None,
@@ -447,6 +451,7 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
         their_side = _side_json(week, week.team(_roster(opponent_team), suffix, canon=opponent_team.platform_team_id or False), None, suffix)
         result['opponent_players'] = their_side['players']
         result['opponent_games_played'] = their_side['games_played']
+        result['opponent_games_total'] = their_side['games_total']
         result['opponent_claims_left'] = claims_left(league, week_start, opponent_abv)
     if adds or drops:
         added = [p for p in adds if p in week.stats and p not in roster]

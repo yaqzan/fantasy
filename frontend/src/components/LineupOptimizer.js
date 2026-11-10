@@ -50,13 +50,6 @@ const weekChance = (side, points) => {
   });
   return dist.slice(Math.floor(chances.length / 2) + 1).reduce((a, b) => a + b, 0);
 };
-// Games played so far over the week's total (played + still to come), as whole numbers: 0/36 at the start, 36/36 at the end.
-const gamesFraction = (players, played) => {
-  const left = (players || []).reduce((sum, p) => sum + p.plays, 0);
-  const total = Math.round(left + (played || 0));
-  return { played: total - Math.round(left), total };
-};
-
 // The injured list at a glance, no sentences: each slot is a chip, a healthy player still in IL is amber (he locks the lineup
 // and blocks adds), my Out / INJ players on the active roster are red with where they can go.
 const OUT_STATUS = ['O', 'INJ'];
@@ -86,8 +79,8 @@ const IlStrip = ({ data }) => {
 // Under a side's score: its claims left and games still to play over the week's total.
 const TeamFacts = ({ claims, perWeek, games, right }) => (
   <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400 tabular-nums ${right ? 'justify-end' : ''}`}>
-    {claims != null && <span title="Pickup claims left this week"><span className="font-semibold text-gray-100">{claims}</span>/{perWeek} claim{perWeek === 1 ? '' : 's'}</span>}
-    <span title="Games played so far over the week's total (the total counts games still to come at their expected number)"><span className="font-semibold text-gray-100">{games.played}</span>/{games.total} games</span>
+    {claims != null && <span title="Pickup claims left this week"><span className="font-semibold text-gray-100">{claims}</span> of {perWeek} claim{perWeek === 1 ? '' : 's'} left</span>}
+    <span title="Games played so far over the week's total: every game still scheduled that fits the lineup slots, as the platform counts it (no injury or rest discount)"><span className="font-semibold text-gray-100">{games.played}</span>/{games.total} games</span>
   </div>
 );
 
@@ -368,7 +361,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 <div className="text-sm font-semibold text-mine">You</div>
                 <div className="text-2xl sm:text-3xl font-bold text-mine">{scoreMine != null ? scoreMine : '-'}</div>
                 <div className="text-xs text-gray-400">{scoreLabel}</div>
-                <TeamFacts claims={data.claims_left ?? claims} perWeek={claims} games={gamesFraction(data.current.players, data.current.games_played)} />
+                <TeamFacts claims={data.claims_left ?? claims} perWeek={claims} games={{ played: data.current.games_played, total: data.current.games_total }} />
               </div>
               <div className="text-center">
                 {baseChance != null ? (
@@ -382,7 +375,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
                 <div className="text-sm font-semibold text-opp truncate" title={hasOpponent ? opponentLabel : undefined}>{hasOpponent ? opponentLabel : 'Opponent'}</div>
                 {hasOpponent && <div className="text-2xl sm:text-3xl font-bold text-opp">{scoreTheirs != null ? scoreTheirs : '-'}</div>}
                 <div className="text-xs text-gray-400">{hasOpponent ? scoreLabel : ''}</div>
-                {data.opponent_players && <TeamFacts right claims={data.opponent_claims_left} perWeek={claims} games={gamesFraction(data.opponent_players, data.opponent_games_played)} />}
+                {data.opponent_players && <TeamFacts right claims={data.opponent_claims_left} perWeek={claims} games={{ played: data.opponent_games_played, total: data.opponent_games_total }} />}
               </div>
             </div>
             {(progress.live > 0 || data.opponent === 'league average' || !data.scheduled_opponent || progress.partial || (progress.started && progress.canon !== null && progress.canon !== undefined)) && (
@@ -403,7 +396,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
               the top, red at the bottom) in a Now column, and the same rows for two picks with the chance after
               adding him and its change. Colour alone says who wins. Once games are played, the label shows each
               side's total so far. */}
-          <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4 mb-4">
+          {!points && <div className="bg-gray-700 rounded-lg border border-gray-600 p-3 sm:p-4 mb-4">
             <div className="grid grid-cols-[4.5rem_repeat(3,minmax(0,1fr))] sm:grid-cols-[7rem_repeat(3,minmax(0,1fr))] gap-x-1.5 gap-y-1 items-center text-sm">
               <div></div>
               <div className="text-center text-xs text-gray-400 pb-1">Now</div>
@@ -450,14 +443,15 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
               })}
             </div>
             {columns.map(col => col.error && <p key={col.key} className="text-xs text-red-300 mt-2">{col.item.name}: {col.error}</p>)}
-          </div>
+          </div>}
 
-          {/* Week plan (claim_planner.py): its own fetch once the matchup is in; hidden where the planner does not apply */}
+          {/* Week plan (claim_planner.py): its own fetch once the matchup is in; hidden where the planner does not apply,
+              and with one claim a week (the category panel above already answers that) */}
           <IlStrip data={data} />
-          <WeekPlan week={activeWeek} statType={view.statType} ready={!!data} />
+          {claims > 1 && <WeekPlan week={activeWeek} statType={view.statType} ready={!!data} />}
           {(() => {   // the week after: its own plan and its own claims (they reset every week, nothing carries over)
             const i = weeks.findIndex(w => w.start === activeWeek);
-            return i >= 0 && weeks[i + 1]
+            return claims > 1 && i >= 0 && weeks[i + 1]
               ? <WeekPlan week={weeks[i + 1].start} statType={view.statType} ready={!!data} title="Next week plan" afterPrevious />
               : null;
           })()}
