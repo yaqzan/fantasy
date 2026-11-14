@@ -101,7 +101,7 @@ def claims_remaining(league, team_id):
         return None
     try:
         import pull_fantrax as pf
-        info = pf.call(pf.session(), lid, 'getTeamRosterInfo', teamId=team_id)['miscData']['transactionInfo']['info']
+        info = pf.roster_info(lid, team_id)['miscData']['transactionInfo']['info']   # shared with the roster refresh (pull_fantrax.sync_my_team)
         left = next(int(i['value']) for i in info if i['name'] == 'Claims Remaining (Week)')
     except (Exception, SystemExit) as e:
         print(f'fantrax claims: {e}')

@@ -328,6 +328,19 @@ def transactions(s, fantrax_league_id):
 
 
 _my_team_synced = {}   # league id -> time of the last one-team refresh
+_roster_info = {}      # (league id, team id) -> (fetched at, getTeamRosterInfo answer)
+ROSTER_INFO_TTL = 15   # seconds: the roster refresh and claims-left (fantrax_canon) share one call
+
+
+def roster_info(league_id, team_id, ttl=ROSTER_INFO_TTL):
+    """getTeamRosterInfo for one team: the roster and \"Claims Remaining (Week)\" in one answer, cached `ttl` s so opening a
+    page makes one Fantrax call, not one per reader."""
+    hit = _roster_info.get((league_id, team_id))
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    data = call(session(), league_id, 'getTeamRosterInfo', teamId=team_id)
+    _roster_info[(league_id, team_id)] = (time.time(), data)
+    return data
 
 
 def sync_my_team(league, ttl=60):
@@ -340,7 +353,7 @@ def sync_my_team(league, ttl=60):
     if team is None or not team.platform_team_id:
         return None
     try:
-        data = call(session(), league.platform_league_id, 'getTeamRosterInfo', teamId=team.platform_team_id)
+        data = roster_info(league.platform_league_id, team.platform_team_id)
     except (Exception, SystemExit) as e:
         print(f'fantrax my-team sync: {e}')
         return None

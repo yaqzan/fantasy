@@ -302,6 +302,7 @@ def sync_my_team(league, ttl=60):
     yahoo = parse_players(root)
     if not yahoo:
         return None
+    info = (parse_rosters(root) or [{}])[0]   # the same answer carries the pickups Yahoo counts for the week
     _my_team_synced[league.id] = time.time()
     ids, by_id = name_index(), {p.id: p for p in Player.select(Player.id, Player.name)}
     want, il, changes = {}, set(), []
@@ -312,6 +313,10 @@ def sync_my_team(league, ttl=60):
         want[player.name] = player
         if p['il']:
             il.add(player.name)
+    if info.get('adds_used') is not None and (team.adds_used, team.adds_week) != (info['adds_used'], info['adds_week']):
+        changes.append(f"claims used: {team.adds_used} -> {info['adds_used']} (week {info['adds_week']})")
+        team.adds_used, team.adds_week = info['adds_used'], info['adds_week']
+        team.save()
     rows = list(FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id == team.id))
     have = {r.player_name: r for r in rows}
     adds, drops = sorted(set(want) - set(have)), sorted(set(have) - set(want))
