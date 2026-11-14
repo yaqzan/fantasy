@@ -15,7 +15,7 @@ import time
 _lock = threading.Lock()
 FAIL_BACKOFF = 60   # seconds a failed refresh is not retried
 _versions = {}   # str(league id) -> number of refreshes that changed the DB's roster
-_status = {}     # str(league id) -> {'ok_at': epoch of the last good refresh | None, 'error': None | 'login' | 'down', 'detail': str}
+_status = {}     # str(league id) -> {'error': None | 'login' | 'down', 'detail': str, 'error_at': epoch}
 
 
 class SyncFailed(Exception):
@@ -23,9 +23,11 @@ class SyncFailed(Exception):
 
 
 def classify(message):
-    """'login' when the message says the saved login is no good, else 'down'."""
+    """'login' when the platform helper says the saved login is no good (Yahoo: 'says not logged in'; Fantrax: a page error,
+    which its helper blames on the login, or no Firefox cookies), else 'down'. Any other text, even one that mentions
+    'sign in' in a returned HTML page, is 'down'."""
     m = str(message).lower()
-    return 'login' if any(w in m for w in ('log in', 'logged in', 'login', 'sign in', 'signed in')) else 'down'
+    return 'login' if any(w in m for w in ('not logged in', 'log in to fantrax.com')) else 'down'
 
 
 def version(league_id):
@@ -33,13 +35,17 @@ def version(league_id):
 
 
 def status(league_id):
-    return dict(_status.get(str(league_id)) or {'ok_at': None, 'error': None, 'detail': ''})
+    return dict(_status.get(str(league_id)) or {'error': None, 'detail': ''})
 
 
-def _incident(lg, problems):
+def _incident(lg, failing):
+    """One Pharos incident per PLATFORM (two Fantrax leagues share the one Firefox login: one page, not one per league).
+    Called with failing=True on a login failure and failing=False after every good refresh (Pharos's contract: it can only
+    send 'recovered' if it hears the all-clear, and it ignores the call when nothing was failing)."""
     try:   # a push is a courtesy: never let it break a refresh
         import pharos
-        pharos.incident(f'{lg.platform}-login-{lg.id}', problems, source='fantasy', noun='login')
+        pharos.incident(f'{lg.platform}-login', {f'{lg.platform} login': 'saved login expired'} if failing else {},
+                        source='fantasy', noun='login')
     except Exception as e:
         print(f'roster refresh: pharos: {e}')
 
@@ -63,16 +69,14 @@ def refresh_my_team(lg):
                 return None
         except SyncFailed as e:
             kind = classify(e)
-            _status[key] = {'ok_at': status(key)['ok_at'], 'error': kind, 'detail': str(e)[:200], 'error_at': time.time()}
+            _status[key] = {'error': kind, 'detail': str(e)[:200], 'error_at': time.time()}
             if kind == 'login':
-                _incident(lg, {f'{lg.platform} login': f'{lg.name}: saved login expired'})
+                _incident(lg, True)
             return None
         if changes is None:   # throttled, or nothing to compare: no news either way
             return None
-        was_bad = status(key)['error'] == 'login'
-        _status[key] = {'ok_at': time.time(), 'error': None, 'detail': ''}
-        if was_bad:
-            _incident(lg, {})
+        _status[key] = {'error': None, 'detail': ''}
+        _incident(lg, False)   # every good refresh: survives a restart or a 'down' between the failure and the recovery
         if changes:
             _versions[key] = version(key) + 1
         return changes
