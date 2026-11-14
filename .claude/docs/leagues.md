@@ -146,7 +146,12 @@ stats) is shared by all leagues.
   Fantrax doesn't show per player (`week_actuals.canon_carried_impl`). `/api/analyze` adds `canon` (Fantrax's own period
   totals vs ours, `diff_*` 0 = agrees; the page shows "so far = Fantrax's lineups" or "differs from Fantrax") and
   `progress.canon` (true; false = Fantrax unreachable, fell back to the guess; null = not a Fantrax league). Checked
-  2026-10-29 (Guillotine week 2): all 9 categories x both teams equal Fantrax's page. **Trap (2026-11-08):** a day with no NBA
+  2026-10-29 (Guillotine week 2): all 9 categories x both teams equal Fantrax's page. **Trap (2026-11-14):** `slate` froze a game at its first final fetch, but ESPN corrects box scores (FGA, REB,
+  STL) for hours after; the stale FGA showed as "differs from Fantrax" (FG% only; Fantrax has the corrected numbers).
+  `daily_leaders.recheck` refetches every final box score 30 min and 3 h after the night's last game went final and at 09:00
+  Eastern next morning, replaces changed lines and re-folds them. The NBA game log is not the referee: it is pulled at the
+  buzzer and a late game can sit in it half-played (2026-11-13 LAC-OKC: NBA rows 103/105 vs final 113/112; heals at the next
+  night's pull). **Trap (2026-11-08):** a day with no NBA
   games (Election Day 2026-11-03, Thanksgiving) answers with the PREVIOUS day's lineups, its own date in `displayedSelections.date`;
   `fantrax_canon._day_or_empty` drops a reply whose date isn't the one asked, else Monday counted twice (app 4-5, Fantrax 5-4). Cache: past days 6 h, today and
   yesterday 90 s. Future days are still our projection (Fantrax's future lineups are whatever is set so far).

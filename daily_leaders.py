@@ -268,9 +268,53 @@ def slate(day, force=False, poll=False):
         return cur
 
 
+RECHECK_AFTER_FINAL = (30 * 60, 3 * 3600)   # seconds after a night's last game went final: refetch every final box score
+RECHECK_MORNING_HOUR = 9                     # Eastern, the morning after: the last refetch (the stat-correction window is over)
+_rechecks = {}  # NBA date -> {'final_at': epoch every game was first seen final, 'done': refetches made}
+
+
+def _recheck_times(day, final_at):
+    morning = datetime.combine(day + timedelta(days=1), datetime.min.time(), NBA_TZ).replace(hour=RECHECK_MORNING_HOUR).timestamp()
+    return [final_at + s for s in RECHECK_AFTER_FINAL] + [max(morning, final_at + RECHECK_AFTER_FINAL[-1] + 60)]
+
+
+def recheck(day, cur):
+    """ESPN corrects a box score (FGA, REB, STL...) for hours after it calls the game final, but `slate` freezes a game
+    at its first final fetch: a stale FGA fed the Fantrax-totals check and Daily Leaders until a restart. Until the
+    recheck times pass we use ESPN's first lines; then every final game is refetched at `RECHECK_AFTER_FINAL` after the
+    night's last game went final and again the next morning at RECHECK_MORNING_HOUR Eastern. A game whose lines changed
+    replaces the held ones and is folded into season stats again. (The NBA's own game log can't be the referee: it is
+    pulled right at the buzzer and a late game can sit in it half-played.) Returns the epoch of the next recheck or None."""
+    if cur is None or not cur['final'] or not _all_final(cur):
+        return None
+    st = _rechecks.setdefault(day, {'final_at': time.time(), 'done': 0})
+    times = _recheck_times(day, st['final_at'])
+    if st['done'] >= len(times):
+        return None
+    if time.time() < times[st['done']]:
+        return times[st['done']]
+    changed = 0
+    for g in cur['scoreboard']:
+        if g['id'] not in cur['final']:
+            continue
+        try:
+            lines = _summary(g)
+        except requests.RequestException as e:
+            print(f'daily leaders: recheck {g["id"]}: {e}')
+            return time.time() + REFRESH_SECONDS   # same pass again soon; `done` unchanged
+        if lines != cur['games'].get(g['id']):
+            with _lock:
+                cur['games'][g['id']] = lines
+            _fold(day, g, lines)
+            changed += 1
+    st['done'] += 1
+    print(f'daily leaders: {day} recheck {st["done"]}/{len(times)}: {changed} of {len(cur["final"])} box scores changed')
+    return times[st['done']] if st['done'] < len(times) else None
+
+
 def poll_once():
     """One poller pass: today, and yesterday until its late games are final. Returns the epoch the
-    next pass is due: the soonest day refetch, stats-refresh check, or Eastern midnight (a new day
+    next pass is due: the soonest day refetch, stats-refresh check, box-score recheck, or Eastern midnight (a new day
     to watch)."""
     import nightly_stats
     wake = []
@@ -278,7 +322,7 @@ def poll_once():
         try:
             cur = slate(day, poll=True)
             nightly_stats.tick(day, cur, on_done=_forget_stats)
-            wake += [due_at(cur), nightly_stats.next_check(day)]
+            wake += [due_at(cur), nightly_stats.next_check(day), recheck(day, cur)]
         except Exception as e:  # ESPN down or slow: try again soon
             print(f'daily leaders poll {day}: {e}')
             wake.append(time.time() + REFRESH_SECONDS)
