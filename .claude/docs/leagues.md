@@ -149,7 +149,7 @@ stats) is shared by all leagues.
   2026-10-29 (Guillotine week 2): all 9 categories x both teams equal Fantrax's page. **Trap (2026-11-14):** `slate` froze a game at its first final fetch, but ESPN corrects box scores (FGA, REB,
   STL) for hours after; the stale FGA showed as "differs from Fantrax" (FG% only; Fantrax has the corrected numbers).
   `daily_leaders.recheck` refetches every final box score 30 min and 3 h after the night's last game went final and at 09:00
-  Eastern next morning, replaces changed lines and re-folds them. The NBA game log is not the referee: it is pulled at the
+  Eastern next morning, replaces changed lines in memory (season stats come from the guarded nightly NBA pull). The NBA game log is not the referee: it is pulled at the
   buzzer and a late game can sit in it half-played (2026-11-13 LAC-OKC: NBA rows 103/105 vs final 113/112). So the nightly pull is guarded too:
   `nightly_stats` passes ESPN's final scores (`--scores`) and `pull_api_data.night_is_in` exits NOT_YET (retry in 30 min, give up
   after 12 h) until the NBA PLAYER log's per-game point sums equal them. **Trap (2026-11-08):** a day with no NBA

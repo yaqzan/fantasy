@@ -283,7 +283,7 @@ def recheck(day, cur):
     at its first final fetch: a stale FGA fed the Fantrax-totals check and Daily Leaders until a restart. Until the
     recheck times pass we use ESPN's first lines; then every final game is refetched at `RECHECK_AFTER_FINAL` after the
     night's last game went final and again the next morning at RECHECK_MORNING_HOUR Eastern. A game whose lines changed
-    replaces the held ones and is folded into season stats again. (The NBA's own game log can't be the referee: it is
+    replaces the held ones (season stats are rebuilt by the guarded nightly NBA pull). (The NBA's own game log can't be the referee: it is
     pulled right at the buzzer and a late game can sit in it half-played.) Returns the epoch of the next recheck or None."""
     if cur is None or not cur['final'] or not _all_final(cur):
         return None
@@ -305,7 +305,6 @@ def recheck(day, cur):
         if lines != cur['games'].get(g['id']):
             with _lock:
                 cur['games'][g['id']] = lines
-            _fold(day, g, lines)
             changed += 1
     st['done'] += 1
     print(f'daily leaders: {day} recheck {st["done"]}/{len(times)}: {changed} of {len(cur["final"])} box scores changed')

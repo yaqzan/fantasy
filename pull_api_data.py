@@ -318,7 +318,8 @@ def night_is_in(day, expected_games, season=SEASON, scores=None):
     totals = frame.groupby(['GAME_ID', 'TEAM_ABBREVIATION'])['PTS'].sum().reset_index()
     pairs = sorted(sorted((int(p) for p in g['PTS']), reverse=True) for _, g in totals.groupby('GAME_ID'))
     want = sorted(sorted((int(p) for p in sc.split('-')), reverse=True) for sc in scores)
-    short = [w for w in want if w not in pairs]
+    from collections import Counter
+    short = list((Counter(map(tuple, want)) - Counter(map(tuple, pairs))).elements())   # counts, so two games with one score both need a match
     if short:
         print(f"{day}: box scores don't add up to the final score yet (final {['-'.join(map(str, w)) for w in short]}; "
               f"log has {['-'.join(map(str, p)) for p in pairs if p not in want]})")
