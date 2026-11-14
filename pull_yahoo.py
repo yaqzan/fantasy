@@ -298,7 +298,8 @@ def sync_my_team(league, ttl=60):
         root = fetch(f'team/nba.l.{league.platform_league_id}.t.{team.platform_team_id}/roster')
     except (Exception, SystemExit) as e:   # fetch raises SystemExit on a login error
         print(f'yahoo my-team sync: {e}')
-        return None
+        from live_roster import SyncFailed
+        raise SyncFailed(str(e)) from e
     yahoo = parse_players(root)
     if not yahoo:
         return None

@@ -55,7 +55,7 @@ export const syncRoster = (leagueId) => {
   const key = String(leagueId);
   const hit = rosterSyncs[key];
   if (hit && Date.now() - hit.at < 60000) return hit.promise;
-  const promise = api.post('/roster-sync').then(r => r.data.version).catch(() => null);   // a failed refresh leaves the DB data standing
+  const promise = api.post('/roster-sync').then(r => r.data).catch(() => null);   // {version, changes, status}; a failed call leaves the DB data standing
   rosterSyncs[key] = { at: Date.now(), promise };
   return promise;
 };

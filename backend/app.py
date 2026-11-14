@@ -697,7 +697,7 @@ def roster_sync():
     import live_roster
     league = current_league()
     changes = live_roster.refresh_my_team(league)
-    return jsonify({'version': live_roster.version(league.id), 'changes': changes})
+    return jsonify({'version': live_roster.version(league.id), 'changes': changes, 'status': live_roster.status(league.id)})
 
 
 @fantasy_api.route('/analyze')

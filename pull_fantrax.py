@@ -356,7 +356,8 @@ def sync_my_team(league, ttl=60):
         data = roster_info(league.platform_league_id, team.platform_team_id)
     except (Exception, SystemExit) as e:
         print(f'fantrax my-team sync: {e}')
-        return None
+        from live_roster import SyncFailed
+        raise SyncFailed(str(e)) from e
     index = name_index()
     players = {p.id: p for p in Player.select(Player.id, Player.name)}
     want = {}

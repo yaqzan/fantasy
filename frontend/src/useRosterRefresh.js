@@ -19,10 +19,10 @@ export default function useRosterRefresh(leagueId, ready, onChange) {
     if (s.checked) return undefined;
     let cancelled = false;
     const at = loadedAt.current;
-    s.promise.then(version => {
+    s.promise.then(answer => {
       if (cancelled) return;   // the page went away or reloaded: the next ready compares again
       s.checked = true;
-      if (version !== null && version !== at) { loadedAt.current = null; change.current(); }
+      if (answer && answer.version !== at) { loadedAt.current = null; change.current(); }
     });
     return () => { cancelled = true; };
   }, [leagueId, ready]);

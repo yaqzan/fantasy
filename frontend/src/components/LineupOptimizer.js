@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { analyze, getPickups, setUndroppable, getSelectedLeague, errorMessage } from '../services/api';
 import useRosterRefresh from '../useRosterRefresh';
+import RosterStatus from './RosterStatus';
 import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
 import { WeekSelect, defaultWeekStart, validWeek, selectClass, shortDate, weekdayLetter, weekDays } from '../weeks';
@@ -336,6 +337,7 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
         </div>
         <button onClick={() => setReload(n => n + 1)} className="btn-secondary text-sm">Refresh</button>
       </div>
+      <RosterStatus />
 
       {error && (
         <div className="mb-4 p-3 rounded bg-red-900/40 border border-red-700 text-red-200 text-sm flex items-center justify-between gap-2">

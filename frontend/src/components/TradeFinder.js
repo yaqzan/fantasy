@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getTrades, getSelectedLeague, errorMessage } from '../services/api';
 import useRosterRefresh from '../useRosterRefresh';
+import RosterStatus from './RosterStatus';
 import useLeagueViewState from '../useLeagueViewState';
 import { shortDate } from '../weeks';
 import { PlayerName } from './PlayerCard';
@@ -88,6 +89,7 @@ const TradeFinder = ({ config }) => {
   return (
     <div className="bg-gray-700 rounded-lg border border-gray-600 p-2 sm:p-3 min-w-0 max-w-4xl">
       <div className="text-sm font-semibold text-gray-100">Trade finder</div>
+      <RosterStatus />
       <p className="text-xs text-gray-400 mt-1">
         Send {x} players, get {x - 1} back: the roster spot you free is rented to a streamer, which is worth more than the extra player you give up.
         My gain is expected FPTS per week from the week plan's model, averaged over the next three full weeks. The partner has to see a win by the room's values.
