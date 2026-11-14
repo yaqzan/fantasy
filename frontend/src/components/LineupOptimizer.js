@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { analyze, getPickups, setUndroppable, errorMessage } from '../services/api';
+import { analyze, getPickups, setUndroppable, getSelectedLeague, errorMessage } from '../services/api';
+import useRosterRefresh from '../useRosterRefresh';
 import useLeagueViewState, { statOptions, validStat } from '../useLeagueViewState';
 import { PlayerName } from './PlayerCard';
 import { WeekSelect, defaultWeekStart, validWeek, selectClass, shortDate, weekdayLetter, weekDays } from '../weeks';
@@ -174,14 +175,19 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
+  const silentReload = useRef(false);
   const asked = useRef(new Set());
   const loaded = useRef(null);                         // the matchup the previews belong to (null while loading)
 
   useEffect(() => {
     let cancelled = false;
     let switched = false;   // moved on to another week: the next run owns the loading flag
-    setLoading(true); setError(null); setData(null); setCandidates([]); setPickupsError(null); setSelected(null); setManual(null); setDayPick({});
-    setPreviews({}); asked.current = new Set();
+    const quiet = silentReload.current;   // a roster refresh: reload under the old page, keep what the owner picked
+    silentReload.current = false;
+    if (!quiet) {
+      setLoading(true); setError(null); setData(null); setCandidates([]); setPickupsError(null); setSelected(null); setManual(null); setDayPick({});
+      setPreviews({}); asked.current = new Set();
+    }
     Promise.all([analyze(activeWeek, view.statType), getPickups(activeWeek, view.statType).catch(err => ({ error: errorMessage(err) }))])
       .then(([matchup, pickups]) => {
         if (cancelled) return;
@@ -200,13 +206,14 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
         setPickupsError(pickups?.error || null);
         const list = pickups?.candidates || [];
         setCandidates(list);
-        setSelected(list[0]?.name || null);
+        if (!quiet) setSelected(list[0]?.name || null);
       })
       .catch(err => { if (!cancelled) setError(errorMessage(err)); })
       .finally(() => { if (!cancelled && !switched) setLoading(false); });
     return () => { cancelled = true; loaded.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWeek, view.statType, reload]);
+  useRosterRefresh(getSelectedLeague(), !!data, () => { silentReload.current = true; setReload(n => n + 1); });
 
   // A claim has a day (mid-week: the pickup plays from it, the drop until the day before); the ranking suggests one
   // and the owner can move it. Every pick carries its effective day.

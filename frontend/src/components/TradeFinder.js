@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { getTrades, errorMessage } from '../services/api';
+import { getTrades, getSelectedLeague, errorMessage } from '../services/api';
+import useRosterRefresh from '../useRosterRefresh';
 import useLeagueViewState from '../useLeagueViewState';
 import { shortDate } from '../weeks';
 import { PlayerName } from './PlayerCard';
@@ -52,13 +53,15 @@ const TradeFinder = ({ config }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const [rosterBump, setRosterBump] = useState(0);
   useEffect(() => {
     let cancelled = false;
     getTrades()
       .then(r => { if (!cancelled) setRoster(r.supported === false ? r : r.roster); })
       .catch(e => { if (!cancelled) setError(errorMessage(e)); });
     return () => { cancelled = true; };
-  }, []);
+  }, [rosterBump]);
+  useRosterRefresh(getSelectedLeague(), roster !== null, () => setRosterBump(b => b + 1));   // roster changed at Yahoo: reload it in place
 
   const names = Array.isArray(roster) ? roster.map(r => r.player) : [];
   const give = view.give.filter(p => names.includes(p));

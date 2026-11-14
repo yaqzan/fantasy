@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { getPlan, errorMessage } from '../services/api';
+import React, { useEffect, useRef, useState } from 'react';
+import { getPlan, getSelectedLeague, errorMessage } from '../services/api';
+import useRosterRefresh from '../useRosterRefresh';
 import { weekdayLetter, shortDate } from '../weeks';
 import { PlayerName } from './PlayerCard';
 
@@ -19,9 +20,13 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', afterPrevious = 
   const [plan, setPlan] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [bump, setBump] = useState(0);
+  const silent = useRef(false);   // a roster refresh reloads the plan under the old one instead of blanking it
 
   useEffect(() => {
-    setPlan(null); setError(null);
+    if (!silent.current) setPlan(null);
+    silent.current = false;
+    setError(null);
     if (!ready) return undefined;
     let cancelled = false;
     setLoading(true);
@@ -30,7 +35,8 @@ const WeekPlan = ({ week, statType, ready, title = 'Week plan', afterPrevious = 
       .catch(err => { if (!cancelled) setError(errorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [week, statType, ready, afterPrevious]);
+  }, [week, statType, ready, afterPrevious, bump]);
+  useRosterRefresh(getSelectedLeague(), !!plan, () => { silent.current = true; setBump(b => b + 1); });
 
   if (plan && !plan.supported) return null;
   if (!plan && !loading && !error) return null;

@@ -37,6 +37,27 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Roster freshness: pages load the DB's roster, then ask the backend to refresh MY roster from Yahoo / Fantrax
+// (/roster-sync). Every response carries X-Roster-Version (how often a refresh changed the DB); a page whose data was
+// loaded under an older number reloads in place (useRosterRefresh).
+let rosterVersionSeen = 0;
+api.interceptors.response.use((response) => {
+  const v = Number(response.headers?.['x-roster-version']);
+  if (!Number.isNaN(v) && !String(response.config?.url || '').includes('roster-sync')) rosterVersionSeen = v;
+  return response;
+});
+export const getRosterVersion = () => rosterVersionSeen;
+
+const rosterSyncs = {};   // league -> { at, promise }: one platform refresh per league per minute, shared by every component
+export const syncRoster = (leagueId) => {
+  const key = String(leagueId);
+  const hit = rosterSyncs[key];
+  if (hit && Date.now() - hit.at < 60000) return hit.promise;
+  const promise = api.post('/roster-sync').then(r => r.data.version).catch(() => null);   // a failed refresh leaves the DB data standing
+  rosterSyncs[key] = { at: Date.now(), promise };
+  return promise;
+};
+
 // The backend's error message, when it sent one.
 // Draft Day tab: targets, max bids and past-auction evidence (the owner's gitignored draft_day.json).
 export const getDraftDay = async () => (await api.get('/draft-day')).data;

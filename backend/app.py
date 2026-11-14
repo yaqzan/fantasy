@@ -680,6 +680,27 @@ def analyze():
     week_start, week_end, opponent = _requested_week(league, request.args.get('week_start'))
     try:   # day=YYYY-MM-DD: the what-if's claim date (a pickup plays from it, a drop until the day before)
         claim_day = date.fromisoformat(request.args['day']) if request.args.get('day') else None
+@fantasy_api.after_request
+def _roster_version_header(response):
+    """X-Roster-Version: how many times my roster changed under this league via /roster-sync; a page loaded under an
+    older number reloads in place (frontend useRosterRefresh)."""
+    import live_roster
+    try:
+        response.headers['X-Roster-Version'] = str(live_roster.version(current_league().id))
+    except Exception:   # no such league: the request itself errors elsewhere
+        pass
+    return response
+
+
+@fantasy_api.route('/roster-sync', methods=['POST'])
+def roster_sync():
+    """Make my roster in the DB what Yahoo / Fantrax shows now (live_roster); pages load the DB first and call this after."""
+    import live_roster
+    league = current_league()
+    changes = live_roster.refresh_my_team(league)
+    return jsonify({'version': live_roster.version(league.id), 'changes': changes})
+
+
     except ValueError:
         return jsonify({'error': 'day must be YYYY-MM-DD'}), 400
     result = get_matchup(league, request.args.get('timeframe') or default_stat_type(league), week_start, week_end, opponent,

@@ -419,8 +419,6 @@ def get_matchup(league, timeframe='projected', week_start=None, week_end=None, o
     opponent's roster is in; no comparison when there's neither). `adds`/`drops`: a what-if roster.
     `day`: the claim date of the what-if (default: now; a pickup plays from it, a drop until the day
     before). `moves`: the best pickups for the week's claims (best_moves)."""
-    from live_roster import refresh_my_team
-    refresh_my_team(league)   # the platform is the source of truth for my roster; the DB is its cache
     week_start, week_end, opponent_abv = _resolve_week(league, week_start, week_end, opponent_abv)
     suffix = timeframe_suffix(timeframe)
     week = Week(league, week_start, week_end)
