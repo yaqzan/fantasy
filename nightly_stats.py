@@ -32,6 +32,11 @@ def _finals(board):
             and str(g.get('detail') or '').startswith('Final')]
 
 
+def _score(g):
+    """'113-112': ESPN's final score, high first (the pull holds the NBA log to it: a half-played late game is not trusted)."""
+    return '-'.join(str(s) for s in sorted((int(t['score']) for t in g['teams']), reverse=True))
+
+
 def _already_refreshed(board):
     """A pull finished after the night's last game could have ended (last tip + 3 h): a restarted
     server doesn't redo the night."""
@@ -79,7 +84,8 @@ def tick(day, cur, on_done=None):
     if time.time() >= run['next']:
         run['tries'] += 1
         args = [sys.executable, os.path.join(ROOT, 'pull_api_data.py'),
-                '--after-games', day.isoformat(), '--games', str(len(_finals(board)))]
+                '--after-games', day.isoformat(), '--games', str(len(_finals(board))),
+                '--scores'] + [_score(g) for g in _finals(board)]
         log = open(LOG, 'a', encoding='utf-8')
         log.write(f'{datetime.now():%Y-%m-%d %H:%M:%S} {day}: try {run["tries"]}: {" ".join(args[1:])}\n')
         log.flush()

@@ -150,8 +150,9 @@ stats) is shared by all leagues.
   STL) for hours after; the stale FGA showed as "differs from Fantrax" (FG% only; Fantrax has the corrected numbers).
   `daily_leaders.recheck` refetches every final box score 30 min and 3 h after the night's last game went final and at 09:00
   Eastern next morning, replaces changed lines and re-folds them. The NBA game log is not the referee: it is pulled at the
-  buzzer and a late game can sit in it half-played (2026-11-13 LAC-OKC: NBA rows 103/105 vs final 113/112; heals at the next
-  night's pull). **Trap (2026-11-08):** a day with no NBA
+  buzzer and a late game can sit in it half-played (2026-11-13 LAC-OKC: NBA rows 103/105 vs final 113/112). So the nightly pull is guarded too:
+  `nightly_stats` passes ESPN's final scores (`--scores`) and `pull_api_data.night_is_in` exits NOT_YET (retry in 30 min, give up
+  after 12 h) until the NBA PLAYER log's per-game point sums equal them. **Trap (2026-11-08):** a day with no NBA
   games (Election Day 2026-11-03, Thanksgiving) answers with the PREVIOUS day's lineups, its own date in `displayedSelections.date`;
   `fantrax_canon._day_or_empty` drops a reply whose date isn't the one asked, else Monday counted twice (app 4-5, Fantrax 5-4). Cache: past days 6 h, today and
   yesterday 90 s. Future days are still our projection (Fantrax's future lineups are whatever is set so far).

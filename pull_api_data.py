@@ -299,16 +299,31 @@ def pull_all_data(season=SEASON, force=False, skip_techs=False):
 NOT_YET = 75  # exit code for --after-games: stats.nba.com doesn't have the whole night yet; try later
 
 
-def night_is_in(day, expected_games, season=SEASON):
-    """True once stats.nba.com's game log holds `expected_games` games on `day` (it lags the final
-    buzzer; box scores stay empty while a game is on)."""
+def night_is_in(day, expected_games, season=SEASON, scores=None):
+    """True once stats.nba.com's PLAYER game log holds `expected_games` games on `day` and, when `scores` is given
+    (ESPN's final score of each game, 'high-low' strings), every game's box score adds up to its final score. The log lags
+    the final buzzer and a late game can sit in it half-played (2026-11-13 LAC-OKC: players summed to 103/105 against the
+    final 113/112, and the season stats were built on that), so a count of games is not enough."""
     stamp = day.strftime('%m/%d/%Y')
-    resp = nba_api_call(leaguegamelog.LeagueGameLog, season=season, player_or_team_abbreviation='T',
+    resp = nba_api_call(leaguegamelog.LeagueGameLog, season=season, player_or_team_abbreviation='P',
                         season_type_all_star='Regular Season', date_from_nullable=stamp, date_to_nullable=stamp,
                         retries=3)
-    found = resp.get_data_frames()[0]['GAME_ID'].nunique() if resp is not None else 0
+    frame = resp.get_data_frames()[0] if resp is not None else None
+    found = frame['GAME_ID'].nunique() if frame is not None and len(frame) else 0
     print(f'{day}: {found} of {expected_games} games in the NBA game log')
-    return found >= expected_games
+    if found < expected_games:
+        return False
+    if not scores:
+        return True
+    totals = frame.groupby(['GAME_ID', 'TEAM_ABBREVIATION'])['PTS'].sum().reset_index()
+    pairs = sorted(sorted((int(p) for p in g['PTS']), reverse=True) for _, g in totals.groupby('GAME_ID'))
+    want = sorted(sorted((int(p) for p in sc.split('-')), reverse=True) for sc in scores)
+    short = [w for w in want if w not in pairs]
+    if short:
+        print(f"{day}: box scores don't add up to the final score yet (final {['-'.join(map(str, w)) for w in short]}; "
+              f"log has {['-'.join(map(str, p)) for p in pairs if p not in want]})")
+        return False
+    return True
 
 
 if __name__ == '__main__':
@@ -325,10 +340,12 @@ if __name__ == '__main__':
                         help='the nightly refresh (daily_leaders poller): exit 75 unless the NBA game log has '
                              '--games games on this date, else a full pull (forced past the once-a-day skip)')
     parser.add_argument('--games', type=int, default=1, help='games expected on --after-games')
+    parser.add_argument('--scores', nargs='*', metavar='HIGH-LOW',
+                        help="ESPN's final score of each game on --after-games: the log must add up to them before it is trusted")
     args = parser.parse_args()
     if args.after_games:
         import sys
-        if not night_is_in(datetime.strptime(args.after_games, '%Y-%m-%d').date(), args.games, args.season):
+        if not night_is_in(datetime.strptime(args.after_games, '%Y-%m-%d').date(), args.games, args.season, args.scores):
             sys.exit(NOT_YET)
         pull_all_data(args.season, force=True, skip_techs=args.skip_techs)
     elif args.rosters:
