@@ -195,7 +195,8 @@ _ctx_lock = threading.Lock()
 
 
 def context(lg, suffix, n=SAMPLE_WEEKS):
-    key = (lg.id, suffix, n)
+    from live_roster import version
+    key = (lg.id, suffix, n, version(lg.id))   # holds every roster: a refresh of mine is a new context
     with _ctx_lock:
         hit = _ctx.get(key)
         if hit and time.time() - hit.built < CTX_TTL:
@@ -380,7 +381,8 @@ RESULT_TTL = 60
 
 def cached_find_trades(lg, give, keep=(), x=2, min_market=0.0, min_lineup=0.0, tau=MARKET_TAU, top=15):
     """find_trades, cached RESULT_TTL seconds per request; one search at a time (the first caller computes, the rest read it)."""
-    key = (lg.id, tuple(sorted(give)), tuple(sorted(keep)), x, round(min_market, 1), round(min_lineup, 1), round(tau, 1), top)
+    from live_roster import version as live_version   # a roster refresh of mine is a new result
+    key = (lg.id, tuple(sorted(give)), tuple(sorted(keep)), x, round(min_market, 1), round(min_lineup, 1), round(tau, 1), top, live_version(lg.id))
     with _results_lock:
         hit = _results.get(key)
         if hit and time.time() - hit[0] < RESULT_TTL:

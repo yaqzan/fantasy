@@ -40,13 +40,15 @@ api.interceptors.request.use((config) => {
 // Roster freshness: pages load the DB's roster, then ask the backend to refresh MY roster from Yahoo / Fantrax
 // (/roster-sync). Every response carries X-Roster-Version (how often a refresh changed the DB); a page whose data was
 // loaded under an older number reloads in place (useRosterRefresh).
-let rosterVersionSeen = 0;
+const rosterVersions = {};   // league -> the version on the latest data response for it (a late reply of another league can't leak in)
 api.interceptors.response.use((response) => {
   const v = Number(response.headers?.['x-roster-version']);
-  if (!Number.isNaN(v) && !String(response.config?.url || '').includes('roster-sync')) rosterVersionSeen = v;
+  if (!Number.isNaN(v) && !String(response.config?.url || '').includes('roster-sync')) {
+    rosterVersions[String(response.config?.headers?.['X-League'] ?? '')] = v;
+  }
   return response;
 });
-export const getRosterVersion = () => rosterVersionSeen;
+export const getRosterVersion = (leagueId) => rosterVersions[String(leagueId ?? '')] ?? 0;
 
 const rosterSyncs = {};   // league -> { at, promise }: one platform refresh per league per minute, shared by every component
 export const syncRoster = (leagueId) => {

@@ -184,10 +184,8 @@ const LineupOptimizer = ({ config, onEditLeague }) => {
     let switched = false;   // moved on to another week: the next run owns the loading flag
     const quiet = silentReload.current;   // a roster refresh: reload under the old page, keep what the owner picked
     silentReload.current = false;
-    if (!quiet) {
-      setLoading(true); setError(null); setData(null); setCandidates([]); setPickupsError(null); setSelected(null); setManual(null); setDayPick({});
-      setPreviews({}); asked.current = new Set();
-    }
+    if (!quiet) { setLoading(true); setError(null); setData(null); setCandidates([]); setPickupsError(null); setSelected(null); setManual(null); setDayPick({}); }
+    setPreviews({}); asked.current = new Set();   // previews belong to the roster they were asked of, quiet reload or not
     Promise.all([analyze(activeWeek, view.statType), getPickups(activeWeek, view.statType).catch(err => ({ error: errorMessage(err) }))])
       .then(([matchup, pickups]) => {
         if (cancelled) return;

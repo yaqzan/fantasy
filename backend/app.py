@@ -1,4 +1,4 @@
-from flask import Flask, Blueprint, jsonify, request, send_from_directory
+from flask import Flask, Blueprint, g, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 import sys
@@ -671,24 +671,23 @@ def _requested_week(league, week_start_param):
     return get_current_fantasy_week_dates(league)
 
 
-@fantasy_api.route('/analyze')
-def analyze():
-    """Lineup Optimizer: my week against the opponent (lineup_optimizer.get_matchup). add/drop
-    (repeatable): a what-if roster (day: when the claim is made). moves=true: the best pickups for the week's claims."""
-    from lineup_optimizer import get_matchup
-    league = current_league()
-    week_start, week_end, opponent = _requested_week(league, request.args.get('week_start'))
-    try:   # day=YYYY-MM-DD: the what-if's claim date (a pickup plays from it, a drop until the day before)
-        claim_day = date.fromisoformat(request.args['day']) if request.args.get('day') else None
-@fantasy_api.after_request
-def _roster_version_header(response):
-    """X-Roster-Version: how many times my roster changed under this league via /roster-sync; a page loaded under an
-    older number reloads in place (frontend useRosterRefresh)."""
+@fantasy_api.before_request
+def _roster_version_at_start():
+    """The roster version when the request STARTED: a response is stamped with it, never with a newer one a refresh
+    produced meanwhile (that would pass old data off as new: frontend useRosterRefresh)."""
     import live_roster
     try:
-        response.headers['X-Roster-Version'] = str(live_roster.version(current_league().id))
+        g.roster_version = live_roster.version(current_league().id)
     except Exception:   # no such league: the request itself errors elsewhere
-        pass
+        g.roster_version = None
+
+
+@fantasy_api.after_request
+def _roster_version_header(response):
+    """X-Roster-Version: how many times my roster changed under this league via /roster-sync, as of the request's start;
+    a page loaded under an older number reloads in place (frontend useRosterRefresh)."""
+    if g.get('roster_version') is not None:
+        response.headers['X-Roster-Version'] = str(g.roster_version)
     return response
 
 
@@ -700,6 +699,16 @@ def roster_sync():
     changes = live_roster.refresh_my_team(league)
     return jsonify({'version': live_roster.version(league.id), 'changes': changes})
 
+
+@fantasy_api.route('/analyze')
+def analyze():
+    """Lineup Optimizer: my week against the opponent (lineup_optimizer.get_matchup). add/drop
+    (repeatable): a what-if roster (day: when the claim is made). moves=true: the best pickups for the week's claims."""
+    from lineup_optimizer import get_matchup
+    league = current_league()
+    week_start, week_end, opponent = _requested_week(league, request.args.get('week_start'))
+    try:   # day=YYYY-MM-DD: the what-if's claim date (a pickup plays from it, a drop until the day before)
+        claim_day = date.fromisoformat(request.args['day']) if request.args.get('day') else None
 
     except ValueError:
         return jsonify({'error': 'day must be YYYY-MM-DD'}), 400

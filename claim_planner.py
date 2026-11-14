@@ -984,7 +984,8 @@ def cached_week_plan(lg, timeframe=None, week_start=None, week_end=None, opponen
     first instead of each building a Week. `after`: (start, end, opponent) of the week before: this plan starts from the
     roster that week's plan ends with (claims reset weekly and nothing carries over, so next week's plan continues from
     this week's end state), falling back to today's roster when that plan is not available."""
-    key = (lg.id, str(week_start), timeframe, str(after[0]) if after else None)
+    from live_roster import version
+    key = (lg.id, str(week_start), timeframe, str(after[0]) if after else None, version(lg.id))   # a roster refresh is a new plan
     with _plans_lock:
         lock = _key_locks.setdefault(key, threading.Lock())
     with lock:
