@@ -257,6 +257,8 @@ def find_trades(lg, give, keep=(), x=2, min_market=0.0, min_lineup=0.0, tau=MARK
     t0 = time.time()
     if lg.platform != 'yahoo' or not lg.daily_lineups or not lg.is_points:
         return {'supported': False, 'reason': 'The trade finder is for Yahoo daily-lineup points leagues (its category version comes later).'}
+    from live_roster import refresh_my_team
+    refresh_my_team(lg)   # the platform is the source of truth for my roster; the DB is its cache
     suffix = lo.timeframe_suffix(timeframe or default_stat_type(lg))
     ctx = context(lg, suffix)
     if ctx is None:

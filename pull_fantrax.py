@@ -327,6 +327,50 @@ def transactions(s, fantrax_league_id):
     return sorted(sets.values(), key=when)
 
 
+_my_team_synced = {}   # league id -> time of the last one-team refresh
+
+
+def sync_my_team(league, ttl=60):
+    """Fantrax is the source of truth: make MY roster in the DB exactly Fantrax's now (one call; `sync_rosters` covers
+    every team and the transaction log). Returns change lines ([] = equal), None when throttled or unreachable."""
+    from fantasy_team_helper import get_team_by_abv, league_team_ids
+    if league.platform != 'fantrax' or time.time() - _my_team_synced.get(league.id, 0) < ttl:
+        return None
+    team = get_team_by_abv(league, league.my_team)
+    if team is None or not team.platform_team_id:
+        return None
+    try:
+        data = call(session(), league.platform_league_id, 'getTeamRosterInfo', teamId=team.platform_team_id)
+    except (Exception, SystemExit) as e:
+        print(f'fantrax my-team sync: {e}')
+        return None
+    index = name_index()
+    players = {p.id: p for p in Player.select(Player.id, Player.name)}
+    want = {}
+    for table in data['tables']:
+        for row in table['rows']:
+            if row.get('scorer') and index.get(norm_name(row['scorer']['name'])) in players:
+                want[index[norm_name(row['scorer']['name'])]] = players[index[norm_name(row['scorer']['name'])]]
+    if not want:   # an empty answer never wipes a roster
+        return None
+    _my_team_synced[league.id] = time.time()
+    team_ids = league_team_ids(league)
+    held = {f.player_id_id: f for f in FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id.in_(team_ids))}
+    have = {pid for pid, f in held.items() if f.fantasy_team_id_id == team.id}
+    adds, drops = [want[pid] for pid in want if pid not in have], [players[pid] for pid in have - set(want) if pid in players]
+    if adds or drops:
+        with DB.atomic():
+            FantasyTeamPlayer.delete().where((FantasyTeamPlayer.fantasy_team_id == team.id)
+                                             & FantasyTeamPlayer.player_id.in_([p.id for p in drops] or [0])).execute()
+            for p in adds:   # off any other team in this league first; a traded player keeps his price
+                price = held[p.id].price if p.id in held else None
+                FantasyTeamPlayer.delete().where((FantasyTeamPlayer.player_id == p.id)
+                                                 & FantasyTeamPlayer.fantasy_team_id.in_(team_ids)).execute()
+                FantasyTeamPlayer.create(player_id=p.id, fantasy_team_id=team, player_name=p.name,
+                                         fantasy_team_name=team.name, price=price)
+    return [f'+{p.name}' for p in adds] + [f'-{p.name}' for p in drops]
+
+
 def sync_rosters(fantrax_league_id, apply):
     """Print transactions not seen before, then make every team's roster exactly Fantrax's."""
     league = next((lg for lg in list_leagues() if lg.platform == 'fantrax' and lg.platform_league_id == fantrax_league_id), None)

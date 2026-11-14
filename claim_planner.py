@@ -922,9 +922,9 @@ def week_plan(lg, timeframe=None, week_start=None, week_end=None, opponent=None,
         return {'supported': False, 'reason': reason}
     started = time.time()
     import lineup_optimizer as lo
-    if lg.platform == 'yahoo' and not roster_il:   # Yahoo is the source of truth: fix the DB before planning on it
-        import pull_yahoo
-        pull_yahoo.sync_my_team(lg)
+    if not roster_il:   # the platform is the source of truth: fix the DB before planning on it
+        from live_roster import refresh_my_team
+        refresh_my_team(lg)
     week, suffix = load_week(lg, week_start, week_end, timeframe)
     if not any(p in week.stats for p in lo._active_roster(lg)[0]):
         return {'supported': False, 'reason': 'No players on your team in this league yet.'}
