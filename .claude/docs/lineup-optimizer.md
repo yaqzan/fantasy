@@ -38,7 +38,7 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 - Claims left: Yahoo leagues from the sync's pickups used; Fantrax leagues ask Fantrax live (`fantrax_canon.claims_remaining`, "Claims Remaining (Week)", current week only, 90 s cache; any other week or no answer = the full allowance). Guillotine showed 1/1 while Fantrax said 0 (2026-10-29).
 - A stored next-week choice is overridden on a week's last day while a claim remains; the owner's own week choice is lost on tab unmount.
 - To test a mid-week state without waiting for one: build `Week(league, ws, we)`, set `week.actual = WeekActuals(ws, we, today, fake_slate, norm_name)` and `week.remaining, week.day_weights = week.actual.remaining(week.schedule)`, then call `rank_moves`. Compare against a brute-force drops x days search.
-- DB rosters and injury flags go stale between syncs (`pull_yahoo.py sync`, `pull_fantrax.py rosters`); sync before judging a ranking.
+- DB rosters and injury flags go stale between syncs (`pull_yahoo.py sync`, `pull_fantrax.py rosters`); sync before judging a ranking. Exception: the week plan (`claim_planner.week_plan`) first runs `pull_yahoo.sync_my_team` (my roster + IL from one Yahoo call, 60 s throttle), so its "IL differs"/"stale sync" notes only show when that call failed.
 - Not yet looked at in a browser by the owner as of 2026-10-26; verify with endpoint probes and the build, not a screenshot.
 
 ## Week plan (claim_planner.py)

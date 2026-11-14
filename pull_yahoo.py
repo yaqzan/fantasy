@@ -277,6 +277,64 @@ def waiver_players(key):
         start += PAGE
 
 
+_my_team_synced = {}   # (league id) -> time of the last one-team refresh
+
+
+def sync_my_team(league, ttl=60):
+    """Yahoo is the source of truth: make MY team's roster and IL flags in the DB exactly what Yahoo shows right now
+    (one call; the hourly `sync` covers every team). Returns a list of change lines, [] when already equal, None when
+    Yahoo was unreachable or within `ttl` seconds of the last refresh. Called by the week plan so it never plans on a
+    stale roster."""
+    import time
+    from fantasy_database import DB, FantasyTeamPlayer, Player
+    from fantasy_team_helper import get_team_by_abv, league_team_ids
+    from projections import name_index, norm_name
+    if league.platform != 'yahoo' or time.time() - _my_team_synced.get(league.id, 0) < ttl:
+        return None
+    team = get_team_by_abv(league, league.my_team)
+    if team is None or not team.platform_team_id:
+        return None
+    try:
+        root = fetch(f'team/nba.l.{league.platform_league_id}.t.{team.platform_team_id}/roster')
+    except (Exception, SystemExit) as e:   # fetch raises SystemExit on a login error
+        print(f'yahoo my-team sync: {e}')
+        return None
+    yahoo = parse_players(root)
+    if not yahoo:
+        return None
+    _my_team_synced[league.id] = time.time()
+    ids, by_id = name_index(), {p.id: p for p in Player.select(Player.id, Player.name)}
+    want, il, changes = {}, set(), []
+    for p in yahoo:
+        player = by_id.get(ids.get(norm_name(p['name'])))
+        if player is None:
+            continue
+        want[player.name] = player
+        if p['il']:
+            il.add(player.name)
+    rows = list(FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id == team.id))
+    have = {r.player_name: r for r in rows}
+    adds, drops = sorted(set(want) - set(have)), sorted(set(have) - set(want))
+    il_now = {n for n, r in have.items() if r.il}
+    if il_now != il & set(have):
+        changes.append(f'IL: DB {sorted(il_now)} -> Yahoo {sorted(il & set(have))}')
+    if adds or drops:
+        changes.append(f'roster: +{adds} -{drops}')
+    if adds or drops or il_now != il & set(have):
+        with DB.atomic():
+            if drops:
+                FantasyTeamPlayer.delete().where((FantasyTeamPlayer.fantasy_team_id == team.id)
+                                                 & FantasyTeamPlayer.player_name.in_(drops)).execute()
+            for name in adds:   # off any other team in this league first
+                FantasyTeamPlayer.delete().where((FantasyTeamPlayer.player_name == name)
+                                                 & FantasyTeamPlayer.fantasy_team_id.in_(league_team_ids(league))).execute()
+                FantasyTeamPlayer.create(player_id=want[name], fantasy_team_id=team, player_name=name,
+                                         fantasy_team_name=team.name)
+            FantasyTeamPlayer.update(il=FantasyTeamPlayer.player_name.in_(list(il) or [''])).where(
+                FantasyTeamPlayer.fantasy_team_id == team.id).execute()
+    return changes
+
+
 def sync(yahoo_league, apply):
     from fantasy_database import DB, FantasyTeam, FantasyTeamPlayer, LeaguePlayerFlag, Player
     from fantasy_team_helper import set_league_flags, league_team_ids
