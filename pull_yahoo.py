@@ -153,7 +153,10 @@ def _web_session_locked(fresh):
 def fetch(path):
     reply = None
     if os.path.exists(TOKEN_FILE):
-        reply = requests.get(f'{API}/{path}', headers={'Authorization': f'Bearer {access_token()}'}, timeout=60)
+        try:
+            reply = requests.get(f'{API}/{path}', headers={'Authorization': f'Bearer {access_token()}'}, timeout=60)
+        except (SystemExit, requests.RequestException) as e:   # a refused token refresh falls back to the Firefox login below
+            print(f'yahoo app token unusable ({e}); using the Firefox login')
     # No app keys, or a token Yahoo refuses (403 "not authorized" while the developer program hasn't
     # approved the app, 2026-10): Yahoo's web host with the Firefox login; an expired one is re-read once.
     if reply is None or reply.status_code in (401, 403):
