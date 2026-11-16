@@ -38,7 +38,7 @@ FULL_ENUM = 60      # activation-day combinations up to which solve tries every 
 @dataclass
 class PlayerData:
     """One player: my roster + IL + candidate free agents. v[t] = expected FPTS if he STARTS on day t (FPTS x his
-    doubtful factor on his next game; 0 with no open game or OUT); the 0.86 availability lives in the layer weights.
+    doubtful factor on his next game x his chance back if OUT (Week.returning); 0 with no open game or OUT all week); the 0.86 availability lives in the layer weights.
     lk: his team's day-0 game is under way (no drop / IL move today). first_add: first day index a claim can land."""
     team: str = ''
     fpts: float = 0.0
@@ -58,9 +58,16 @@ class PlayerData:
     has_stats: bool = True
     mf: list = field(default_factory=list)   # per day: role_minutes factor (that night's expected minutes / usual); [] = 1.0
     keep: float = 0.0   # FPTS of holding him past this week (keep_values): earned if he is mine at the week's end
+    back: list = field(default_factory=list)   # OUT and expected back (Week.returning): per day his chance to play; [] = none
 
     def f(self, t):
         return self.mf[t] if self.mf else 1.0
+
+    def plays(self, t):
+        """His chance to play day t if his team plays: 1 healthy, 0 OUT for the week, Week.returning's chance when back."""
+        if not self.out:
+            return 1.0
+        return self.back[t] if self.back else 0.0
 
 
 @dataclass
@@ -389,17 +396,21 @@ def build_instance(lg, week, suffix, opp, roster_il=None):
         game, v = [], []
         mfp = mfac.get(p, {})
         mf = [mfp.get(d, 1.0) for d in days] if mfp else []
+        ret = week.returning.get(p) if out else None
+        back = [ret.get(d, 0.0) for d in days] if ret else []
         for t, d in enumerate(days):
             open_game = d in week.remaining.get(team, {}) and (team, d) not in tipped
             game.append(bool(open_game))
-            val = fpts * (doubt if d == nxt else 1.0) * (mf[t] if mf else 1.0) if open_game and not out else 0.0
+            plays = (back[t] if back else 0.0) if out else 1.0   # PlayerData.plays
+            val = fpts * (doubt if d == nxt else 1.0) * (mf[t] if mf else 1.0) * plays if open_game else 0.0
             v.append(max(val, 0.0))
         lk = bool(days) and (team, days[0]) in tipped
         live_share = weights.get((team, days[0]), 1.0) if lk else 0.0
         locked_start = lk and p in counted_today
         return PlayerData(team=team, fpts=fpts, zscore=float(s.get(f'Z-SCORE{suffix}', 0) or 0), elig=sorted(elig),
                           owned=owned, il=p in il, undroppable=owned and p in undroppable, out=out, game=game, v=v,
-                          doubt=doubt, lk=lk, live_share=live_share, locked_start=locked_start, first_add=first_add, mf=mf)
+                          doubt=doubt, lk=lk, live_share=live_share, locked_start=locked_start, first_add=first_add, mf=mf,
+                          back=back)
 
     players = {p: pdata(p, True) for p in owned_all}
     for p in (stored[0] if stored else {}):
@@ -520,7 +531,7 @@ def _split_doubtful(inst):
                 continue
             c = copy.copy(d)
             c.first_add, c.last_add = lo, hi
-            c.v = [max(d.fpts * (d.doubt if t == g else 1.0) * d.f(t), 0.0) if d.game[t] and not d.out else 0.0 for t in range(T)]
+            c.v = [max(d.fpts * (d.doubt if t == g else 1.0) * d.f(t) * d.plays(t), 0.0) if d.game[t] else 0.0 for t in range(T)]
             copies.append((g, c))
         if len(copies) <= 1:      # one window: his v already carries the factor on that game
             players[p] = d
@@ -545,7 +556,7 @@ def _solve_one(inst: Instance, C, dstar, positions=False, time_limit=60, alias=N
             if P is inst.players:
                 P = dict(P)
             P[q] = copy.copy(d)
-            P[q].v = [max(d.fpts * (d.doubt if t == g else 1.0) * d.f(t), 0.0) if d.game[t] and not d.out else 0.0
+            P[q].v = [max(d.fpts * (d.doubt if t == g else 1.0) * d.f(t) * d.plays(t), 0.0) if d.game[t] else 0.0
                       for t in range(T)]
     frozen = [any(t < dstar.get(q, T) for q in healthy) for t in range(T)]
     m = _Model()
@@ -864,7 +875,7 @@ ASSUMPTIONS = [
     'IL takes only OUT players. A healthy player left in IL freezes the lineup and blocks adds until he is activated, '
     'and activating him needs an open active spot.',
     'Only starters score; the bench covers absent starters (each player plays 86% of his games).',
-    'OUT means out all week; positions are ignored, as in the rest of the Pickup Desk.',
+    'OUT means out all week unless ESPN gives a return date (then he plays from it, at its odds, and stays OUT for IL rules); positions are ignored, as in the rest of the Pickup Desk.',
     'Claims land at once and the opponent makes no moves.',
 ]
 

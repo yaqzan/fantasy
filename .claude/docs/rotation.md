@@ -73,7 +73,7 @@ Data: game logs 2013-14..2025-26 (`.horizon/preseason-2026/data/rs_*.csv`; MySQL
   Better still and not done: refit the channel coefficients against U (-0.32 with the pair term, REVIEW.md).
 - **Rest of season**: no role part (the review measured it at 0.5% of ROS minutes, its tail beyond k = 4 where the delta scores
   nothing, and it carried the worst outliers); ROS = U x availability (projections.md "Rest of season").
-- **Not done**: a player's OWN return date in the optimizer or the ROS games (O/INJ = out all week still; the factor only moves his teammates).
+- **Not done**: a player's OWN return date in the ROS games. The optimizer uses it since 2026-11-16 (`Week.returning`, lineup-optimizer.md "Injuries").
 
 ## Minutes surge (2026-11-08): `role_minutes.surges`
 Owner: "isolate who's given new opportunities" and whether it lasts ("a missing starter ... apply based on when he returns").

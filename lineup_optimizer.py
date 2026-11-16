@@ -57,6 +57,36 @@ def _injury_statuses(names):
             .where(Player.name.in_(list(names)) & Player.injury_status.is_null(False)) if p.injury_status}
 
 
+RETURN_MIN_CHANCE = 0.5   # a returning player's game counts (at its chance) only from here up: below it he is out that day
+
+
+def returning_players(stats, injured, schedule, today):
+    """{name: {day: chance he plays}} for the Out players (Yahoo O/INJ) ESPN gives a return date: each of his team's
+    games from today, 1 - role_minutes Season.p_out (ESPN's date with the SLIP spread, tonight's NBA sheet, the
+    absence-streak table after a short date). A game under RETURN_MIN_CHANCE is left out (0): a long shot still
+    ranks at his full score in a daily lineup and would push a healthy bench player out of the layers. An Out
+    player with no ESPN date is not here: out all week, as before. {} when the model can't be built."""
+    import role_minutes
+    s = role_minutes.season(today)
+    if s is None:
+        return {}
+    ctx = role_minutes.context(today, role_minutes.tonight_sheet(today))
+    out = {}
+    for name in injured:
+        st = stats.get(name)
+        pid = st and st.get('NBA_ID')
+        rep = ctx['reports'].get(pid) if pid is not None else None
+        team = s.abv_of_full.get(st.get('TEAM')) if st else None
+        if not (rep and rep.get('status') == 'Out' and rep.get('return_date') and team):
+            continue
+        days = sorted(d for d in schedule.get(st['TEAM'], {}) if d >= today)
+        chance = {d: round(1.0 - s.p_out(pid, team, d, k, ctx), 3) for d, k in s.team_days(team, days).items()}
+        chance = {d: c if c >= RETURN_MIN_CHANCE else 0.0 for d, c in chance.items()}
+        if any(chance.values()):
+            out[name] = chance
+    return out
+
+
 def _roster(team):
     return [ftp.player_name for ftp in FantasyTeamPlayer.select().where(FantasyTeamPlayer.fantasy_team_id == team.id)]
 
@@ -91,6 +121,12 @@ class Week:
         me = get_team_by_abv(league, league.my_team) if league.my_team else None
         self.my_canon = me.platform_team_id if me else None
         self.waivers = get_waiver_dates(league)   # {free agent: the day he clears waivers}
+        # Out players ESPN expects back this week: they play from then on at that chance (still in `injured`: IL rules)
+        try:
+            self.returning = returning_players(self.stats, self.injured, self.schedule, today)
+        except Exception as e:   # never block the optimizer on it
+            print(f'returning players: {e}')
+            self.returning = {}
         self.opponent_now = None   # {category: total so far} of the opponent Week.opponent last returned
 
     def minutes_factor(self, suffix):
@@ -171,10 +207,12 @@ class Week:
             taken = {day: len(got) for day, got in lineups.items()}
         mf = self.minutes_factor(suffix)
         eff = {}
-        games, wins, game_var = player_week_games(players, self.stats, self.remaining, league, suffix, self.injured,
+        out = self.injured - set(self.returning)
+        games, wins, game_var = player_week_games(players, self.stats, self.remaining, league, suffix, out,
                                                   availability=AVAILABILITY, variance=True, day_weights=self.day_weights,
                                                   tipped=self.actual.tipped if self.actual else (), locked=locked, taken=taken,
-                                                  windows=windows, doubtful=self.doubtful, minutes_factor=mf, effective=eff, sit=sit)
+                                                  windows=windows, doubtful=self.doubtful, minutes_factor=mf, effective=eff, sit=sit,
+                                                  play_chance=self.returning)
         totals = team_week_totals(players, self.stats, eff if mf else games, wins, league.categories, suffix, game_var, carried,
                                   games_played=games if mf else None)
         # what Yahoo's "games played x/y" total counts: every scheduled game that fits the slots, no availability or injury discount

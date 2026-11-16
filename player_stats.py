@@ -425,7 +425,7 @@ def _lineup_chance(rank, slots, availability):
 
 def player_week_games(roster, player_stats, schedule, league, last_n_games='', unavailable=(),
                       availability=1.0, variance=False, day_weights=None, tipped=(), locked=(), taken=None,
-                      windows=None, doubtful=None, minutes_factor=None, effective=None, sit=()):
+                      windows=None, doubtful=None, minutes_factor=None, effective=None, sit=(), play_chance=None):
     """Games and expected wins each rostered player contributes over the week.
 
     Daily lineups: each day only the players whose team plays and who make that day's lineup count
@@ -460,8 +460,14 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
     numbers already carry (a teammate out, or back). It scales what the game adds to his stats, not the game count
     or wins, and in daily leagues it also reorders that day's lineup (score + (factor - 1) x |score|). Each game's
     games x factor goes to `effective` ({} to fill), which team_week_totals takes as the stat games. Absent = 1.0.
+
+    `play_chance` {player: {day: chance he plays}}: an Out player coming back (Week.returning, ESPN return dates); daily
+    lineups only (weekly leagues start healthy players). A listed player plays only the days listed with a chance above 0, each scaled by it, like a doubtful game; an
+    unlisted day is 0. A game under way (locked) is a fact and is not scaled.
     """
     doubtful = doubtful or {}
+    pc = play_chance or {}
+    chance_of = lambda p, day: pc[p].get(day, 0.0) if p in pc else 1.0  # noqa: E731
     weight = (lambda team, day: day_weights.get((team, day), 1.0)) if day_weights else (lambda team, day: 1.0)
     mf = minutes_factor or {}
     fac = (lambda p, day: mf.get(p, {}).get(day, 1.0)) if mf else (lambda p, day: 1.0)
@@ -501,7 +507,11 @@ def player_week_games(roster, player_stats, schedule, league, last_n_games='', u
                 continue
             if (p, day) in sit:
                 continue
-            by_day.setdefault(day, []).append((p, p_win, weight(team, day), (team, day) in tipped))
+            live = (team, day) in tipped
+            c = 1.0 if live else chance_of(p, day)
+            if c <= 0:
+                continue
+            by_day.setdefault(day, []).append((p, p_win, weight(team, day) * c, live))
     slots = league.slots
     taken = taken or {}
     score = {p: player_stats[p].get(f'Z-SCORE{last_n_games}', 0) or 0 for p in players} if mf else {}
