@@ -152,7 +152,7 @@ class Ctx:
         Players who are OUT go to a free IL slot first (`il_used` of the K are taken), so only a full IL costs a cut.
         Players the planner calls undroppable (market rule, can't-cut) stay."""
         room = max(self.insts[0].K - il_used, 0)
-        out = [p for p in names if self.player(p) and self.player(p).out][:room]
+        out = [p for p in names if self.player(p) and self.player(p).il_ok][:room]
         names = [p for p in names if p not in out]
         over = len(names) - self.N
         if over <= 0:
@@ -173,7 +173,7 @@ class Ctx:
         import claim_planner as cp
         inst = self.insts[w]
         if partner:
-            il = [p for p in il if inst.players.get(p) and inst.players[p].out]
+            il = [p for p in il if inst.players.get(p) and inst.players[p].il_ok]
         players = {}
         for p in list(active) + list(il):
             d = inst.players.get(p)
@@ -186,7 +186,7 @@ class Ctx:
             if not d.owned and d.first_add is not None:
                 players[p] = d
         inst2 = dataclasses.replace(inst, players=players, claims_left=claims,
-                                    healthy_in_il=sorted(p for p in il if p in players and not players[p].out))
+                                    healthy_in_il=sorted(p for p in il if p in players and not players[p].il_ok))
         return cp.solve(inst2)
 
 

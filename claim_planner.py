@@ -48,6 +48,7 @@ class PlayerData:
     il: bool = False
     undroppable: bool = False
     out: bool = False
+    il_ok: bool = False   # may sit in IL: Yahoo tags him O/INJ/Q/D/P (owner 2026-11-16: any tag is IL-eligible, not a violation)
     game: list = field(default_factory=list)
     v: list = field(default_factory=list)
     doubt: float = 1.0
@@ -296,6 +297,7 @@ def build_instance(lg, week, suffix, opp, roster_il=None):
     stats = week.stats
     tipped = week.actual.tipped if week.actual else set()
     weights = week.day_weights or {}
+    tagged = lo._injury_statuses(owned_all)   # Yahoo's tag per player: any of O/INJ/Q/D/P keeps him IL-legal
     mfac = week.minutes_factor(suffix)   # role_minutes: each day's minutes factor, so v[t] (and the judge) see it
 
     # today's canon: who already played / is playing in a counted slot (Week.team's locked / taken)
@@ -408,7 +410,7 @@ def build_instance(lg, week, suffix, opp, roster_il=None):
         live_share = weights.get((team, days[0]), 1.0) if lk else 0.0
         locked_start = lk and p in counted_today
         return PlayerData(team=team, fpts=fpts, zscore=float(s.get(f'Z-SCORE{suffix}', 0) or 0), elig=sorted(elig),
-                          owned=owned, il=p in il, undroppable=owned and p in undroppable, out=out, game=game, v=v,
+                          owned=owned, il=p in il, undroppable=owned and p in undroppable, out=out, il_ok=out or p in tagged, game=game, v=v,
                           doubt=doubt, lk=lk, live_share=live_share, locked_start=locked_start, first_add=first_add, mf=mf,
                           back=back)
 
@@ -446,7 +448,7 @@ def build_instance(lg, week, suffix, opp, roster_il=None):
                     suffix=suffix, days=[d.isoformat() for d in days], slots=slots, open_slots=open_slots,
                     n_slots=[len(s) for s in open_slots], players=players, stored_lineup=stored,
                     stored_source=stored_source,
-                    healthy_in_il=sorted(p for p in il if p in players and not players[p].out),
+                    healthy_in_il=sorted(p for p in il if p in players and not players[p].il_ok),
                     claims_left=C, N=lg.roster_size, K=3, avail=AVAILABILITY, my_carried=carried, live_const=live_const,
                     opp_mean=theirs['FPTS'][0], opp_var=theirs['FPTS'][1], notes=notes, contested=contested)
     select_pool(inst)
@@ -587,7 +589,7 @@ def _solve_one(inst: Instance, C, dstar, positions=False, time_limit=60, alias=N
                 m.var(('a', p, t), obj=-(EPS * (T - 1 - t)))
             if not (d.owned and d.undroppable):
                 m.var(('d', p, t), 0.0, 1.0, integer=False, obj=-(EPS_D + EPS * (T - 1 - t)))
-            if d.owned and (d.il or d.out):
+            if d.owned and (d.il or d.il_ok):
                 lb, ub = 0.0, 1.0
                 if t == 0 and d.lk:
                     lb = ub = 1.0 if d.il else 0.0
@@ -639,7 +641,7 @@ def _solve_one(inst: Instance, C, dstar, positions=False, time_limit=60, alias=N
                     else:
                         m.row([(('g', p, 0), 1.0), (('i', p, 0), 1.0), (('o', p, 0), -1.0)], lb=i0 - 1.0)
                 # enter IL only if OUT: i[t] - i[t-1] <= OUT
-                m.row([(('i', p, t), 1.0)] + prev_i, ub=(1.0 if d.out else 0.0) + i0)
+                m.row([(('i', p, t), 1.0)] + prev_i, ub=(1.0 if d.il_ok else 0.0) + i0)
                 if frozen[t]:
                     # frozen: no IL entries (i[t] <= i[t-1]) ...
                     m.row([(('i', p, t), 1.0)] + prev_i, ub=i0)
@@ -837,7 +839,7 @@ def score_judge(inst: Instance, plan: Plan, week, rules=True):
         for t, day in enumerate(days):
             owned, il = st[t]
             active = owned - il
-            frozen = rules and any(not P[q].out for q in il)
+            frozen = rules and any(not P[q].il_ok for q in il)
             roster = [p for p in inst.stored_lineup[t] if p in active] if frozen else sorted(active)
             week.remaining = {team: {day: g[day]} for team, g in full.items() if day in g}
             dbt = {}
@@ -905,7 +907,7 @@ def _note(inst, m, n_add):
     if kind == 'drop':
         return ('OUT · ' if d.out else '') + f'{d.fpts:.1f} FPTS/g{keep} · unaddable 3 days'
     if kind == 'il_in':
-        return 'OUT: frees an active spot'
+        return 'IL: frees an active spot'
     return 'activate' if not d.out else 'back to the active roster'
 
 
