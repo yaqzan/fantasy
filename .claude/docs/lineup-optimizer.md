@@ -19,7 +19,7 @@ The optimizer is NOT a lineup-setting tool: it projects this week's head-to-head
 | Per-day minutes factor (teammates out / back, ESPN return dates, tonight's sheet) | `role_minutes.factors` via `Week.minutes_factor(suffix)`; model in rotation.md "Role-aware minutes" |
 | Week plan (ILP: adds, drops, IL moves, claim days; Yahoo daily points leagues) | `claim_planner.py` (`week_plan`, `solve`, `score_judge`, `keep_values`), `/api/plan`; card `components/WeekPlan.js` |
 | Page | `frontend/src/components/LineupOptimizer.js`; API client `services/api.js` (`analyze`, `pickups`, `getPlan`); sibling `WeeklyPickups.js` |
-| Crowded day: who to start (the Start tab; daily category leagues, all-UTIL slots) | `start_day.py` (`status`, `lineups`), `/api/start-day[/status]`; `components/StartDay.js`, tab logic in `App.js` |
+| Crowded day: who to start (the Start tab; any daily-lineup league) | `start_day.py` (`status`, `lineups`), `/api/start-day[/status]`; `components/StartDay.js`, tab logic in `App.js` |
 | Terminal | `python lineup_optimizer.py <league> proj [moves] [plan]` ; `python claim_planner.py <league>` |
 
 ## Traps
@@ -136,7 +136,7 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
 ## Start tab (start_day.py, 2026-11-04)
 
 Fantrax category leagues (WSOP, Guillotine) set `roster.active` (6) starters of 10, and on a night when almost everyone
-plays the question is who. Capability by rule, not id: `supported` = daily lineups + category scoring + all-UTIL slots.
+plays the question is who. Capability by rule, not id: `supported` = daily lineups. Courtside (Yahoo points, positional slots, 2026-11-18): only lineups `fill_slots` can seat are tried; a points league is one category, so the tab shows win chance, not categories.
 - **Method:** every legal lineup of the players who can still start (healthy, game today, not tipped) goes through
   `Week.team`; the sat players get a window starting tomorrow, so the rest of the week plays as usual. Value = expected
   categories won against this week's opponent, plus the week-win chance (Poisson-binomial). Exact search up to

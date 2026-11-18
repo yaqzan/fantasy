@@ -1,12 +1,13 @@
-"""Who to start on a crowded day (the "Start" tab): daily category leagues with fewer active slots than
-healthy players with a game.
+"""Who to start on a crowded day (the "Start" tab): daily-lineup leagues with fewer active slots than
+healthy players with a game (category or points scoring, all-UTIL or positional slots).
 
 The matchup model decides. For a day, every legal lineup of the players who can still start is run through
 `Week.team` (the sat players get a window that begins the next day, so every other day plays as usual) and
 scored by expected categories won against this week's opponent, plus the week-win chance. From the grid:
 a MUST is a player whose absence costs `MUST_COST` or more of the best lineup's value; the rest compete for
 the open spots, each with what the best lineup containing him loses. Exact search only (`MAX_LINEUPS`):
-Fantrax's 6 of 10 is 210 lineups.
+Fantrax's 6 of 10 is 210 lineups. Positional slots: only lineups `fill_slots` can seat are tried (a points league is
+one category, so its "expected categories" is the win chance).
 
     python start_day.py [league] [YYYY-MM-DD]
 """
@@ -16,7 +17,7 @@ from datetime import date, timedelta
 
 import lineup_optimizer as lo
 from leagues import category_meta
-from player_stats import category_win_chances
+from player_stats import category_win_chances, fill_slots
 
 MUST_COST = 0.03      # benching him loses this many expected categories (3% of a category)
 TOSSUP_LOSS = 0.04    # an option within this of the best lineup is a toss-up for the open spot
@@ -26,9 +27,15 @@ _cache = {}
 
 
 def supported(league):
-    """Daily lineups, category scoring, no positional slots: any k of the players fill the k slots."""
-    return bool(league.daily_lineups and league.settings['scoring']['type'] == 'categories'
-                and all(slot == 'UTIL' for slot in league.slots))
+    """Daily lineups (any scoring, any slots): the day's lineup is a choice among the players who can start."""
+    return bool(league.daily_lineups)
+
+
+def _seatable(chosen, league, stats):
+    """True when `chosen` players can all be seated in the league's slots (any k of them, with all-UTIL slots)."""
+    if all(slot == 'UTIL' for slot in league.slots):
+        return True
+    return len(fill_slots(list(chosen), league.slots, stats)) == len(chosen)
 
 
 def _week_win(chances):
@@ -127,12 +134,16 @@ def _lineups(league, day):
     doubtful = week.doubtful
     next_game = {p: min(week.remaining.get(week.stats[p]['TEAM'], {}), default=None) for p in doubtful if p in week.stats}
     for chosen in itertools.combinations(free, open_slots):
+        if not _seatable(chosen + tuple(locked), league, week.stats):   # a position nobody fills: not a legal lineup
+            continue
         sat = [p for p in free if p not in chosen]
         sit = {(p, day) for p in sat}
         # a doubtful player's doubt belongs to his next game; sat on it, it must not move to a later game
         week.doubtful = {p: v for p, v in doubtful.items() if p not in sat or next_game.get(p) != day}
         chances = category_win_chances(week.team(roster, suffix, owned, sit=sit).totals, theirs, league)
         grid.append((sum(chances.values()), _week_win(list(chances.values())), frozenset(chosen), chances))
+    if not grid:
+        return {**base, 'conflict': True, 'error': 'No lineup fits the positional slots.'}
     best = max(grid, key=lambda g: g[0])
     worst = min(grid, key=lambda g: g[0])
 
