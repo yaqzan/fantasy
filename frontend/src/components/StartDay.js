@@ -9,12 +9,14 @@ const signedPct = (x) => `${x > 0 ? '+' : ''}${(x * 100).toFixed(1)}%`;
 // Start tab (start_day.py via /api/start-day): on a day with more healthy players than active slots, which ones the
 // week's matchup says to start. Must-starts, then the players who compete for the open spots, then the bench.
 const PlayerRow = ({ p, labels, pick, points }) => {
-  const unit = points ? 'win' : 'cats';
-  const val = (x) => (points ? `${(x * 100).toFixed(1)}%` : x.toFixed(2));
+  const unit = points ? 'pts' : 'cats';
+  const val = (x) => x.toFixed(points ? 1 : 2);
   return (
   <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded px-2 py-1.5 text-sm ${pick ? 'bg-gray-800 border border-nba-orange' : 'bg-gray-800/60'}`}>
     <span className="font-semibold text-gray-100 min-w-0"><PlayerName name={p.name} /></span>
     <span className="text-[11px] text-gray-500">{p.team}</span>
+    {points && p.slot && <span className="text-[11px] rounded px-1 bg-gray-700 text-gray-300">{p.slot}</span>}
+    {points && <span className="text-[11px] text-gray-400 tabular-nums">{p.fpts} pts{p.factor !== 1 ? ` (minutes x${p.factor})` : ''}</span>}
     {p.play_chance != null && <span className="text-[11px] rounded px-1 bg-amber-900/60 text-amber-300">{pct(p.play_chance)} to play</span>}
     {pick && <span className="text-[11px] rounded px-1 bg-nba-orange text-onaccent font-semibold">model pick</span>}
     <span className="ml-auto text-xs text-gray-400 tabular-nums text-right">
@@ -47,7 +49,7 @@ const StartDay = ({ config, status }) => {
   }, [day]);
 
   const labels = data?.category_labels || {};
-  const points = Object.keys(labels).length === 1;
+  const points = Boolean(data?.points);
   const musts = data?.players?.filter(p => p.role === 'must') || [];
   const options = data?.players?.filter(p => p.role === 'toss-up') || [];
   const bench = data?.players?.filter(p => p.role === 'bench') || [];
@@ -72,10 +74,16 @@ const StartDay = ({ config, status }) => {
       {data?.too_many && <div className="text-xs text-gray-300 mt-2">Too many lineups to try ({data.candidates} players for {data.slots - data.locked.length} spots).</div>}
       {data?.best && (
         <>
+          {points ? (
+            <div className="mt-2 text-xs text-gray-300">
+              Best lineup tonight: <span className="font-bold text-green-300 tabular-nums">{data.best.fpts}</span> projected points, by role and who is playing.
+            </div>
+          ) : (
           <div className="mt-2 text-xs text-gray-300">
             Start {data.open_slots} of {data.candidates} vs {data.opponent}. The right group is <span className="font-bold text-green-300 tabular-nums">{pct(data.best.win)}</span> to
             win the week {!points && `(${data.best.expected} categories)`}; the worst is <span className="font-bold text-red-300 tabular-nums">{pct(data.worst.win)}</span> {!points && `(${data.worst.expected})`}.
           </div>
+          )}
           {data.locked.length > 0 && <div className="mt-1 text-[11px] text-gray-400">Already in a game: {data.locked.join(', ')}.</div>}
           {musts.length > 0 && <div className="mt-3 text-[11px] uppercase tracking-wide text-gray-400">Must start</div>}
           <div className="space-y-1 mt-1">{musts.map(p => <PlayerRow key={p.name} p={p} labels={labels} points={points} />)}</div>

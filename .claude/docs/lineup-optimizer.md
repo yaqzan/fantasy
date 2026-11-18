@@ -136,7 +136,7 @@ P(win) equal; 2026-11-02). Since then production alone has the pool rule, bounde
 ## Start tab (start_day.py, 2026-11-04)
 
 Fantrax category leagues (WSOP, Guillotine) set `roster.active` (6) starters of 10, and on a night when almost everyone
-plays the question is who. Capability by rule, not id: `supported` = daily lineups. Courtside (Yahoo points, positional slots, 2026-11-18): only lineups `fill_slots` can seat are tried; a points league is one category, so the tab shows win chance, not categories.
+plays the question is who. Capability by rule, not id: `supported` = daily lineups. Courtside (Yahoo points, positional slots, 2026-11-18): points leagues skip the opponent grid: each free player is valued at tonight's FPTS x `minutes_factor` (role) x play chance, the best lineup is `fill_slots` best-first, and bench cost / loss are in FPTS (`PTS_MUST` 5 = must, `PTS_TOSSUP` 2). Category leagues keep the grid. Not modelled: a tipped player is reseated freely; Out players with an ESPN return date are not candidates.
 - **Method:** every legal lineup of the players who can still start (healthy, game today, not tipped) goes through
   `Week.team`; the sat players get a window starting tomorrow, so the rest of the week plays as usual. Value = expected
   categories won against this week's opponent, plus the week-win chance (Poisson-binomial). Exact search up to

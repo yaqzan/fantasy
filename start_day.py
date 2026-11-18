@@ -31,6 +31,21 @@ def supported(league):
     return bool(league.daily_lineups)
 
 
+PTS_MUST = 5.0        # points leagues: benching him costs this many projected FPTS tonight
+PTS_TOSSUP = 2.0      # within this many FPTS of the best lineup: a toss-up
+
+
+def is_points(league):
+    return league.settings['scoring']['type'] == 'points'
+
+
+def _seats(players, league, stats):
+    """How many of `players` the league's slots can seat at most."""
+    if all(slot == 'UTIL' for slot in league.slots):
+        return min(len(players), len(league.slots))
+    return len(fill_slots(list(players), league.slots, stats))
+
+
 def _seatable(chosen, league, stats):
     """True when `chosen` players can all be seated in the league's slots (any k of them, with all-UTIL slots)."""
     if all(slot == 'UTIL' for slot in league.slots):
@@ -86,7 +101,7 @@ def _status(league, day=None):
     d = day
     while d <= week_end:
         free, locked = _candidates(week, roster, d)
-        if 0 < slots - len(locked) < len(free):   # no open spot (tipped games fill the slots): nothing to choose
+        if 0 < slots - len(locked) and _seats(locked + free, league, week.stats) - len(locked) < len(free)                 and _seats(locked + free, league, week.stats) > len(locked):   # no open spot (tipped games fill the slots): nothing to choose
             out['conflict_days'].append(d.isoformat())
         if d == day:
             out['conflict'] = d.isoformat() in out['conflict_days']
@@ -107,7 +122,7 @@ def lineups(league, day=None):
 
 def _lineups(league, day):
     if not supported(league):
-        return {'supported': False, 'reason': 'Start days are for daily-lineup category leagues without positional slots.'}
+        return {'supported': False, 'reason': 'Start days are for daily-lineup leagues.'}
     suffix = lo.timeframe_suffix(lo.default_stat_type(league))
     week_start, week_end, opponent = lo._resolve_week(league, None, None, None)
     week = lo.Week(league, week_start, week_end)
@@ -117,12 +132,14 @@ def _lineups(league, day):
         return {'supported': True, 'error': f'{day.isoformat()} is not a day left this week'}
     free, locked = _candidates(week, roster, day)
     slots = len(league.slots)
-    open_slots = slots - len(locked)
+    open_slots = min(slots, _seats(locked + free, league, week.stats)) - len(locked)
     base = {'supported': True, 'day': day.isoformat(), 'slots': slots, 'locked': locked, 'candidates': len(free)}
     if open_slots <= 0:   # tipped games already fill every slot
         return {**base, 'conflict': False, 'start': [], 'bench': free}
     if len(free) <= open_slots:
         return {**base, 'conflict': False, 'start': free, 'bench': []}
+    if is_points(league):
+        return _points_lineups(league, week, suffix, day, free, locked, base)
     combos = len(list(itertools.islice(itertools.combinations(range(len(free)), open_slots), MAX_LINEUPS + 1)))
     if combos > MAX_LINEUPS:
         return {**base, 'conflict': True, 'too_many': True}
@@ -177,6 +194,45 @@ def _lineups(league, day):
             'categories': {c: round(v, 3) for c, v in best[3].items()}, 'players': players, 'category_labels': meta}
 
 
+def _points_lineups(league, week, suffix, day, free, locked, base):
+    """Points leagues: rank by tonight's projected FPTS (role-adjusted minutes x chance he plays), seated greedily
+    (the slots form a matroid, so best-first filling is the best lineup). No opponent, no lineup grid."""
+    st = week.stats
+    mf = week.minutes_factor(suffix)
+    pts = {p: (st[p].get(f'FPTS{suffix}') or 0) * mf.get(p, {}).get(day, 1.0) * week.doubtful.get(p, 1.0) for p in free}
+    order = sorted(free, key=lambda p: -pts[p])
+
+    def lineup(first):
+        rest = [p for p in order if p != first]
+        seated = fill_slots(list(locked) + ([first] if first else []) + rest, league.slots, st)
+        return seated, sum(pts.get(p, 0) for p in seated)
+
+    seated, best = lineup(None)
+    players = []
+    for p in free:
+        if p in seated:
+            cost = best - lineup_without(p, order, locked, league, st, pts)
+            loss = 0.0
+        else:
+            cost, loss = 0.0, best - lineup(p)[1]
+        players.append({'name': p, 'team': st[p]['TEAM'], 'play_chance': week.doubtful.get(p), 'in_best': p in seated,
+                        'bench_cost': round(cost, 1), 'loss': round(loss, 1), 'fpts': round(pts[p], 1),
+                        'factor': round(mf.get(p, {}).get(day, 1.0), 2), 'slot': seated.get(p), 'helps': []})
+    for p in players:
+        p['role'] = 'must' if p['in_best'] and p['bench_cost'] >= PTS_MUST else (
+            'toss-up' if p['in_best'] or p['loss'] <= PTS_TOSSUP else 'bench')
+    players.sort(key=lambda p: (p['role'] != 'must', p['role'] == 'bench', -p['bench_cost'], p['loss']))
+    must = sum(p['role'] == 'must' for p in players)
+    return {**base, 'conflict': True, 'points': True, 'open_slots': base['slots'] - len(base['locked']),
+            'open_for_options': base['slots'] - len(base['locked']) - must, 'best': {'fpts': round(best, 1)},
+            'players': players}
+
+
+def lineup_without(p, order, locked, league, st, pts):
+    seated = fill_slots(list(locked) + [q for q in order if q != p], league.slots, st)
+    return sum(pts.get(q, 0) for q in seated)
+
+
 def main(league: str = None, day: str = None):
     """Print the crowded-day lineup for a league (default: the active one) and a day (default: today).
 
@@ -198,6 +254,11 @@ def main(league: str = None, day: str = None):
         if data.get(k):
             print(k, data[k])
             return
+    if data.get('points'):
+        print(f"best lineup {data['best']['fpts']} FPTS")
+        for p in data['players']:
+            print(f"  {p['role']:8s} {p['name']:22s} {p['slot'] or '-':5s} {p['fpts']:5.1f} pts x{p['factor']}  bench -{p['bench_cost']}  loss {p['loss']}")
+        return
     print(f"best {data['best']['expected']} cats, win {data['best']['win']:.0%}; worst {data['worst']['expected']}, {data['worst']['win']:.0%}")
     for p in data['players']:
         print(f"  {p['role']:8s} {p['name']:22s} bench -{p['bench_cost']:.3f}  loss {p['loss']:.3f}  win {p['win_delta']:+.1%}  {p['helps']}")
