@@ -157,16 +157,17 @@ const GameProgress = ({ p }) => {
   }
   if (p.game_state !== 'in' || !p.game_period) return null;
   const q = p.game_period;
-  const on = p.on_court;
+  const half = q === 2 && ['0.0', '0:00'].includes(String(p.game_clock)); // ESPN reports halftime as period 2, clock 0.0
+  const on = half ? false : p.on_court;                    // nobody is on the floor at halftime: no red pulse
   return (
-    <span className="flex items-center gap-1 shrink-0" title={on ? 'On the floor' : on === false ? 'On the bench' : undefined}>
+    <span className="flex items-center gap-1 shrink-0" title={half ? 'Halftime' : on ? 'On the floor' : on === false ? 'On the bench' : undefined}>
       <span className="flex gap-px">
         {[1, 2, 3, 4].map(i => (
           <i key={i} className={`block w-[7px] sm:w-[9px] h-[5px] rounded-[1px] ${
             i < q || q > 4 ? 'bg-gray-400' : i === q ? (on ? 'bg-red-500 animate-pulse' : 'bg-gray-400') : 'bg-gray-600'}`} />
         ))}
       </span>
-      <span className={`tabular-nums ${on ? 'text-red-400 font-semibold' : ''}`}>{q > 4 ? 'OT ' : ''}{p.game_clock}</span>
+      <span className={`tabular-nums ${on ? 'text-red-400 font-semibold' : ''}`}>{q > 4 ? 'OT ' : ''}{half ? 'HALF' : p.game_clock}</span>
     </span>
   );
 };
