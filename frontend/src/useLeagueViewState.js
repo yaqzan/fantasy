@@ -29,7 +29,7 @@ export const seasonLabel = () => {
 };
 
 export const statOptions = () => [
-  ['projected', `${seasonLabel()} Running Projection`], ['season', 'Season Average'], ['10', 'Last 10 Games'], ['5', 'Last 5 Games'],
+  ['projected', `${seasonLabel()} Running Projection`], ['season', 'Season Average'], ['10', 'Last 10 Games'], ['5', 'Last 5 Games'], ['3', 'Last 3 Games'],
 ];
 
 // Drops a stored stats choice the league can't offer any more.

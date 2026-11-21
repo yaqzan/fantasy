@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { calculateCustomZScores, calculateCustomAuctionValues } from './services/api';
 
 // API field suffix for each stats choice ('projected' = the projection).
-const PERIOD_SUFFIX = { season: '_season', '5': '_5', '10': '_10', projected: '_projected' };
+const PERIOD_SUFFIX = { season: '_season', '3': '_3', '5': '_5', '10': '_10', projected: '_projected' };
 
 // Rank, score and auction $ for the selected stats, with the punted categories and the
 // star-premium slider applied. Shared by the in-season table and the draft board.

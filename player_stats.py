@@ -10,12 +10,12 @@ from fantasy_config import API_ATTRIBUTES
 from leagues import CATEGORY_CATALOG, slot_reach
 
 
-TIME_PERIODS = ['', '_5', '_10']
-TIMEFRAMES = ['', '_5', '_10', '_projected', '_proj']  # '_proj': the blended line as is; '_projected': THE projection (see _add_projections)
+TIME_PERIODS = ['', '_3', '_5', '_10']
+TIMEFRAMES = ['', '_3', '_5', '_10', '_projected', '_proj']  # '_proj': the blended line as is; '_projected': THE projection (see _add_projections)
 PROJ_FRAMES = ('_proj', '_projected')
 # The frontend's stats choices -> key suffix. 'projected' is THE projection (model + preseason + this season's games);
 # an older client's 'proj' / 'pre' falls through to it (callers default to '_projected').
-STAT_SUFFIXES = {'season': '', '5': '_5', '10': '_10', 'projected': '_projected'}
+STAT_SUFFIXES = {'season': '', '3': '_3', '5': '_5', '10': '_10', 'projected': '_projected'}
 Z_CAP = 3.0       # a category's z-score is capped at +/-Z_CAP before categories are summed
 POOL_PASSES = 3   # re-rank passes that settle the pool the z-scores are measured against
 # Players in that pool per roster spot. Teams reach past the top `spots` for categories and injuries
@@ -24,7 +24,7 @@ POOL_PASSES = 3   # re-rank passes that settle the pool the z-scores are measure
 SCALING_POOL_FACTOR = 1.8
 _NORMAL = NormalDist()
 VALID_POSITIONS = ['C', 'F', 'G']
-STAT_AVG_WEIGHTS = {'': 0.5, '_10': 0.5, '_5': 0.0}
+STAT_AVG_WEIGHTS = {'': 0.5, '_10': 0.5, '_5': 0.0, '_3': 0.0}
 TEAM_DICT = {
     'LA Clippers': 'Los Angeles Clippers',
     'LA Lakers': 'Los Angeles Lakers',
@@ -824,7 +824,7 @@ def calculate_overall_scores(player_stats, league, punt_categories=()):
     summed, so each one is worth the same, as in the league's scoring. Scarce stats are weighted
     by their spread: one block is worth about sixteen points.
 
-    Keys written, per timeframe n ('', '_5', '_10', '_projected'):
+    Keys written, per timeframe n ('', '_3', '_5', '_10', '_projected'):
       SCORE-{cat}{n}     one category, 0-100: 50 + 50 * z / Z_CAP (50 = average of the scaling pool)
       VALUE{n}, RANK{n}  summed z over every category, and the rank by it
       Z-VALUE{n}, Z-RANK{n}  summed z over the categories not punted, and the rank by it

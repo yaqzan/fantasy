@@ -1,4 +1,4 @@
-"""Per-game history behind every player's season / last-5 / last-10 totals (table game_lines).
+"""Per-game history behind every player's season / last-3 / last-5 / last-10 totals (table game_lines).
 
 Two writers, one calculation:
 - The NBA pull (pull_api_data.update_all_player_stats) stores every game of the official game log
@@ -50,9 +50,9 @@ def recompute(player, season):
     nba_ids = [r.game_id for r in rows if r.source == 'nba']
     techs = technicals_by_player(nba_ids).get(player.id, {}) if nba_ids else {}
     techs.update({r.game_id: r.tech or 0 for r in rows if r.source == 'espn'})
-    base = (player.blka_nba or 0, player.blka_nba_5 or 0, player.blka_nba_10 or 0) if nba_ids else (0, 0, 0)
+    base = (player.blka_nba or 0, player.blka_nba_3 or 0, player.blka_nba_5 or 0, player.blka_nba_10 or 0) if nba_ids else (0, 0, 0, 0)
     blka = []
-    for total, n in zip(base, (None, 5, 10)):
+    for total, n in zip(base, (None, 3, 5, 10)):
         window = rows if n is None else rows[:n]
         espn = [r for r in window if r.source == 'espn']
         nba_part = total if n is None else round(total * (n - len(espn)) / n)

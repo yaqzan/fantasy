@@ -168,34 +168,37 @@ def update_team_rosters(season=SEASON):
     return rostered_players
 
 def pull_times_blocked(season=SEASON):
-    """{player id: (season, last 5, last 10) times blocked}. The game logs have no BLKA column;
+    """{player id: (season, last 3, last 5, last 10) times blocked}. The game logs have no BLKA column;
     leaguedashplayerstats does. Its last-N filter counts the team's last N games, close enough."""
     out = {}
-    for i, last_n in enumerate((0, 5, 10)):
+    for i, last_n in enumerate((0, 3, 5, 10)):
         resp = nba_api_call(leaguedashplayerstats.LeagueDashPlayerStats, season=season,
                             per_mode_detailed='Totals', last_n_games=last_n)
         if resp is None:
             print(Fore.YELLOW + f"Times blocked (last {last_n or 'season'}) unavailable; keeping stored values")
             return None
         for row in resp.get_data_frames()[0][['PLAYER_ID', 'BLKA']].itertuples():
-            out.setdefault(int(row.PLAYER_ID), [0, 0, 0])[i] = int(row.BLKA)
+            out.setdefault(int(row.PLAYER_ID), [0, 0, 0, 0])[i] = int(row.BLKA)
     return out
 
 def apply_game_stats(player, player_games, techs, blka):
-    """Write season / last 5 / last 10 totals from a player's game log rows onto the Player row.
-    blka: (season, last 5, last 10) or None to keep the stored times-blocked values."""
+    """Write season / last 3 / last 5 / last 10 totals from a player's game log rows onto the Player row.
+    blka: (season, last 3, last 5, last 10) or None to keep the stored times-blocked values."""
     player_games = player_games.sort_values('GAME_DATE', ascending=False)
-    kept_blka = (player.blka, player.blka_5, player.blka_10)
+    kept_blka = (player.blka, player.blka_3, player.blka_5, player.blka_10)
     overall = compute_game_stats(player_games, techs, blka[0] if blka else 0)
-    last_5 = compute_game_stats(player_games.head(5), techs, blka[1] if blka else 0)
-    last_10 = compute_game_stats(player_games.head(10), techs, blka[2] if blka else 0)
+    last_3 = compute_game_stats(player_games.head(3), techs, blka[1] if blka else 0)
+    last_5 = compute_game_stats(player_games.head(5), techs, blka[2] if blka else 0)
+    last_10 = compute_game_stats(player_games.head(10), techs, blka[3] if blka else 0)
     for attr in API_ATTRIBUTES:
         setattr(player, attr.lower(), int(overall[attr]))
+        setattr(player, f'{attr}_3'.lower(), int(last_3[attr]))
         setattr(player, f'{attr}_5'.lower(), int(last_5[attr]))
         setattr(player, f'{attr}_10'.lower(), int(last_10[attr]))
     if blka is None:
-        player.blka, player.blka_5, player.blka_10 = kept_blka
+        player.blka, player.blka_3, player.blka_5, player.blka_10 = kept_blka
     player.plus_minus = overall['PLUS_MINUS'] / overall['GP'] if overall['GP'] > 0 else 0
+    player.plus_minus_3 = last_3['PLUS_MINUS'] / last_3['GP'] if last_3['GP'] > 0 else 0
     player.plus_minus_5 = last_5['PLUS_MINUS'] / last_5['GP'] if last_5['GP'] > 0 else 0
     player.plus_minus_10 = last_10['PLUS_MINUS'] / last_10['GP'] if last_10['GP'] > 0 else 0
     if player.gp is not None and overall['GP'] > player.gp:     # he played: the old injury's timetable is over
@@ -275,7 +278,7 @@ def update_all_player_stats(rostered_players=None, retry_rounds=3, season=SEASON
 
     for pid, player in tqdm(remaining_db.items(), desc='Updating player stats...'):
         if times_blocked is not None:  # else keep the stored NBA totals
-            player.blka_nba, player.blka_nba_5, player.blka_nba_10 = times_blocked.get(pid, (0, 0, 0))
+            player.blka_nba, player.blka_nba_3, player.blka_nba_5, player.blka_nba_10 = times_blocked.get(pid, (0, 0, 0, 0))
         recompute(player, season)  # same totals as before, from game_lines (+ ESPN games the NBA lacks)
         player.api_updated_at = now
         player.save()

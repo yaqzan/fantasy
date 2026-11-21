@@ -58,6 +58,6 @@ FPOINTS_SCORING = {
     'TOV': -1
 }
 
-# Per-player counting columns in the players table (lower-cased, with _5 / _10 variants).
+# Per-player counting columns in the players table (lower-cased, with _3 / _5 / _10 variants).
 API_ATTRIBUTES = ['FGA', 'FGM', 'FTA', 'FTM', 'FG3M', 'PTS', 'AST', 'REB', 'STL', 'BLK', 'TOV', 'BLKA', 'DD2', 'TD3', 'PF',
                   'TECH', 'W']

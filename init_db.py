@@ -35,6 +35,10 @@ def upgrade_schema(DB):
     for col in ('tech', 'tech_5', 'tech_10', 'w', 'w_5', 'w_10', 'blka_nba', 'blka_nba_5', 'blka_nba_10'):
         if col not in player_cols:
             ops.append(migrator.add_column('players', col, IntegerField(null=True)))
+    from fantasy_config import API_ATTRIBUTES  # the last-3 window (added after 5 / 10): one column per counting stat
+    for col in [f'{a.lower()}_3' for a in API_ATTRIBUTES] + ['blka_nba_3', 'plus_minus_3']:
+        if col not in player_cols:
+            ops.append(migrator.add_column('players', col, FloatField(null=True) if col == 'plus_minus_3' else IntegerField(null=True)))
     if 'stats_season' not in player_cols:
         ops.append(migrator.add_column('players', 'stats_season', CharField(max_length=7, null=True)))
     if 'player_seasons' in DB.get_tables() and 'tech' not in {c.name for c in DB.get_columns('player_seasons')}:

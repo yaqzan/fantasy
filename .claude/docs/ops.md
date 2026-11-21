@@ -24,7 +24,7 @@
 - **No other cron jobs for data.** The API process runs a poller thread (`daily_leaders.start_poller`,
   started in `backend/app.py`; sleeps until the next thing is due, see leagues.md "Daily Leaders"):
   ESPN every 5 min while games are on; **ESPN fold**: when ESPN calls a regular-season game final, its
-  lines go into `game_lines` and those players' season / last-5 / last-10 totals are recomputed at
+  lines go into `game_lines` and those players' season / last-3 / last-5 / last-10 totals (Player `*_3` columns; the stats dropdown's Last 3 Games; `blka_nba_3` is seeded from L5 x 3/5 until the next NBA pull) are recomputed at
   once (`game_log.py`; same `apply_game_stats` as the NBA pull. 2026-04-10 sandbox: 321 folded
   players equal the official totals, times blocked excepted, which is approximate between pulls).
   A fold never builds on a gap: it skips a night if `game_lines` lacks an earlier game night, and a
