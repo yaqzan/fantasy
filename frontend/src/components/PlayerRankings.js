@@ -20,7 +20,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
   // Leagues with positions filter by their slot positions; all-flex leagues by NBA's G/F/C.
   const chips = caps.positions?.length ? caps.positions : ['G', 'F', 'C'];
   const [view, setView] = useLeagueViewState(config.league?.id, 'players', {
-    statType: config.default_stat_type || 'projected', positions: chips, available: true, healthy: true,
+    statType: config.default_stat_type || 'projected', positions: chips, available: true, mine: true, healthy: true,
     priceExponent: null, punts: [], tonight: false, tomorrow: false, opp: false, likely: false, surge: false,
   }, (picked) => ({
     ...validStat(config)(picked),
@@ -41,7 +41,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
   const filtered = players.filter(player => {
     const mine = player.fantasy_team?.abbreviation === config.MY_TEAM_ABV;
     return (player.name.toLowerCase().includes(search) || player.team.toLowerCase().includes(search))
-      && (mine || !view.available || !player.drafted)
+      && ((!view.available && !view.mine) || (view.available && !player.drafted) || (view.mine && mine))
       && (!showPositionFilter || view.positions.some(chip => playsPosition(player, chip)))
       && (!view.healthy || !player.is_injured)
       && (!view.tonight || player.plays_today)
@@ -51,7 +51,7 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
       && (!rotationOn || !view.likely || (player.rotation && player.rotation.p >= 0.8));
   });
   const changed = [view.statType !== (config.default_stat_type || 'projected'), showPositionFilter && view.positions.length !== chips.length,
-    caps.auction && view.priceExponent != null, !view.available, !view.healthy, view.tonight, view.tomorrow, view.surge, rotationOn && view.opp, rotationOn && view.likely].filter(Boolean).length;
+    caps.auction && view.priceExponent != null, !view.available, !view.mine, !view.healthy, view.tonight, view.tomorrow, view.surge, rotationOn && view.opp, rotationOn && view.likely].filter(Boolean).length;
   const lever = filtersOpen ? 'flex' : 'hidden sm:flex';
   const togglePosition = (chip) => setView(v => ({
     positions: v.positions.includes(chip) ? v.positions.filter(p => p !== chip) : [...v.positions, chip],
@@ -127,6 +127,10 @@ const PlayerRankings = ({ players, fantasyTeams, config, draftMode, draftPlan, o
             <label className="flex items-center">
               <input type="checkbox" checked={view.available} onChange={(e) => setView({ available: e.target.checked })} className={checkboxClass} />
               <span className="ml-2 text-sm text-gray-300">Available</span>
+            </label>
+            <label className="flex items-center" title="Show your own players (with Available on: alongside the free agents)">
+              <input type="checkbox" checked={view.mine} onChange={(e) => setView({ mine: e.target.checked })} className={checkboxClass} />
+              <span className="ml-2 text-sm text-gray-300">Mine</span>
             </label>
             <label className="flex items-center" title="Only players whose team plays on this Eastern date">
               <input type="checkbox" checked={view.tonight} onChange={(e) => setView({ tonight: e.target.checked })} className={checkboxClass} />
